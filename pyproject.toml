@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aerowhip-deploy"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "pyvista>=0.44",
+    "pyvistaqt>=0.13.1",
+    "PySide6>=6.11.2",
+    "torch==2.11.0",
+    "triton-windows==3.6.0.post26; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+analysis = ["matplotlib==3.11.2"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["simulation*", "viewer*", "trajectories*", "controllers*", "take_processing*", "fitting*", "tasks*", "training*"]
+
+[tool.setuptools.package-data]
+viewer = ["assets/drone/*.stl"]

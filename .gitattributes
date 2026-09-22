@@ -1,0 +1,2 @@
+# Preserve exact bytes for source/model SHA-256 compatibility on restore.
+* -text

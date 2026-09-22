@@ -1,0 +1,15 @@
+# Stage-1 request interface only; NOT a training preset or capability estimate.
+# Inclusive [lower, upper] bounds; equal endpoints fix a parameter.
+# inf leaves a capability limit unspecified. Every actual request must be finite.
+# Finite training ranges/distributions and acceptance thresholds need review.
+[request_bounds]
+# World +X toward +Y. Both endpoints represent the same heading.
+heading_rad = [-3.141592653589793, 3.141592653589793]
+# Tip-velocity elevation above the world XY plane; not drone pitch.
+elevation_rad = [-1.5707963267948966, 1.5707963267948966]
+release_height_world_m = [-inf, inf]
+# World-frame tip-speed magnitude. Zero is allowed as a diagnostic reference,
+# not accepted as whipping; measured direction is undefined at zero speed.
+tip_speed_mps = [0.0, inf]
+# Elapsed from the first rollout sample; also bounded by its available horizon.
+release_time_s = [0.0, inf]
