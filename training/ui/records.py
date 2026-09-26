@@ -9,6 +9,19 @@ def read_json(path):
     return json.loads(Path(path).read_text(encoding='utf-8'))
 
 
+def run_display_name(path):
+    """Optional UI-only label; the run directory remains its stable identity."""
+    path = Path(path)
+    try:
+        metadata = read_json(path/'display.json')
+        name = metadata.get('name') if isinstance(metadata, dict) else None
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    except (OSError, ValueError):
+        pass
+    return path.name
+
+
 @dataclass
 class RunHistory:
     path: Path | None = None

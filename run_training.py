@@ -11,7 +11,7 @@ from training.ui.window import TrainingWindow
 
 CONFIGURATION = Path(__file__).resolve().parent/'configs/experiments/whip_stage1_directed.toml'
 RESUME_CHECKPOINT = None
-TOTAL_UPDATES = 100
+TOTAL_UPDATES = None  # Use the selected preset's budget; editable in the Training UI.
 
 
 def main():

@@ -71,7 +71,7 @@ def load_cases():
                           source_time=t, source_commands=command, source_phase=phase,
                           transitions=[dict(time_s=float(t[k]), phase=int(phase[k])) for k in transitions],
                           kind='saved planned reference, not a recorded flight-command log'))
-    gentle = FullStateTrajectory.gentle_move((0., 0., 2.))
+    gentle = FullStateTrajectory.gentle_move((0., 0., 2.), timestep_s=DT)
     t = np.arange(gentle.sample_count)*DT
     command = np.stack([gentle.command(k) for k in range(len(t))])
     cases.append(dict(name='Gentle', source_path=None, source_sha256=None,

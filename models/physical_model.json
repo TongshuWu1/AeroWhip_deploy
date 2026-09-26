@@ -110,18 +110,18 @@
       0.0,
       -9.80665
     ],
-    "cable_substeps": 12,
+    "physics_timestep_s": 0.00020833333333333335,
     "segments_per_marker_interval": [
+      1,
       2,
-      3,
-      3,
-      3,
-      3,
-      3,
-      3,
-      3,
-      3,
-      3
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2,
+      2
     ],
     "constraint_iterations": 4,
     "curvature_frame_regularization": 2e-05

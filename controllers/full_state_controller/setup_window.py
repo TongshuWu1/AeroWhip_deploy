@@ -103,7 +103,7 @@ class SetupWindow(QtWidgets.QDialog):
             else:
                 trajectory = FullStateTrajectory.load(source)
             position = ', '.join(f'{value:g}' for value in initial.position_world_m)
-            self.details.setText(f'Start: ({position}) m · {trajectory.duration_s:g} s · 100 Hz')
+            self.details.setText(f'Start: ({position}) m · {trajectory.duration_s:g} s · {trajectory.rate_label}')
             trajectory.validate_initial(config)
         except (OSError, ValueError, TypeError, KeyError) as exc:
             self.error.setText(str(exc))

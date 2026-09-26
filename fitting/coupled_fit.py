@@ -54,31 +54,39 @@ class FitWindow:
             raise ValueError("Initial cable state must satisfy the configured lengths")
 
 
-NAMES=("position_gain", "velocity_gain", "attitude_frequency", "bending", "damping", "drag")
+NAMES=("position_gain", "velocity_gain", "attitude_frequency", "bending", "drag")
 # Common XYZ gain scales preserve axis ratios and limit the number of unknowns.
 # Geometry, measured masses, inertia, feedforward and delay are never fitted here.
-BOUNDS=((.5,2.),(.5,2.),(.5,3.),(.1,10.),(.25,4.),(.25,4.))
+BOUNDS=((.5,2.),(.5,2.),(.5,3.),(.1,10.),(.25,4.))
 
 
 def _scaled_config(base, scales):
+    if len(scales) != len(NAMES):
+        raise ValueError(f'Expected {len(NAMES)} scales in order {NAMES}')
     config=deepcopy(base)
     control=config['controller'];cable=config['cable']
     for key,scale in (("position_gain_s_inv2",scales[0]),("velocity_gain_s_inv",scales[1]),
                       ("attitude_frequency_rad_s",scales[2])):
         control[key]=[float(v*scale) for v in control[key]]
-    cable['EI_n_m2']*=float(scales[3]);cable['Cb_n_m2_s']*=float(scales[4])
-    cable['external_drag_s_inv']*=float(scales[5])
+    cable['EI_n_m2']*=float(scales[3])
+    cable['external_drag_s_inv']*=float(scales[4])
+    # New candidates must not advertise an inactive damping coefficient.
+    # The input artifact is deep-copied and remains untouched.
+    cable.pop('Cb_n_m2_s', None)
+    config['simulation'].pop('curvature_frame_regularization', None)
     return config
 
 
 def window_loss(base, window, log_scales):
     """One full untruncated rollout; checkpointing trades recomputation for RAM."""
+    if log_scales.shape != (len(NAMES),):
+        raise ValueError(f'Expected {len(NAMES)} log-scales in order {NAMES}')
     scales=log_scales.exp()
     model=CoupledDynamics(base);controller=CoupledController(model)
     controller.position_gain_s_inv2=controller.position_gain_s_inv2*scales[0]
     controller.velocity_gain_s_inv=controller.velocity_gain_s_inv*scales[1]
     controller.attitude_frequency_rad_s=controller.attitude_frequency_rad_s*scales[2]
-    model.ei=model.ei*scales[3];model.cb=model.cb*scales[4];model.drag=model.drag*scales[5]
+    model.ei=model.ei*scales[3];model.drag=model.drag*scales[4]
     state=CoupledState(*(getattr(window.initial,f.name).detach().clone() for f in fields(window.initial)))
     commands=model.tensor(window.applied_commands)
     target_positions=model.tensor(window.tracking_positions)

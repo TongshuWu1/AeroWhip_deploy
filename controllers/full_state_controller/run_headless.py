@@ -5,6 +5,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 from pathlib import Path
 import platform
 import sys
@@ -31,7 +32,7 @@ def _digest(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--trajectory', type=Path, required=True, help='Existing 100 Hz full-state CSV')
+    parser.add_argument('--trajectory', type=Path, required=True, help='Existing timestamped full-state CSV')
     parser.add_argument('--config', type=Path, default=ROOT/'configs/scenes/default.toml')
     parser.add_argument('--model', type=Path, default=DEFAULT_MODEL)
     parser.add_argument('--steps', type=int,
@@ -51,7 +52,8 @@ def main():
         model = json.loads(paths['model'].read_text(encoding='utf-8'))
         trajectory = FullStateTrajectory.load(paths['trajectory'])
         trajectory.validate_initial(config)
-        steps = trajectory.sample_count-1 if args.steps is None else args.steps
+        trajectory_steps = math.ceil(trajectory.duration_s/config.timestep_s-1e-10)
+        steps = trajectory_steps if args.steps is None else args.steps
         for name, path in paths.items():
             if _digest(path) != sources[name]['sha256']:
                 raise RuntimeError(f'{name} changed while loading')
@@ -63,7 +65,7 @@ def main():
         started_at = datetime.now(timezone.utc).isoformat()
         started = perf_counter()
         simulation = Simulation(config, model_config=model, device=args.device,
-                                compile_physics=not args.no_compile, command_source=trajectory.command)
+                                compile_physics=not args.no_compile, command_source=trajectory)
         setup_s = perf_counter()-started
         print(f'Running {steps} steps on {simulation.dynamics.device}...', flush=True)
         started = perf_counter()
@@ -79,13 +81,16 @@ def main():
             'steps': steps, 'state_samples': steps+1, 'timestep_s': simulation.timestep_s,
             'simulation_duration_s': steps*simulation.timestep_s,
             'trajectory_duration_s': trajectory.duration_s,
-            'extra_hold_steps': max(0, steps-(trajectory.sample_count-1)),
+            'extra_hold_steps': max(0, steps-trajectory_steps),
+            'command_timestep_s': trajectory.timestep_s,
+            'physics_maximum_timestep_s': simulation.dynamics.model.physics_dt,
+            'command_delay_s': simulation.dynamics.delay_s,
             'command_delay_steps': simulation.dynamics.delay_steps,
             'command_columns': arrays['command_columns'].tolist(),
             'command_convention': 'World P/V/A at tracking origin (m, m/s, m/s^2); '
                                   'acceleration excludes gravity; yaw/yaw_rate in rad and rad/s.',
-            'sample_convention': 'State row k is at time_s[k]. Command row k acts on '
-                                 '[time_s[k], time_s[k+1]); applied_commands include configured delay.',
+            'sample_convention': 'State row k is at time_s[k]. Requested/applied command rows are '
+                                 'left-endpoint snapshots; exact event times/values are retained separately.',
             'acceleration_convention': 'World tracking-origin backward velocity difference; '
                                       'initial row is a zero placeholder, not measured acceleration.',
             'reset_convention': 'Configured initial physical state; command delay queue filled '

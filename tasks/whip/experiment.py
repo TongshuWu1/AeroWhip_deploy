@@ -79,6 +79,7 @@ def load_experiment(path):
     trajectory = TrainingConfiguration(**raw['trajectory'])
     scoring = WhipScoreConfiguration(**raw['reward'])
     returns = WhipReturnConfiguration(**raw['return'])
+    returns.acceleration_scale(trajectory)
     if 'workspace' in raw:
         workspace = CylinderWorkspace(**raw['workspace'])
         scene = load_configuration(ROOT/exp['scene'])
@@ -416,7 +417,7 @@ def run_experiment(configuration_path, *, progress=None, stop_requested=lambda: 
                                  'three dimensionless XYZ features; all other initial state fixed',
         score='PeakWhipScorer with explicit experiment configuration; not a physical whip classifier',
         envelope='100-Hz state-sample checks over maneuver and final hold; no continuous collision certificate',
-        cost='Mean squared command acceleration / max_acceleration^2 over maneuver left-endpoint samples',
+        cost='Mean squared command acceleration / acceleration_cost_scale^2 over maneuver left-endpoint samples; legacy scale defaults to max_acceleration',
         event_window='[command_delay, command_delay + duration]; tip allowed another configured tip_window_s',
         exploration=raw.get('exploration', 'independent; identity latent-to-control map'),
         action_transform='tanh(offset + matrix @ latent); full-rank fixed float64 matrix and offset saved in policy'

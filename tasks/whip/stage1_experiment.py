@@ -1,4 +1,4 @@
-"""Visible fixed-request CEM experiment using the unchanged Stage-1 objective."""
+"""Visible fixed-request CEM experiment using the configured Stage-1 objective."""
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -21,14 +21,12 @@ from trajectories.full_state import FullStateTrajectory
 from .experiment import ROOT, digest, finite_float, notify, synchronize, write_json
 from .resume import inspect_resume
 from .stage1 import Stage1Reward
-from .stage1_configuration import Stage1Configuration
+from .stage1_configuration import load_stage1_settings, resolve_stage1_settings
 from .workspace import WorkspaceWhipEnvironment
 
 
 def load_training(path):
-    with Path(path).open('rb') as stream:
-        raw = tomllib.load(stream)
-    cfg = Stage1Configuration.from_mapping(raw)
+    raw, cfg = load_stage1_settings(path, root=ROOT)
     exp = raw['experiment']
     if exp['mode'] != 'training' or exp['device'] not in ('cpu', 'cuda'):
         raise ValueError('Select the Stage-1 training preset with an explicit CPU/CUDA device')
@@ -57,6 +55,8 @@ class Stage1Episode:
     speed_bounds: torch.Tensor
     acceleration_bounds: torch.Tensor
     rollout: object
+    command_times_s: torch.Tensor
+    command_events: torch.Tensor
 
     @property
     def valid(self):
@@ -65,9 +65,9 @@ class Stage1Episode:
     def trajectory(self, index):
         if not 0 <= index < len(self.commands) or not bool(self.valid[index]):
             raise ValueError('Cannot export an invalid episode')
-        command = self.commands[index].detach().cpu().numpy()
+        command = self.command_events[index].detach().cpu().numpy()
         rows = np.zeros((len(command), 14))
-        rows[:, 0] = np.arange(len(command))*.01
+        rows[:, 0] = self.command_times_s.detach().cpu().numpy()
         if np.any(command[:, 10] != 0):
             raise ValueError('CSV export requires zero yaw-rate feedforward')
         rows[:, 1:11] = command[:, :10]
@@ -90,7 +90,7 @@ class Stage1Task:
         if not cfg.workspace.height_lower_world_m <= initial.position_world_m[2] <= cfg.workspace.height_upper_world_m:
             raise ValueError('Initial drone height must be inside the cylinder')
         simulator = BatchedRollout(model, [model.initial_state(initial.position_world_m)]*batch_size)
-        delay = simulator.delay_steps*model.dt
+        delay = simulator.delay_s
         if (not math.isclose(cfg.mechanics.event_start_s, delay, abs_tol=1e-12, rel_tol=0)
                 or not math.isclose(cfg.mechanics.event_end_s, delay+cfg.trajectory.duration_s, abs_tol=1e-12, rel_tol=0)):
             raise ValueError('Stage-1 event bounds must match the configured model command delay')
@@ -104,11 +104,10 @@ class Stage1Task:
     @torch.no_grad()
     def evaluate(self, actions):
         env = self.environment
-        _, commands, _, valid, speed, acceleration = env.decode(actions.double())
-        if env.post_hold_steps:
-            commands = torch.cat((commands, commands[:, -1:].expand(-1, env.post_hold_steps, -1)), 1)
-        rollout = env.simulator.run(commands[:, :-1], admissible=valid)
-        episode = Stage1Episode(actions.detach().clone(), commands, valid, speed, acceleration, rollout)
+        points, commands, _, valid, speed, acceleration = env.decode(actions.double())
+        commands, packets, rollout = env.execute(points, commands, valid)
+        episode = Stage1Episode(actions.detach().clone(), commands, valid, speed, acceleration, rollout,
+                                env.command_times.clone(), packets)
         result = self.reward(rollout, commands, admissible=valid)
         if not bool(torch.isfinite(result.returns).all()):
             raise FloatingPointError('Stage 1 must return one finite return per episode')
@@ -147,7 +146,8 @@ def save_records(folder, name, episode, result, *, dense_index=None):
         arrays = {key: getattr(r, key)[dense_index] for key in ('cable_positions', 'cable_velocities', 'drone_positions',
             'drone_velocities', 'drone_rotations', 'drone_angular_velocities', 'state_valid', 'applied_commands')}
         arrays.update(time_s=r.time_s, cable_rest_lengths=r.cable_rest_lengths, cable_marker_indices=r.cable_marker_indices,
-                      actions=episode.actions[dense_index], commands=episode.commands[dense_index])
+                      actions=episode.actions[dense_index], commands=episode.commands[dense_index],
+                      command_times_s=episode.command_times_s, command_events=episode.command_events[dense_index])
         save_arrays(folder/f'{name}_motion.npz', arrays)
         if bool(result.valid[dense_index]):
             episode.trajectory(dense_index).save(folder/f'{name}.csv')
@@ -183,7 +183,8 @@ def train(raw, task, evaluation_task, output, metadata, *, progress, stop_reques
             synchronize(exp['device']); began = perf_counter()
             latent, actions = search.sample(exp['batch_size'])
             episode, result = task.evaluate(actions)
-            diagnostics = search.update(latent, result.returns)
+            diagnostics = search.update(latent, result.returns,
+                valid=result.valid if search.configuration.valid_elites_only else None)
             synchronize(exp['device'])
             record = dict(seed=seed, update=update, samples=statistics(episode, result), learner=diagnostics,
                           elapsed_s=perf_counter()-began)
@@ -246,6 +247,15 @@ def run(configuration_path, *, progress=None, stop_requested=lambda: False, expe
     for key, value in inputs.items():
         shutil.copy2(value, output/(key+value.suffix))
         if digest(output/(key+value.suffix)) != sources[key]['sha256']: raise ValueError(f'Input changed while copying: {key}')
+    # Resolve again from retained inputs: protocol values must not describe a
+    # different scene/model from the snapshots actually used by this run.
+    with (output/'configuration.toml').open('rb') as stream:
+        retained = resolve_stage1_settings(tomllib.load(stream),
+            scene=load_configuration(output/'scene.toml'),
+            model=json.loads((output/'model.json').read_text(encoding='utf-8')))
+    retained['experiment']['updates'] = exp['updates']
+    if retained != raw:
+        raise ValueError('Scene/model settings changed while resolving the experiment; reload the preset')
     code = {}
     paths = [ROOT/'run_training.py']
     for package in ('tasks/whip', 'training', 'training/ui', 'trajectories', 'simulation', 'simulation/dynamics'):
@@ -256,7 +266,9 @@ def run(configuration_path, *, progress=None, stop_requested=lambda: False, expe
         code[str(relative)] = digest(destination)
     metadata = dict(schema='whip_stage1_v1', experiment=raw, sources=sources, code_sha256=code,
         method='Smoothed diagonal latent CEM; fixed initial state/request, not a contextual policy or iCEM',
-        score=('Multiplicative directed-surface Stage1Reward; no hit bonus; crossing diagnostics are not whip labels'
+        score=('Same-event mechanics-weighted directed strike bonus plus smooth approach; not a whip classifier'
+               if cfg.strike_surface is not None and cfg.strike_surface.strike_bonus_weight > 0 else
+               'Multiplicative directed-surface Stage1Reward; no hit bonus; crossing diagnostics are not whip labels'
                if cfg.strike_surface is not None else
                'Approved Stage1Reward; experimental shaping, not a whip classifier'),
         evaluation='Batch-one transformed CEM mean; best sample stored separately; no held-out/generalization claim',

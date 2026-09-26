@@ -13,6 +13,7 @@ from simulation.state import (DroneState, SimulationState,
                               rotation_matrix_to_quaternion_xyzw)
 from .coupled import CoupledDynamics, CoupledState
 from .coupled_control import CoupledController
+from simulation.timing import TIME_EPS, integration_steps
 
 
 class CoupledRuntime:
@@ -33,10 +34,11 @@ class CoupledRuntime:
         if not np.array_equal(configuration.platform.cable_segment_lengths_m,
                               self.model.config['cable']['marker_interval_lengths_m']):
             raise ValueError("Scene and physical model cable lengths must match")
-        delay = float(self.model.config['controller']['command_delay_s'])
-        self.delay_steps = round(delay / self.dt)
-        if delay < 0 or not math.isclose(self.delay_steps*self.dt, delay, abs_tol=1e-12):
-            raise ValueError("Command delay must be a nonnegative integer number of steps")
+        self.delay_s = float(self.model.config['controller']['command_delay_s'])
+        if not math.isfinite(self.delay_s) or self.delay_s < 0:
+            raise ValueError('Command delay must be finite and nonnegative')
+        self.delay_steps = (round(self.delay_s/self.dt) if
+            math.isclose(round(self.delay_s/self.dt)*self.dt, self.delay_s, abs_tol=TIME_EPS, rel_tol=0) else None)
         initial = configuration.initial_state
         R = self.model.tensor(quaternion_xyzw_to_rotation_matrix(initial.quaternion_body_to_world_xyzw))
         self._initial_physics = self.model.initial_state(
@@ -52,18 +54,18 @@ class CoupledRuntime:
         self._initial_command[9] = float(np.arctan2(R[1,0].cpu(), R[0,0].cpu()))
         self.reset()
         self.graph = None
+        self._segment_graphs = {}
         self.command = self.model.tensor(self._last_command).clone()
         self.compiled = False
         if compile_physics and self.device.startswith('cuda'):
-            original = self.model.substep
+            original = self.model.controlled_substep
             try:
-                self.model.substep = torch.compile(original, backend='inductor', fullgraph=True)
-                thrust, torque = self.controller(self.physics, self.command)
-                self.model.substep(self.physics, thrust, torque, self.dt/self.model.substeps)
+                self.model.controlled_substep = torch.compile(original, backend='inductor', fullgraph=True)
+                self.model.controlled_substep(self.physics, self.command, self.controller, self.model.integration_dt)
                 torch.cuda.synchronize()
                 self.compiled = True
             except Exception as exc:
-                self.model.substep = original
+                self.model.controlled_substep = original
                 warnings.warn(f'Physics compilation failed; using CUDA graphs without compilation: {exc}', RuntimeWarning)
         if graph and self.device.startswith('cuda'):
             torch.backends.cuda.preferred_linalg_library('cusolver')
@@ -78,6 +80,7 @@ class CoupledRuntime:
             with torch.cuda.graph(self.graph):
                 self._transition()
             self.reset()
+            self._segment_graphs[(self.model.substeps, self.model.integration_dt)] = self.graph
 
     @torch.no_grad()
     def reset(self):
@@ -93,14 +96,19 @@ class CoupledRuntime:
             self.acceleration = m.tensor([0., 0., 0.])
         hold = self._initial_command.copy()
         self._last_command = hold
+        self._requested_left = hold.copy()
         self._applied_command = hold.copy()
-        self._command_history = deque(hold.copy() for _ in range(self.delay_steps))
+        self._pending = deque()
+        self._output_index = 0
+        self._held_applied = hold.copy()
+        self.last_requested_events = ()
+        self.last_applied_events = ()
         if hasattr(self, 'command'):
             self.command.copy_(m.tensor(hold))
 
-    def _transition(self):
+    def _transition(self, duration_s=None):
         _, previous_v = self.model.tracking_pose(self.physics)
-        output = self.model.step_unchecked(self.physics, self.command, self.controller)
+        output = self.model.step_unchecked(self.physics, self.command, self.controller, duration_s)
         _, velocity = self.model.tracking_pose(output)
         self.acceleration.copy_((velocity - previous_v) / self.dt)
         for field in fields(output):
@@ -108,31 +116,86 @@ class CoupledRuntime:
 
     @property
     def requested_command(self):
-        """Latest requested P/V/A/yaw/yaw-rate command; return an owned CPU copy."""
-        return self._last_command.copy()
+        """Requested command at the last interval's left endpoint; owned copy."""
+        return self._requested_left.copy()
 
     @property
     def applied_command(self):
-        """Command used for the last completed interval, after the delay queue."""
+        """Delayed command at the last interval's left endpoint, not its average."""
         return self._applied_command.copy()
 
-    @torch.no_grad()
-    def step(self, command=None):
-        if command is not None:
-            command = np.asarray(command, dtype=np.float64)
-            if command.shape != (11,) or not np.isfinite(command).all():
-                raise ValueError("Expected 11 finite P/V/A/yaw/yaw-rate values")
-            if command[10] != 0:
-                raise ValueError("Yaw-rate feedforward is not supported")
-            self._last_command = command.copy()
-        self._command_history.append(self._last_command)
-        delayed = self._command_history.popleft()
-        self.command.copy_(torch.from_numpy(delayed))
-        if self.graph is not None:
-            self.graph.replay()
+    def _integrate(self, duration_s):
+        key = integration_steps(duration_s, self.model.physics_dt)
+        graph = self._segment_graphs.get(key)
+        # Periodic rates reuse a few chunk lengths. Irregular event timestamps
+        # must not create an unbounded collection of large CUDA graphs.
+        if graph is None and self.graph is not None and len(self._segment_graphs) < 8:
+            saved = tuple(getattr(self.physics, f.name).clone() for f in fields(self.physics))
+            acceleration = self.acceleration.clone()
+            stream = torch.cuda.Stream()
+            stream.wait_stream(torch.cuda.current_stream())
+            with torch.cuda.stream(stream):
+                for _ in range(3):
+                    self._transition(duration_s)
+            torch.cuda.current_stream().wait_stream(stream)
+            graph = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(graph):
+                self._transition(duration_s)
+            for field, value in zip(fields(self.physics), saved):
+                getattr(self.physics, field.name).copy_(value)
+            self.acceleration.copy_(acceleration)
+            self._segment_graphs[key] = graph
+        if graph is None:
+            self._transition(duration_s)
         else:
-            self._transition()
-        self._applied_command = delayed.copy()
+            graph.replay()
+
+    @torch.no_grad()
+    def step(self, command=None, *, command_events=()):
+        """Advance one feedback interval; events carry absolute simulation time."""
+        start, end = self._output_index*self.dt, (self._output_index+1)*self.dt
+        if command is not None and len(command_events):
+            raise ValueError('Supply an immediate command or timestamped events, not both')
+        events = [(start, command)] if command is not None else list(command_events)
+        checked, previous = [], -math.inf
+        for time_s, value in events:
+            time_s, value = float(time_s), np.asarray(value, dtype=np.float64)
+            if (not math.isfinite(time_s) or time_s < start-TIME_EPS or time_s >= end-TIME_EPS
+                    or time_s <= previous):
+                raise ValueError('Command events must increase within the current feedback interval')
+            if value.shape != (11,) or not np.isfinite(value).all():
+                raise ValueError("Expected 11 finite P/V/A/yaw/yaw-rate values")
+            if value[10] != 0:
+                raise ValueError("Yaw-rate feedforward is not supported")
+            checked.append((time_s, value.copy()))
+            previous = time_s
+        self.last_requested_events = tuple(checked)
+        self._requested_left = self._last_command.copy()
+        for time_s, value in checked:
+            if time_s <= start+TIME_EPS:
+                self._requested_left = value.copy()
+            self._last_command = value.copy()
+            self._pending.append((time_s+self.delay_s, value))
+        applied = []
+        while self._pending and self._pending[0][0] <= start+TIME_EPS:
+            event = self._pending.popleft()
+            self._held_applied = event[1]
+            applied.append(event)
+        self._applied_command = self._held_applied.copy()
+        previous_v = self.model.tracking_pose(self.physics)[1].clone()
+        cursor = start
+        while self._pending and self._pending[0][0] < end-TIME_EPS:
+            event = self._pending.popleft()
+            if event[0] > cursor+TIME_EPS:
+                self.command.copy_(torch.from_numpy(self._held_applied))
+                self._integrate(event[0]-cursor)
+            cursor, self._held_applied = max(cursor, event[0]), event[1]
+            applied.append(event)
+        self.command.copy_(torch.from_numpy(self._held_applied))
+        self._integrate(end-cursor)
+        self.acceleration.copy_((self.model.tracking_pose(self.physics)[1]-previous_v)/self.dt)
+        self.last_applied_events = tuple(applied)
+        self._output_index += 1
 
     @torch.no_grad()
     def snapshot(self, time_s):

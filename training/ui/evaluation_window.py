@@ -10,6 +10,8 @@ from time import perf_counter
 import numpy as np
 from PySide6 import QtCore, QtWidgets
 
+from .records import run_display_name
+
 
 class EvaluationWindow(QtWidgets.QWidget):
     def __init__(self, root, backend):
@@ -17,6 +19,7 @@ class EvaluationWindow(QtWidgets.QWidget):
         self.root, self.backend = Path(root), backend
         self.selection = self.process = self.output = None
         self.replay = self.simulation_window = self.viewer = None
+        self.scene_controls = None
         self.summary = self.scene = None
         self.release_index = self.release_position = self.desired_height = None
         self._close_when_finished = False
@@ -120,6 +123,7 @@ class EvaluationWindow(QtWidgets.QWidget):
         self.replay_button.clicked.connect(self.restart_play)
         self.release_button.clicked.connect(self.seek_release)
         self.timeline.valueChanged.connect(self.seek)
+        self.timeline.sliderPressed.connect(self.pause_playback)
         self.speed_combo.currentIndexChanged.connect(self.change_speed)
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.refresh_playback)
@@ -144,7 +148,8 @@ class EvaluationWindow(QtWidgets.QWidget):
         self.run_combo.blockSignals(True)
         self.run_combo.clear()
         for path in runs:
-            self.run_combo.addItem(Path(path).name, path)
+            self.run_combo.addItem(run_display_name(path), path)
+            self.run_combo.setItemData(self.run_combo.count()-1, path, QtCore.Qt.ItemDataRole.ToolTipRole)
         if selected in runs:
             self.run_combo.setCurrentIndex(runs.index(selected))
         self.run_combo.blockSignals(False)
@@ -317,7 +322,7 @@ class EvaluationWindow(QtWidgets.QWidget):
         self.set_playback_enabled(False)
         summary = self.backend.read_json(Path(output)/'summary.json')
         self.summary = summary
-        self.loaded_label.setText(f"{Path(summary['source_run']).name}\nSeed {summary['seed']} · Update {summary['update']}")
+        self.loaded_label.setText(f"{run_display_name(summary['source_run'])}\nSeed {summary['seed']} · Update {summary['update']}")
         reach_fields = {
             'score_mean': ('score_mean', 'Reach score'),
             'target_score_mean': ('reach_progress_mean', 'Reach progress'),
@@ -469,6 +474,7 @@ class EvaluationWindow(QtWidgets.QWidget):
         window.setWindowTitle(f"Policy Evaluation · Update {self.summary['update']}")
         self.viewer, self.simulation_window = viewer, window
         window.closed.connect(self.scene_closed)
+        self.add_scene_controls(window)
         a = self.replay.arrays
         for name, points, color in (('Command', a['commands'][:, :3], '#397dcc'),
                                     ('Drone', a['drone_positions'], '#178760'),
@@ -509,10 +515,46 @@ class EvaluationWindow(QtWidgets.QWidget):
         window.show()
         window.plotter.render()
 
+    def add_scene_controls(self, window):
+        """Replay-only controls; the standalone simulation UI stays unchanged."""
+        bar = QtWidgets.QToolBar('Playback', window)
+        bar.setMovable(False)
+        bar.setFloatable(False)
+        controls = QtWidgets.QWidget(bar)
+        row = QtWidgets.QHBoxLayout(controls)
+        row.setContentsMargins(10, 5, 10, 5)
+        play = QtWidgets.QPushButton('Play')
+        play.setMinimumWidth(72)
+        play.setToolTip('Pause at the current frame or resume playback. Space also toggles playback.')
+        play.clicked.connect(self.toggle_play)
+        row.addWidget(play)
+        timeline = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        timeline.setRange(0, len(self.replay.time)-1)
+        timeline.setMinimumWidth(180)
+        timeline.setToolTip('Scrub to a saved frame. Seeking pauses playback.')
+        timeline.sliderPressed.connect(self.pause_playback)
+        timeline.valueChanged.connect(self.seek)
+        row.addWidget(timeline, 1)
+        clock = QtWidgets.QLabel()
+        clock.setMinimumWidth(100)
+        row.addWidget(clock)
+        row.addWidget(QtWidgets.QLabel('Speed'))
+        speed = QtWidgets.QComboBox()
+        for index in range(self.speed_combo.count()):
+            speed.addItem(self.speed_combo.itemText(index), self.speed_combo.itemData(index))
+        speed.currentIndexChanged.connect(self.speed_combo.setCurrentIndex)
+        row.addWidget(speed)
+        controls.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Preferred)
+        bar.addWidget(controls)
+        window.addToolBar(QtCore.Qt.ToolBarArea.BottomToolBarArea, bar)
+        self.scene_controls = dict(play=play, timeline=timeline, clock=clock, speed=speed)
+        self.refresh_playback()
+
     def scene_closed(self):
         if self.replay is not None:
             self.replay.running = False
         self.simulation_window = self.viewer = None
+        self.scene_controls = None
 
     def render_state(self):
         if self.viewer is not None:
@@ -535,6 +577,12 @@ class EvaluationWindow(QtWidgets.QWidget):
             self.render_state()
             self.refresh_playback()
 
+    def pause_playback(self):
+        if self.replay is not None:
+            self.replay.running = False
+            self.render_state()
+            self.refresh_playback()
+
     def seek(self, index):
         if self.replay is not None:
             self.replay.running = False
@@ -550,15 +598,23 @@ class EvaluationWindow(QtWidgets.QWidget):
     def change_speed(self, *_):
         if self.replay is not None:
             self.replay.speed = self.speed_combo.currentData()
+            if self.viewer is not None:
+                self.viewer._last_tick = perf_counter()
+            self.refresh_playback()
 
     def refresh_playback(self):
         if self.replay is None:
             return
-        self.timeline.blockSignals(True)
-        self.timeline.setValue(self.replay.index)
-        self.timeline.blockSignals(False)
-        self.time_label.setText(f'{self.replay.state.time_s:.2f} / {self.replay.duration_s:.2f} s')
-        self.play_button.setText('Pause' if self.replay.running else 'Play')
+        panels = [dict(play=self.play_button, timeline=self.timeline, clock=self.time_label, speed=self.speed_combo)]
+        if self.scene_controls is not None:
+            panels.append(self.scene_controls)
+        for panel in panels:
+            with QtCore.QSignalBlocker(panel['timeline']):
+                panel['timeline'].setValue(self.replay.index)
+            with QtCore.QSignalBlocker(panel['speed']):
+                panel['speed'].setCurrentIndex(panel['speed'].findData(self.replay.speed))
+            panel['clock'].setText(f'{self.replay.state.time_s:.2f} / {self.replay.duration_s:.2f} s')
+            panel['play'].setText('Pause' if self.replay.running else 'Play')
 
     def closeEvent(self, event):
         if self.process is not None:

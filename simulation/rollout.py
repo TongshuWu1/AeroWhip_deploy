@@ -22,8 +22,8 @@ def rollout(simulation: Simulation, steps: int) -> dict[str, np.ndarray]:
     """Reset, then collect N intervals and N+1 states without wall-clock pacing.
 
     Uses the simulation's command source and reset hook. No source means the
-    initial position/yaw hold. Command row k acts on [time_s[k], time_s[k+1]);
-    requested and delayed commands are logged separately, each exactly once.
+    initial position/yaw hold. Command row k is a left-endpoint snapshot;
+    exact requested/applied events are retained separately without quantization.
     Acceleration is the runtime's backward difference; row 0 is a zero placeholder.
     An exception aborts the rollout rather than returning partially filled arrays.
     """
@@ -43,10 +43,16 @@ def rollout(simulation: Simulation, steps: int) -> dict[str, np.ndarray]:
     arrays['command_columns'] = np.array(
         ['x', 'y', 'z', 'vx', 'vy', 'vz', 'ax', 'ay', 'az', 'yaw', 'yaw_rate'])
     arrays['cable_marker_indices'] = simulation.state.cable_marker_indices.copy()
+    requested_events, applied_events = [], []
     for index in range(steps):
         state = simulation.step()
         for name, value in _state_values(state).items():
             arrays[name][index+1] = value
         arrays['requested_commands'][index] = simulation.dynamics.requested_command
         arrays['applied_commands'][index] = simulation.dynamics.applied_command
+        requested_events.extend(simulation.dynamics.last_requested_events)
+        applied_events.extend(simulation.dynamics.last_applied_events)
+    for name, events in (('requested', requested_events), ('applied', applied_events)):
+        arrays[name+'_event_time_s'] = np.array([time for time, _ in events], dtype=np.float64)
+        arrays[name+'_event_commands'] = np.array([value for _, value in events], dtype=np.float64).reshape(-1, 11)
     return arrays

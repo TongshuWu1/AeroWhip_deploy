@@ -35,7 +35,11 @@ class Stage1Return:
 class Stage1Scorer:
     """Score fixed-request batches on a cached 100 Hz mesh/time grid.
 
-    max_e M(e) * exp(-0.5 * normalized_release_error(e)^2) * (1-beta*t_e/T).
+    max_e M(e) * [A(e) + strike_weight*I_strike(e)] * (1-beta*t_e/T).
+    A is smooth request matching. The optional directed-wall bonus is earned
+    only at a qualified crossing, with mechanics measured at that SAME event.
+    Maximum selection does not accumulate credit for repeated crossings.
+    Missing/zero strike weight preserves the original matching-only objective.
     M is the existing experimental transport/release/forward proxy, including
     its cubic root and known limitations. Every term uses the SAME event.
     The Gaussian is outside the cubic root. Direction is requested tip velocity,
@@ -116,9 +120,10 @@ class Stage1Scorer:
         rhs = (torch.linalg.cross(r, dv, dim=-1)*self.weights[:, None]).sum(-2)
         finite = torch.isfinite(inertia).flatten(2).all(-1) & torch.isfinite(rhs).all(-1)
         safe = torch.where(finite[..., None, None], inertia, self.eye).reshape(-1, 3, 3)
-        # Bound cuSOLVER batch size, as in the retained implementation.
+        # Bound eigensolver workspace without changing any per-matrix math.
+        # Larger chunks reserve several GiB on CUDA during training scoring.
         inverse = torch.cat([torch.linalg.pinv(part, hermitian=True,
-            rtol=self.configuration.mechanics.rigid_pinv_rtol) for part in safe.split(16384)], 0).reshape_as(inertia)
+            rtol=self.configuration.mechanics.rigid_pinv_rtol) for part in safe.split(2048)], 0).reshape_as(inertia)
         omega = (inverse @ torch.where(finite[..., None], rhs, 0)[..., None])[..., 0]
         residual = dv[..., -1, :]-torch.linalg.cross(omega, r[..., -1, :], dim=-1)
         return torch.linalg.vector_norm(residual, dim=-1).masked_fill(~finite, float('nan'))
@@ -181,14 +186,18 @@ class Stage1Scorer:
             +(matching_speed_error/match.speed_width_mps).square()+(angle/math.radians(match.direction_width_deg)).square()))
         matching = matching.masked_fill(tip_speed <= 0, 0)
         if surface is not None:
-            # Same-event multiplicative shaping; crossing is a diagnostic,
-            # never a +1 bonus or an independent source of reward.
+            # Smooth approach shaping is uniform inside the finite rectangle;
+            # no center-point accuracy is requested.
             speed_error = forward-self.speed
             angle = surface['angle']
             matching = torch.exp(-.5*((surface['distance']/self.surface.approach_width_m).square()
                 +(speed_error.clamp_max(0)/match.speed_width_mps).square()
                 +(angle/math.radians(match.direction_width_deg)).square()))
             matching = matching.masked_fill(tip_speed <= 0, 0)
+        strike_weight = self.surface.strike_bonus_weight if surface is not None else 0.0
+        reward_matching = matching
+        if strike_weight > 0:
+            reward_matching = matching+strike_weight*surface['qualified'].to(p.dtype)
         time_factor = 1-match.time_preference*event_time/self.horizon
         for value in (turn, mu, spread, prefix, nonrigid, relative_speed, tip_speed, matching):
             valid = valid & torch.isfinite(value).flatten(1).all(-1)
@@ -207,7 +216,7 @@ class Stage1Scorer:
             release = (event_relative[:, tips]-pre_speed[..., None]).clamp_min(0)
             pulse = _sat(nonrigid[:, tips], cfg.nonrigid_reference_mps)*_sat(release, cfg.release_reference_mps)
             mechanical = (bend[..., None]*pulse*_sat(forward[:, tips], cfg.forward_reference_mps)).clamp_min(0).pow(1/3)
-            objective = mechanical*matching[:, tips]*time_factor[:, tips]
+            objective = mechanical*reward_matching[:, tips]*time_factor[:, tips]
             if surface is not None:
                 # Interpolation must not extend the configured bend-to-tip lag.
                 permitted = event_time[:, tips] <= self.elapsed[ends][None, :, None]+cfg.tip_lag_s+1e-12
@@ -228,6 +237,12 @@ class Stage1Scorer:
                 for name, key in (('wall_distance_m', 'distance'), ('crossing_fraction', 'fraction'),
                                   ('plane_crossing', 'crossing'), ('directed_strike', 'qualified')):
                     fields[-1][name] = surface[key].to(p.dtype).gather(1, chosen)
+                if strike_weight > 0:
+                    # Components at the selected event, not independent maxima.
+                    weighted_mechanics = take(mechanical)*time_factor.gather(1, chosen)
+                    fields[-1]['approach_reward'] = weighted_mechanics*matching.gather(1, chosen)
+                    fields[-1]['strike_bonus'] = (weighted_mechanics*strike_weight
+                        *surface['qualified'].to(p.dtype).gather(1, chosen))
         joined = {key: torch.cat([item[key] for item in fields], 1) for key in fields[0]}
         selected = joined['score'].argmax(1)[:, None]
         values = {key: value.gather(1, selected)[:, 0] for key, value in joined.items()}
@@ -259,6 +274,7 @@ class Stage1Reward:
         self.scorer = Stage1Scorer(rest_lengths, time_s, configuration, initial_position=initial_position)
         self.configuration = configuration
         self.intervals = round(configuration.trajectory.duration_s/.01)
+        self.acceleration_scale = configuration.returns.acceleration_scale(configuration.trajectory)
         self.lower = rest_lengths.new_tensor(configuration.returns.drone_lower_world_m)
         self.upper = rest_lengths.new_tensor(configuration.returns.drone_upper_world_m)
         self.tilt_cosine = math.cos(math.radians(configuration.returns.maximum_tilt_deg))
@@ -285,7 +301,7 @@ class Stage1Reward:
             & (p[..., 2] >= cfg.returns.minimum_cable_height_m).flatten(1).all(-1)
             & cfg.workspace.contains(drone, drone[:, 0]).all(-1))
         cost = cfg.returns.acceleration_cost_weight*(commands[:, :self.intervals, 6:9]
-            /cfg.trajectory.max_acceleration_mps2).square().sum(-1).mean(-1)
+            /self.acceleration_scale).square().sum(-1).mean(-1)
         valid = numerical & envelope & torch.isfinite(commands).flatten(1).all(-1) & torch.isfinite(cost)
         returns = torch.where(valid, score.score-cost, cfg.returns.failure_return)
         return Stage1Return(returns, valid, numerical, envelope, cost, score)

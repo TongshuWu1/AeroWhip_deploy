@@ -42,7 +42,7 @@ class CoupledResidual(nn.Module):
         self.register_buffer('_hover_features',
             torch.tensor([0.]*15 + [0., 0., -1., 1., 0., 0.]), persistent=False)
 
-    def drone_acceleration(self, model, state, command):
+    def drone_acceleration(self, model, state, command, *, equilibrium=None):
         p, v = model.tracking_pose(state)
         R = state.rotation
         heading = torch.stack((command[9].cos(), command[9].sin(), torch.zeros_like(command[9])))
@@ -59,7 +59,9 @@ class CoupledResidual(nn.Module):
             # Level, yaw-aligned hover: zero tracking errors and motion,
             # body-frame gravity -Z and commanded heading +X. Subtract before
             # tanh so the original per-axis acceleration bound still holds.
-            response = response - self.drone(self._hover_features)
+            if equilibrium is None:
+                equilibrium = self.drone(self._hover_features)
+            response = response - equilibrium
         body = self.drone_limit_m_s2 * torch.tanh(response)
         return R @ body
 

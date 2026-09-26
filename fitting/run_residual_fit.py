@@ -82,8 +82,8 @@ def main():
                 progress({'phase':'comparison','role':role,'model':label})
                 batch=BatchedObjective(base,group,window_weights(group),'cuda',graph=True,
                                        training=False,residual=residual)
-                predictions[label]=batch.predict([0.]*6)
-                losses[role][label]=batch.evaluate([0.]*6)[0]
+                predictions[label]=batch.predict([0.]*len(batch.base_parameters))
+                losses[role][label]=batch.evaluate([0.]*len(batch.base_parameters))[0]
                 del batch
             for i,(window,meta) in enumerate(zip(group,metadata[role])):
                 record={'take':meta['take'],'role':role,'maneuver':meta['maneuver']}

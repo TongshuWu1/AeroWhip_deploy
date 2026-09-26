@@ -119,6 +119,9 @@ def load_configuration(path: str | Path) -> SimulationConfiguration:
     except KeyError as exc:
         raise ValueError(f"Missing configuration section: {exc.args[0]}") from exc
 
+    if 'cable_spin_rates_radps' in initial:
+        raise ValueError('Cable spin is not supported by the reduced DDER model')
+
     window_size = _vector(viewer, "window_size_px", 2)
     if np.any(window_size <= 0.0) or np.any(window_size != np.floor(window_size)):
         raise ValueError("window_size_px must contain two positive integers")

@@ -1,4 +1,4 @@
-"""Qt simulation window: 3D scene, read-only telemetry and keyboard hints."""
+"""Qt simulation window: 3D scene, playback toggle, telemetry and keyboard hints."""
 
 from time import perf_counter
 
@@ -28,6 +28,11 @@ class TelemetryPanel(QtWidgets.QWidget):
         status_row.addWidget(self.status)
         status_row.addWidget(self.time)
         layout.addLayout(status_row)
+        self.play_button = QtWidgets.QPushButton("Play")
+        self.play_button.setObjectName("playbackToggle")
+        self.play_button.setMinimumHeight(36)
+        self.play_button.setToolTip("Run or pause here without resetting the current state.")
+        layout.addWidget(self.play_button)
         self.fields = {}
         for name, unit, axes in (("Position", "m", ("X", "Y", "Z")),
                                  ("Velocity", "m/s", ("X", "Y", "Z")),
@@ -72,6 +77,10 @@ class TelemetryPanel(QtWidgets.QWidget):
             QLabel { color: #243342; font: 10pt 'Segoe UI'; background: transparent; }
             QLabel#title { font-size: 18pt; font-weight: 600; }
             QLabel#status { color: #536b7d; font-weight: 600; }
+            QPushButton#playbackToggle { background: #286ca5; color: white;
+                border: none; border-radius: 5px; font: 11pt 'Segoe UI'; padding: 7px; }
+            QPushButton#playbackToggle:hover { background: #205887; }
+            QPushButton#playbackToggle:disabled { background: #879aaa; }
             QFrame#card { background: white; border: 1px solid #dce3e9; border-radius: 7px; }
             QLabel#heading { font-weight: 600; }
             QLabel#unit, QLabel#axis { color: #6b7c89; font-size: 9pt; }
@@ -82,6 +91,8 @@ class TelemetryPanel(QtWidgets.QWidget):
 
     def update_state(self, state, running, error=None):
         self.status.setText("Error" if error else "Running" if running else "Paused")
+        self.play_button.setText("Pause" if running else "Play")
+        self.play_button.setEnabled(not bool(error))
         self.time.setText(f"{state.time_s:.2f} s")
         drone = state.drone
         values = {"Position": drone.position_world_m,
@@ -118,6 +129,7 @@ class SimulationWindow(QtWidgets.QMainWindow):
         self.plotter = QtInteractor(central, auto_update=False, multi_samples=4)
         layout.addWidget(self.plotter.interactor, 1)
         self.panel = TelemetryPanel()
+        self.panel.play_button.clicked.connect(viewer._toggle_simulation)
         self.sidebar = QtWidgets.QScrollArea()
         self.sidebar.setWidgetResizable(True)
         self.sidebar.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)

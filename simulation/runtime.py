@@ -12,7 +12,8 @@ class Simulation:
                  compile_physics=True, command_source=None, command_reset=None) -> None:
         """Create a simulation with an explicit model path or configuration dict.
 
-        command_source(step_index) supplies P/V/A/yaw at physics-step boundaries.
+        A timestamped source supplies events(start_s, end_s). Legacy callable
+        sources(step_index) still supply P/V/A/yaw at feedback boundaries.
         Stateful sources can supply command_reset(), called on initialization and
         reset. Without a source, step(command) supplies commands directly; omitted
         commands hold the last command (initially the configured position/yaw).
@@ -79,6 +80,12 @@ class Simulation:
         try:
             for _ in range(steps):
                 next_command = command
+                if next_command is None and hasattr(self.command_source, 'events'):
+                    events = self.command_source.events(self.step_count*self.timestep_s,
+                                                        (self.step_count+1)*self.timestep_s)
+                    self.dynamics.step(command_events=events)
+                    self.step_count += 1
+                    continue
                 if next_command is None and self.command_source is not None:
                     next_command = self.command_source(self.step_count)
                 self.dynamics.step(next_command)

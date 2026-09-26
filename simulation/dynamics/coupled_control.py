@@ -17,14 +17,19 @@ class CoupledController:
         if not bool(torch.isfinite(self.hover_scale)) or float(self.hover_scale)<=0:
             raise ValueError("Hover thrust scale must be positive")
 
-    def __call__(self, state, command):
+    def __call__(self, state, command, *, drone_equilibrium=None):
         model = self.model
         p,v = model.tracking_pose(state)
         acceleration = (self.position_gain_s_inv2*(command[:3]-p)
                         +self.velocity_gain_s_inv*(command[3:6]-v)
                         +self.acceleration_feedforward*command[6:9])
         if model.residual is not None:
-            acceleration = acceleration + model.residual.drone_acceleration(model,state,command)
+            if drone_equilibrium is None:
+                correction = model.residual.drone_acceleration(model,state,command)
+            else:
+                correction = model.residual.drone_acceleration(
+                    model,state,command,equilibrium=drone_equilibrium)
+            acceleration = acceleration + correction
         # Nominal hover trim supplies total weight; drone inertia/mass in the
         # plant still exclude cable mass. This is controller effort, not a
         # second cable force added to the dynamics.

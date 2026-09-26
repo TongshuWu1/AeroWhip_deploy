@@ -87,7 +87,7 @@ class BSplineCommand:
         return tuple(float(np.linalg.norm(curve[0], axis=1).max()/self.duration_s**order)
                      for order, curve in enumerate(self._curves[1:], start=1))
 
-    def samples(self, timestep_s=.01, max_speed_mps=None, max_acceleration_mps2=None):
+    def samples(self, timestep_s=1/30, max_speed_mps=None, max_acceleration_mps2=None):
         timestep_s = float(timestep_s)
         if not np.isfinite(timestep_s) or timestep_s <= 0:
             raise ValueError('Timestep must be positive and finite')

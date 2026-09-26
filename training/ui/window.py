@@ -10,7 +10,7 @@ from time import perf_counter
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from .plots import MetricPlot
-from .records import RunHistory, load_history
+from .records import RunHistory, load_history, run_display_name
 
 
 def duration(seconds):
@@ -33,6 +33,8 @@ class TrainingWindow(QtWidgets.QMainWindow):
         self.process = None
         self.preview = None
         self.preview_hash = None
+        self._budget_configuration = None
+        self._initial_budget_override = total_updates is not None
         self.history = RunHistory()
         self._started = None
         self._elapsed = None
@@ -223,7 +225,7 @@ class TrainingWindow(QtWidgets.QMainWindow):
         value = str(Path(path).resolve())
         index = combo.findData(value)
         if index < 0:
-            combo.addItem(Path(value).name, value)
+            combo.addItem(run_display_name(value), value)
             index = combo.count()-1
             combo.setItemData(index, value, QtCore.Qt.ItemDataRole.ToolTipRole)
         return index
@@ -243,6 +245,12 @@ class TrainingWindow(QtWidgets.QMainWindow):
                 raise ValueError('Configuration changed while loading; select it again.')
             exp, trajectory = raw['experiment'], raw['trajectory']
             training = exp['mode'] == 'training'
+            budget_configuration = (str(path), exp.get('updates'))
+            if training and budget_configuration != self._budget_configuration:
+                if self._budget_configuration is not None or not self._initial_budget_override:
+                    with QtCore.QSignalBlocker(self.total_updates):
+                        self.total_updates.setValue(exp['updates'])
+                self._budget_configuration = budget_configuration
             self.total_updates.setEnabled(training)
             self.run_mode.setEnabled(training and self.resume_inspector is not None)
             resuming = training and self.run_mode.currentText() == 'Resume'
@@ -288,6 +296,7 @@ class TrainingWindow(QtWidgets.QMainWindow):
             self.config_details.setText(
                 f"Model: {Path(exp['model']).name}  ·  {exp['device'].upper()}  ·  {exp['mode'].capitalize()}\n"
                 f"{target_text}  ·  {trajectory['control_count']} spline controls\n"
+                f"Commands: {trajectory.get('command_rate_hz', 100):g} Hz · Feedback: 100 Hz\n"
                 f"{budget}\n"
                 f"Exploration: {exploration_text}")
             if 'workspace' in raw:
@@ -295,6 +304,11 @@ class TrainingWindow(QtWidgets.QMainWindow):
                 self.config_details.setText(self.config_details.text()+
                     f"\nWorkspace: cylinder · Radius {workspace['radius_m']:g} m · "
                     f"Z {workspace['height_lower_world_m']:g}–{workspace['height_upper_world_m']:g} m")
+            if stage1:
+                mechanics = raw['mechanics']
+                self.config_details.setText(self.config_details.text()+
+                    f"\nMotion: {trajectory['duration_s']:g} s · Hold: {trajectory['post_hold_s']:g} s · "
+                    f"Event window: {mechanics['event_start_s']:g}–{mechanics['event_end_s']:g} s")
             self.config_details.setToolTip(str(path))
             self.preview, self.preview_hash = raw, digest
             if self.history.path is None and not self.history.updates:
@@ -326,7 +340,12 @@ class TrainingWindow(QtWidgets.QMainWindow):
         path = Path(self.config_combo.currentData())
         options = {}
         try:
-            if hashlib.sha256(path.read_bytes()).hexdigest() != self.preview_hash:
+            current, *_ = self.configuration_loader(path)
+            current = deepcopy(current)
+            if current['experiment']['mode'] == 'training':
+                current['experiment']['updates'] = self.total_updates.value()
+            if (hashlib.sha256(path.read_bytes()).hexdigest() != self.preview_hash
+                    or current != self.preview):
                 self.preview_configuration()
                 self.message.setText('Configuration changed. Review the updated settings, then press Start.')
                 return
@@ -439,6 +458,8 @@ class TrainingWindow(QtWidgets.QMainWindow):
             self.history.add_update(record)
             self.ensure_seed(record['seed'])
             self.log.appendPlainText(f"Seed {record['seed']} · Update {record['update']} · Return {record['samples']['return_mean']:.6g} · {record['elapsed_s']:.2f} s")
+            if record.get('learner', {}).get('distribution_updated') is False:
+                self.log.appendPlainText(f"CEM distribution unchanged: {record['learner']['valid_candidates']} valid candidates; not enough elites.")
             self.refresh_plots(); self.refresh_progress()
         elif kind == 'evaluation':
             self.history.add_evaluation(event['seed'], event['update'], event['metrics'])
@@ -567,6 +588,10 @@ class TrainingWindow(QtWidgets.QMainWindow):
         if stage1:
             components = (('Mechanics', 'mechanical_mean'), ('Matching', 'matching_mean'), ('Time', 'time_factor_mean'))
             self.component_plot.setToolTip('Multiplicative factors at the same event; means over valid positive-score events, not whip-success rates.')
+            if self.history.configuration.get('strike_surface', {}).get('strike_bonus_weight', 0) > 0:
+                components = (('Mechanics', 'mechanical_mean'), ('Approach', 'approach_reward_mean'),
+                              ('Strike bonus', 'strike_bonus_mean'))
+                self.component_plot.setToolTip('Approach + Strike bonus is the score before motion cost. Both include the same-event mechanics and time factors; Mechanics is shown separately. Means over valid positive-score events, not whip-success rates.')
         self.component_plot.set_series([(label, samples(key), False) for label, key in components])
         self.event_details.setVisible(stage1)
         latest = records[-1][1]['samples'] if records else {}

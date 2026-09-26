@@ -165,6 +165,8 @@ def evaluate(checkpoint, output, expected_hashes, progress=print):
             'drone_positions', 'drone_velocities', 'drone_rotations', 'drone_angular_velocities',
             'cable_positions', 'cable_velocities', 'state_valid')}
         arrays.update(time_s=rollout.time_s.cpu().numpy(), commands=episode.commands[0].cpu().numpy(),
+                      command_times_s=episode.command_times_s.cpu().numpy(),
+                      command_events=episode.command_events[0].cpu().numpy(),
                       cable_marker_indices=rollout.cable_marker_indices.cpu().numpy())
         with np.load(record['paths']['diagnostics'], allow_pickle=False) as saved:
             action_equal = np.array_equal(episode.actions.cpu().numpy(), saved['actions'])

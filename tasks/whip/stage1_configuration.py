@@ -1,6 +1,8 @@
 """Explicit settings for the isolated, fixed-request Stage-1 objective."""
 
+from copy import deepcopy
 from dataclasses import dataclass, fields
+import json
 import math
 from pathlib import Path
 import tomllib
@@ -9,6 +11,65 @@ from .configuration import TrainingConfiguration
 from .reward import WhipReturnConfiguration
 from .skill import SKILL_PARAMETERS
 from .workspace import CylinderWorkspace
+from simulation.configuration import load_configuration
+
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def resolve_stage1_settings(raw, *, scene, model):
+    """Resolve omitted dependent fields; never rewrite explicit saved settings.
+
+    The returned mapping is complete and is retained in the run protocol.
+    Physical/reward choices (including the wall and post-hold) remain explicit.
+    """
+    resolved = deepcopy(raw)
+    trajectory, mechanics = resolved['trajectory'], resolved['mechanics']
+    workspace, returns = resolved['workspace'], resolved['return']
+    initial = scene.initial_state.position_world_m
+    delay = model['controller']['command_delay_s']
+    if isinstance(delay, bool) or not math.isfinite(delay) or delay < 0:
+        raise ValueError('Model command delay must be finite and nonnegative')
+
+    def pair(section, lower, upper, values):
+        present = (lower in section, upper in section)
+        if present[0] != present[1]:
+            raise ValueError(f'Provide both {lower} and {upper}, or omit both for automatic values')
+        if not present[0]:
+            section[lower], section[upper] = values
+
+    pair(mechanics, 'event_start_s', 'event_end_s',
+         (delay, delay+trajectory['duration_s']))
+    if (not math.isclose(mechanics['event_start_s'], delay, rel_tol=0, abs_tol=1e-12)
+            or not math.isclose(mechanics['event_end_s'], delay+trajectory['duration_s'], rel_tol=0, abs_tol=1e-12)):
+        raise ValueError('Event bounds must match model delay and maneuver duration; omit both event bounds to derive them')
+    radius = workspace['radius_m']
+    lower_z, upper_z = workspace['height_lower_world_m'], workspace['height_upper_world_m']
+    if trajectory.get('control_mapping', 'box') == 'cylinder_v1':
+        lower = [-radius, -radius, float(lower_z-initial[2])]
+        upper = [radius, radius, float(upper_z-initial[2])]
+        pair(trajectory, 'offset_lower_m', 'offset_upper_m', (lower, upper))
+        if any(not math.isclose(a, b, rel_tol=0, abs_tol=1e-12)
+               for name, expected in (('offset_lower_m', lower), ('offset_upper_m', upper))
+               for a, b in zip(trajectory[name], expected)):
+            raise ValueError('Cylinder offsets must match workspace and initial position; omit both offsets to derive them')
+    elif 'offset_lower_m' not in trajectory or 'offset_upper_m' not in trajectory:
+        raise ValueError('Box mapping requires explicit trajectory offsets')
+    pair(returns, 'drone_lower_world_m', 'drone_upper_world_m',
+         ([float(initial[0]-radius), float(initial[1]-radius), lower_z],
+          [float(initial[0]+radius), float(initial[1]+radius), upper_z]))
+    return resolved
+
+
+def load_stage1_settings(path, *, root=ROOT):
+    """Resolve a user preset using its selected scene/model, without simulation."""
+    with Path(path).open('rb') as stream:
+        raw = tomllib.load(stream)
+    root = Path(root)
+    scene = load_configuration(root/raw['experiment']['scene'])
+    model = json.loads((root/raw['experiment']['model']).read_text(encoding='utf-8'))
+    resolved = resolve_stage1_settings(raw, scene=scene, model=model)
+    return resolved, Stage1Configuration.from_mapping(resolved)
 
 
 def _positive(value, name):
@@ -77,10 +138,15 @@ class StrikeSurfaceConfiguration:
     height_m: float
     maximum_entry_angle_deg: float
     approach_width_m: float
+    strike_bonus_weight: float = 0.0
 
     def __post_init__(self):
         for field in fields(self):
-            _positive(getattr(self, field.name), field.name)
+            if field.name != 'strike_bonus_weight':
+                _positive(getattr(self, field.name), field.name)
+        if (isinstance(self.strike_bonus_weight, bool) or not math.isfinite(self.strike_bonus_weight)
+                or self.strike_bonus_weight < 0):
+            raise ValueError('Strike bonus weight must be finite and nonnegative')
         if self.maximum_entry_angle_deg >= 90:
             raise ValueError('Entry angle must be strictly between zero and 90 degrees')
 
@@ -107,6 +173,7 @@ class Stage1Configuration:
     strike_surface: StrikeSurfaceConfiguration | None = None
 
     def __post_init__(self):
+        self.returns.acceleration_scale(self.trajectory)
         if any(not isinstance(value, str) or not value for value in (self.scene, self.model)):
             raise ValueError('Provide scene/model paths relative to the repository')
         request = tuple(self.request)
@@ -123,16 +190,14 @@ class Stage1Configuration:
                 raise ValueError('Directed Stage 1 requires a horizontal normal and minimum-speed mode')
         horizon = self.trajectory.duration_s+self.trajectory.post_hold_s
         if self.mechanics.event_end_s+self.mechanics.tip_lag_s > horizon+1e-12:
-            raise ValueError('The full event window and release lag must fit the episode')
+            raise ValueError('post_hold_s must cover the model command delay plus mechanics.tip_lag_s')
         if any(window > self.mechanics.event_end_s-self.mechanics.event_start_s+1e-12
                for window in self.mechanics.windows_s):
             raise ValueError('Every configured bend duration must fit the event search interval')
 
     @classmethod
     def load(cls, path):
-        with Path(path).open('rb') as stream:
-            raw = tomllib.load(stream)
-        return cls.from_mapping(raw)
+        return load_stage1_settings(path)[1]
 
     @classmethod
     def from_mapping(cls, raw):

@@ -18,6 +18,7 @@ class WhipReturnConfiguration:
     drone_upper_world_m: tuple[float, float, float]
     maximum_tilt_deg: float
     minimum_cable_height_m: float
+    acceleration_cost_scale_mps2: float | None = None
 
     def __post_init__(self):
         for name in ('acceleration_cost_weight', 'failure_return', 'maximum_tilt_deg',
@@ -26,7 +27,11 @@ class WhipReturnConfiguration:
                 raise ValueError(f'{name} must be finite')
         if (self.acceleration_cost_weight < 0 or not 0 < self.maximum_tilt_deg < 90
                 or self.failure_return >= -self.acceleration_cost_weight):
-            raise ValueError('Require a nonnegative cost, tilt in (0,90), and failure below valid-return range')
+            raise ValueError('Require a nonnegative cost, tilt in (0,90), and failure_return < -acceleration_cost_weight')
+        if self.acceleration_cost_scale_mps2 is not None:
+            value = self.acceleration_cost_scale_mps2
+            if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
+                raise ValueError('acceleration_cost_scale_mps2 must be positive and finite')
         for name in ('drone_lower_world_m', 'drone_upper_world_m'):
             values = tuple(getattr(self, name))
             if len(values) != 3 or not all(math.isfinite(x) for x in values):
@@ -34,6 +39,15 @@ class WhipReturnConfiguration:
             object.__setattr__(self, name, values)
         if not all(a < b for a, b in zip(self.drone_lower_world_m, self.drone_upper_world_m)):
             raise ValueError('Envelope lower bounds must be below upper bounds')
+
+    def acceleration_scale(self, trajectory):
+        """Keep legacy normalization; uncapped commands require an explicit scale."""
+        scale = self.acceleration_cost_scale_mps2
+        if scale is None:
+            scale = trajectory.max_acceleration_mps2
+        if scale is None:
+            raise ValueError('Provide acceleration_cost_scale_mps2 when the acceleration limit is omitted')
+        return scale
 
 
 @dataclass(frozen=True)
@@ -58,7 +72,7 @@ class WhipReward:
         self.intervals = round(trajectory.duration_s/model.dt)
         time = torch.arange(self.intervals+environment.post_hold_steps+1,
                             device=model.rest.device, dtype=model.rest.dtype)*model.dt
-        delay = environment.simulator.delay_steps*model.dt
+        delay = environment.simulator.delay_s
         if trajectory.post_hold_s+1e-12 < delay+scoring_configuration.tip_window_s:
             raise ValueError('Post-hold must cover command delay and the full tip-scoring window')
         self.metrics = WhipMetrics(model.rest, time, region_boundaries_m=
@@ -70,7 +84,7 @@ class WhipReward:
         self.upper = model.tensor(return_configuration.drone_upper_world_m)
         self.tilt_cosine = math.cos(math.radians(return_configuration.maximum_tilt_deg))
         self.height = return_configuration.minimum_cable_height_m
-        self.acceleration_scale = trajectory.max_acceleration_mps2
+        self.acceleration_scale = return_configuration.acceleration_scale(trajectory)
 
     @torch.no_grad()
     def __call__(self, episode):

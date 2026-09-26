@@ -12,16 +12,24 @@ class TrainingConfiguration:
     offset_lower_m: tuple[float, float, float]
     offset_upper_m: tuple[float, float, float]
     max_speed_mps: float
-    max_acceleration_mps2: float
+    max_acceleration_mps2: float | None = None
     control_count: int = 32
+    command_rate_hz: float = 100.  # Legacy configurations retain their original timing.
+    control_mapping: str = 'box'
 
     def __post_init__(self):
+        if self.control_mapping not in ('box', 'cylinder_v1'):
+            raise ValueError('Control mapping must be box or cylinder_v1')
         if operator.index(self.control_count) < 6:
             raise ValueError('At least six total control points are required')
-        for name in ('duration_s', 'max_speed_mps', 'max_acceleration_mps2'):
+        for name in ('duration_s', 'max_speed_mps', 'command_rate_hz'):
             value = getattr(self, name)
             if not math.isfinite(value) or value <= 0:
                 raise ValueError(f'{name} must be positive and finite')
+        if self.max_acceleration_mps2 is not None:
+            value = self.max_acceleration_mps2
+            if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
+                raise ValueError('max_acceleration_mps2 must be positive and finite, or omitted')
         if not math.isfinite(self.post_hold_s) or self.post_hold_s < 0:
             raise ValueError('post_hold_s must be finite and nonnegative')
         for name in ('offset_lower_m', 'offset_upper_m'):
@@ -34,6 +42,9 @@ class TrainingConfiguration:
         for value in (self.duration_s, self.post_hold_s):
             if not math.isclose(value/.01, round(value/.01), rel_tol=0, abs_tol=1e-8):
                 raise ValueError('Durations must be exact multiples of the 100 Hz timestep')
+        if not math.isclose(self.duration_s*self.command_rate_hz,
+                            round(self.duration_s*self.command_rate_hz), rel_tol=0, abs_tol=1e-8):
+            raise ValueError('Maneuver duration must contain a whole number of command periods')
 
     @property
     def action_size(self):

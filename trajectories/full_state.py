@@ -1,4 +1,4 @@
-"""Native 100 Hz P/V/A/yaw commands, not predicted motion.
+"""Timestamped P/V/A/yaw packets, independent of the feedback sample rate.
 
 World position refers to the top-of-drone tracking origin, not the COM.
 Acceleration is kinematic feedforward (gravity is added by the inner controller).
@@ -6,6 +6,7 @@ Yaw is in radians; omega is body-frame rad/s and must currently be zero.
 """
 
 import numpy as np
+from simulation.timing import TIME_EPS, validate_command_times
 
 
 COLUMNS = ('time_s', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'ax', 'ay', 'az',
@@ -13,7 +14,7 @@ COLUMNS = ('time_s', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'ax', 'ay', 'az',
 
 
 class FullStateTrajectory:
-    timestep_s = .01
+    timestep_s = 1/30
 
     def __init__(self, samples):
         values = np.array(samples, dtype=np.float64, copy=True)
@@ -21,9 +22,11 @@ class FullStateTrajectory:
             raise ValueError('Expected at least two rows of time, P/V/A, yaw and body angular velocity')
         if not np.isfinite(values).all():
             raise ValueError('Trajectory values must be finite')
-        if not np.allclose(values[:, 0], np.arange(len(values))*self.timestep_s,
-                           rtol=0, atol=1e-8):
-            raise ValueError('Trajectory must start at 0 s with consecutive 0.01 s samples; no resampling')
+        self.time_s = validate_command_times(values[:, 0])
+        self.time_s.flags.writeable = False
+        intervals = np.diff(self.time_s)
+        self.timestep_s = (float(intervals[0]) if
+            np.allclose(intervals, intervals[0], rtol=0, atol=TIME_EPS) else None)
         if np.any(values[:, 11:] != 0):
             raise ValueError('Nonzero body angular-rate feedforward is not supported by the fitted controller')
         if np.any(np.abs(values[-1, 4:10]) > 1e-10):
@@ -37,6 +40,14 @@ class FullStateTrajectory:
     def load(cls, path):
         """CSV units: metres, seconds, radians; omega is body-frame rad/s."""
         rows = np.atleast_1d(np.genfromtxt(path, delimiter=',', names=True, encoding='utf-8-sig'))
+        legacy = ('time_s', 'px_m', 'py_m', 'pz_m', 'vx_m_s', 'vy_m_s', 'vz_m_s',
+                  'ax_m_s2', 'ay_m_s2', 'az_m_s2', 'yaw_rad', 'yaw_rate_rad_s')
+        if rows.dtype.names == legacy:
+            if np.any(rows['yaw_rate_rad_s'] != 0):
+                raise ValueError('Nonzero yaw-rate feedforward is not supported')
+            values = np.zeros((len(rows), len(COLUMNS)))
+            values[:, :11] = np.column_stack([rows[name] for name in legacy[:11]])
+            return cls(values)
         if rows.dtype.names != COLUMNS:
             raise ValueError('CSV header must be: ' + ','.join(COLUMNS))
         return cls(np.column_stack([rows[name] for name in COLUMNS]))
@@ -48,9 +59,9 @@ class FullStateTrajectory:
         return self._commands[min(step_index, len(self._commands)-1)].copy()
 
     def save(self, path):
-        """Export the same 100 Hz full-state format accepted by load()."""
+        """Preserve source timestamps; never resample commands during export."""
         rows = np.zeros((self.sample_count, len(COLUMNS)))
-        rows[:, 0] = np.arange(self.sample_count)*self.timestep_s
+        rows[:, 0] = self.time_s
         rows[:, 1:11] = self._commands[:, :10]
         np.savetxt(path, rows, delimiter=',', header=','.join(COLUMNS), comments='', fmt='%.17g')
 
@@ -60,7 +71,25 @@ class FullStateTrajectory:
 
     @property
     def duration_s(self):
-        return (self.sample_count-1)*self.timestep_s
+        return float(self.time_s[-1])
+
+    @property
+    def rate_label(self):
+        return f'{1/self.timestep_s:g} Hz' if self.timestep_s is not None else 'Timestamped'
+
+    def index_at(self, time_s):
+        if not np.isfinite(time_s) or time_s < 0:
+            raise ValueError('Time must be finite and nonnegative')
+        return int(np.searchsorted(self.time_s, time_s+TIME_EPS, side='right')-1)
+
+    def command_at(self, time_s):
+        return self.command(self.index_at(time_s))
+
+    def events(self, start_s, end_s):
+        """Commands in [start, end); the runtime applies its delay exactly once."""
+        first = np.searchsorted(self.time_s, start_s-TIME_EPS, side='left')
+        last = np.searchsorted(self.time_s, end_s-TIME_EPS, side='left')
+        return tuple((float(self.time_s[i]), self.command(i)) for i in range(first, last))
 
     def preview(self, component):
         offset = {'Position': 0, 'Velocity': 3, 'Acceleration': 6}[component]
@@ -68,8 +97,6 @@ class FullStateTrajectory:
 
     def validate_initial(self, config):
         from simulation.state import quaternion_xyzw_to_rotation_matrix
-        if not np.isclose(config.timestep_s, self.timestep_s, rtol=0, atol=1e-12):
-            raise ValueError('Simulation and trajectory timesteps must agree')
         initial = config.initial_state
         rotation = quaternion_xyzw_to_rotation_matrix(initial.quaternion_body_to_world_xyzw)
         yaw = float(np.arctan2(rotation[1, 0], rotation[0, 0]))
@@ -80,9 +107,11 @@ class FullStateTrajectory:
             raise ValueError('Trajectory must begin at the configured initial yaw')
 
     @classmethod
-    def gentle_move(cls, position, yaw=0.):
+    def gentle_move(cls, position, yaw=0., *, timestep_s=1/30):
         """One-second hold, 0.25 m world-X move over 2 s, one-second hold."""
-        t = np.arange(401)*cls.timestep_s
+        if not np.isfinite(timestep_s) or timestep_s <= 0 or abs(round(4/timestep_s)*timestep_s-4) > TIME_EPS:
+            raise ValueError('The command timestep must divide the four-second trajectory')
+        t = np.arange(round(4/timestep_s)+1)*timestep_s
         s = np.clip((t-1.)/2., 0., 1.)
         shape = 10*s**3-15*s**4+6*s**5
         velocity = (30*s**2-60*s**3+30*s**4)/2.

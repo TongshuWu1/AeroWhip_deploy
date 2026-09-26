@@ -8,13 +8,13 @@ import numpy as np
 import torch
 
 from fitting.batched_objective import BatchedObjective
-from fitting.coupled_fit import FitWindow, window_weights
+from fitting.coupled_fit import FitWindow, window_weights, NAMES
 from simulation.dynamics.coupled import CoupledDynamics
 
 
 def check_residual_gradients(objective, network):
     """Check both learned branches on the actual fitting segments, unchanged loss."""
-    scales=objective.model.tensor([0.]*6)
+    scales=objective.model.tensor([0.]*len(NAMES))
     def loss():return (objective.rollout(scales)*objective.weights).sum()
     network.zero_grad(set_to_none=True)
     value=loss();value.backward()
@@ -68,7 +68,7 @@ def fit_residual(config, windows, network, settings, *, progress=None, checkpoin
     objective=BatchedObjective(config,windows,window_weights(windows),device,
         graph=device.startswith('cuda'),compile_physics=device.startswith('cuda'),
         residual=network,magnitude_penalty=settings['magnitude_penalty'])
-    scales=objective.model.tensor([0.]*6)
+    scales=objective.model.tensor([0.]*len(NAMES))
     optimizer=torch.optim.Adam(network.parameters(),lr=settings['learning_rate'])
 
     def loss():
@@ -144,7 +144,7 @@ def hold_comparison(config, network, duration_s=30.):
     metrics={};arrays={'time_s':np.arange(1,steps+1)*model.dt}
     for label in ('before','after'):
         if label=='after':probe.load_state_dict(selected)
-        positions,markers,rotations=(a[0] for a in batch.predict([0.]*6))
+        positions,markers,rotations=(a[0] for a in batch.predict([0.]*len(NAMES)))
         speed=np.linalg.norm(np.diff(markers[:,-1],axis=0)/model.dt,axis=1)
         tail=round(5/model.dt)
         error=np.linalg.norm(positions-p.numpy(),axis=1)

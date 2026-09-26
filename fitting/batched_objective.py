@@ -8,6 +8,7 @@ from torch.utils.checkpoint import checkpoint
 from simulation.dynamics.coupled import CoupledDynamics, CoupledState
 from simulation.dynamics.coupled_control import CoupledController
 from fitting.cuda_block import CudaBlock
+from fitting.coupled_fit import NAMES
 
 
 class BatchedObjective:
@@ -22,7 +23,7 @@ class BatchedObjective:
         self.controller = CoupledController(self.model)
         m, c = self.model, self.controller
         self.base_parameters = (c.position_gain_s_inv2, c.velocity_gain_s_inv,
-                                c.attitude_frequency_rad_s, m.ei, m.cb, m.drag)
+                                c.attitude_frequency_rad_s, m.ei, m.drag)
         self.initial = tuple(torch.stack([getattr(w.initial, f.name) for w in windows]).to(device)
                              for f in fields(CoupledState))
         self.commands = m.tensor(np.stack([w.applied_commands for w in windows])).transpose(0,1)
@@ -46,7 +47,7 @@ class BatchedObjective:
                      for k in range(0, len(self.commands), self.block_steps)}
             for size in sorted(sizes):
                 samples = tuple(v.detach().clone().requires_grad_(training) for v in self.initial)
-                samples += (self.commands[:size], m.tensor([0.]*6).requires_grad_(training),
+                samples += (self.commands[:size], m.tensor([0.]*len(NAMES)).requires_grad_(training),
                             self.positions[:,:size], self.markers[:,:size], self.rotations[:,:size])
                 parameters = tuple(p for p in m.residual.parameters() if p.requires_grad) if m.residual is not None else ()
                 self.blocks[size] = CudaBlock(self._block, samples, training=training, parameters=parameters)
@@ -67,26 +68,26 @@ class BatchedObjective:
         state, command, log_scales = args[:-2], args[-2], args[-1]
         parameters = tuple(v*s for v,s in zip(self.base_parameters, log_scales.exp()))
         (c.position_gain_s_inv2, c.velocity_gain_s_inv, c.attitude_frequency_rad_s,
-         m.ei, m.cb, m.drag) = parameters
+         m.ei, m.drag) = parameters
 
         def advance_one(*values):
             state = CoupledState(*values[:-1])
             if whole_step:
                 out = m.step_unchecked(state, values[-1], c)
             else:
-                thrust, torque = c(state, values[-1])
-                out = m.substep(state, thrust, torque, m.dt/m.substeps)
+                out = m.controlled_substep(state, values[-1], c, m.integration_dt)
             return tuple(getattr(out, f.name) for f in fields(out))
 
         output = torch.vmap(advance_one)(*state, command)
         (c.position_gain_s_inv2, c.velocity_gain_s_inv, c.attitude_frequency_rad_s,
-         m.ei, m.cb, m.drag) = self.base_parameters
+         m.ei, m.drag) = self.base_parameters
         return output
 
     def _block(self, *args):
         m = self.model
-        state = args[:6]
-        commands, log_scales, positions, markers, rotations = args[6:]
+        count = len(fields(CoupledState))
+        state = args[:count]
+        commands, log_scales, positions, markers, rotations = args[count:]
         observe = torch.vmap(lambda *args: (m.tracking_pose(CoupledState(*args))[0],
                                            m.cable_state(CoupledState(*args))[0]))
         loss = torch.zeros_like(self.weights)
@@ -110,6 +111,8 @@ class BatchedObjective:
         return (*state, loss, torch.stack(ps,1), torch.stack(qs,1), torch.stack(rs,1))
 
     def rollout(self, log_scales, *, predictions=False):
+        if log_scales.shape != (len(NAMES),):
+            raise ValueError(f'Expected {len(NAMES)} log-scales in order {NAMES}')
         if torch.is_grad_enabled() and not self.training:
             raise RuntimeError('Comparison-only objective cannot compute gradients')
         state = tuple(v.detach().clone() for v in self.initial)
@@ -125,10 +128,11 @@ class BatchedObjective:
                 result = checkpoint(self._block, *args, use_reentrant=False)
             else:
                 result = self._block(*args)
-            state = result[:6]
-            loss = loss + result[6]
+            count = len(fields(CoupledState))
+            state = result[:count]
+            loss = loss + result[count]
             if predictions:
-                outputs.append(result[7:])
+                outputs.append(result[count+1:])
         if predictions:
             return loss/len(self.commands), tuple(torch.cat(values,1) for values in zip(*outputs))
         return loss/len(self.commands)

@@ -27,7 +27,7 @@ def main():
     parser.add_argument('--model', type=Path, default=DEFAULT_MODEL,
                         help='Dynamics model configuration (JSON)')
     parser.add_argument('--trajectory', type=Path,
-                        help='100 Hz CSV (SI units): ' + ','.join(COLUMNS) +
+                        help='Timestamped CSV (SI units): ' + ','.join(COLUMNS) +
                              '. Default: gentle 0.25 m X movement.')
     parser.add_argument('--device', choices=('cpu', 'cuda'))
     parser.add_argument('--no-compile', action='store_true')
@@ -40,7 +40,7 @@ def main():
     try:
         simulation = Simulation(config, model_config=args.model, device=args.device,
                                 compile_physics=not args.no_compile,
-                                command_source=trajectory.command)
+                                command_source=trajectory)
     except (OSError, ValueError, RuntimeError) as exc:
         QtWidgets.QMessageBox.critical(None, 'Cannot open simulation', str(exc))
         return

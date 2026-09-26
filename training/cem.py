@@ -14,8 +14,11 @@ class CEMConfiguration:
     alpha: float
     initial_std: float
     std_floor: float
+    valid_elites_only: bool = False  # Preserve historical search behavior.
 
     def __post_init__(self):
+        if type(self.valid_elites_only) is not bool:
+            raise ValueError('valid_elites_only must be boolean')
         if type(self.elites) is not int or self.elites < 2:
             raise ValueError('CEM requires at least two elites')
         if not math.isfinite(self.alpha) or not 0 < self.alpha <= 1:
@@ -61,20 +64,38 @@ class DiagonalCEM:
         return latent, self.transform(latent)
 
     @torch.no_grad()
-    def update(self, latent, returns):
+    def update(self, latent, returns, *, valid=None):
         if (latent.ndim != 2 or latent.shape[1] != len(self.mean) or returns.shape != latent.shape[:1]
                 or latent.device != self.mean.device or returns.device != self.mean.device
                 or latent.dtype != self.mean.dtype or returns.dtype != self.mean.dtype
                 or len(latent) < self.configuration.elites
                 or not bool(torch.isfinite(latent).all() & torch.isfinite(returns).all())):
             raise ValueError('Provide a finite evaluated latent batch and aligned returns')
-        selected = returns.topk(self.configuration.elites)
+        valid_count = len(returns)
+        ranked = returns
+        if self.configuration.valid_elites_only:
+            if (not isinstance(valid, torch.Tensor) or valid.shape != returns.shape
+                    or valid.dtype != torch.bool or valid.device != returns.device):
+                raise ValueError('Valid-only CEM requires an aligned boolean validity mask')
+            valid_count = int(valid.sum())
+            if valid_count < self.configuration.elites:
+                # Count the attempted batch, not a distribution update. Do not
+                # fit invalid/tied failure rows or silently resample a new batch.
+                self.updates += 1
+                return dict(latent_std_mean=float(self.variance.sqrt().mean()), elite_return_mean=None,
+                            valid_candidates=valid_count, distribution_updated=False)
+            ranked = returns.masked_fill(~valid, -float('inf'))
+        elif valid is not None:
+            raise ValueError('A validity mask requires valid_elites_only=True')
+        selected = ranked.topk(self.configuration.elites)
         elite = latent[selected.indices]
         alpha = self.configuration.alpha
         self.mean = (1-alpha)*self.mean+alpha*elite.mean(0)
         self.variance = ((1-alpha)*self.variance+alpha*elite.var(0, unbiased=False)).clamp_min(self.configuration.std_floor**2)
         self.updates += 1
-        return dict(latent_std_mean=float(self.variance.sqrt().mean()), elite_return_mean=float(selected.values.mean()))
+        return dict(latent_std_mean=float(self.variance.sqrt().mean()), elite_return_mean=float(selected.values.mean()),
+                    valid_candidates=valid_count if self.configuration.valid_elites_only else None,
+                    distribution_updated=True)
 
     def save(self, path):
         with Path(path).open('xb') as stream:

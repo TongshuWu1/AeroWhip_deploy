@@ -19,6 +19,7 @@ class TrajectoryPlot(QtWidgets.QWidget):
 
     def set_trajectory(self, trajectory, component):
         self.values = trajectory.preview(component)
+        self.times = trajectory.time_s
         self.duration = trajectory.duration_s
         self.unit = {'Position': 'm', 'Velocity': 'm/s', 'Acceleration': 'm/s²'}[component]
         self.cache = None
@@ -56,7 +57,7 @@ class TrajectoryPlot(QtWidgets.QWidget):
                 painter.drawText(4, int(rect.bottom()), f'{lo:.3g}')
                 path = QtGui.QPainterPath()
                 for i, value in enumerate(values):
-                    point = QtCore.QPointF(rect.left()+rect.width()*i/(len(values)-1),
+                    point = QtCore.QPointF(rect.left()+rect.width()*self.times[i]/self.duration,
                                           rect.bottom()-rect.height()*(value-lo)/(hi-lo))
                     if i == 0:
                         path.moveTo(point)
@@ -112,7 +113,7 @@ class ControllerWindow(QtWidgets.QWidget):
         layout.addWidget(self.plot, 1)
         units = QtWidgets.QLabel('World P/V/A: m, m/s, m/s² · Yaw: rad · Body rates: rad/s (zero)')
         units.setWordWrap(True)
-        units.setToolTip('CSV header: '+','.join(COLUMNS)+'\n100 Hz, time starts at zero. Position uses the tracking origin. Acceleration excludes gravity.')
+        units.setToolTip('CSV header: '+','.join(COLUMNS)+'\nOriginal timestamps, starting at zero. Position uses the tracking origin. Acceleration excludes gravity.')
         layout.addWidget(units)
         self.error = QtWidgets.QLabel()
         self.error.setStyleSheet('color: #c24444;')
@@ -142,7 +143,7 @@ class ControllerWindow(QtWidgets.QWidget):
         self.filename.setText('B-spline' if generated else Path(source).name if source else 'Gentle move')
         self.filename.setToolTip('Generated command trajectory' if generated else
                                  str(Path(source).resolve()) if source else 'Built-in 0.25 m X movement')
-        self.details.setText(f'{self.trajectory.duration_s:g} s · {self.trajectory.sample_count} samples · 100 Hz')
+        self.details.setText(f'{self.trajectory.duration_s:g} s · {self.trajectory.sample_count} samples · {self.trajectory.rate_label}')
 
     def update_preview(self, *_):
         self.plot.set_trajectory(self.trajectory, self.component.currentText())
@@ -169,7 +170,7 @@ class ControllerWindow(QtWidgets.QWidget):
         # No playback state changes until all input checks succeed.
         self.viewer._reset_simulation()
         self.trajectory = candidate
-        self.simulation.command_source = candidate.command
+        self.simulation.command_source = candidate
         self.progress.setRange(0, candidate.sample_count-1)
         self.describe(source, generated)
         self.error.clear()
@@ -224,7 +225,7 @@ class ControllerWindow(QtWidgets.QWidget):
         self.run_button.setEnabled(fault is None)
         self.load_button.setEnabled(not sim.running)
         self.spline_button.setEnabled(not sim.running)
-        self.progress.setValue(min(sim.step_count, self.trajectory.sample_count-1))
+        self.progress.setValue(self.trajectory.index_at(elapsed))
         self.plot.cursor = elapsed
         self.plot.update()
 
