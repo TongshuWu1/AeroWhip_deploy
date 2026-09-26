@@ -1,0 +1,27 @@
+{
+  "status": "stopped",
+  "reason": "UI Stop or UI disconnected",
+  "checkpoints": [
+    "seed_0\\policy_000000.pt",
+    "seed_0\\policy_000005.pt",
+    "seed_0\\policy_000010.pt",
+    "seed_0\\policy_000015.pt",
+    "seed_0\\policy_000020.pt",
+    "seed_0\\policy_000025.pt",
+    "seed_0\\policy_000030.pt",
+    "seed_0\\policy_000035.pt",
+    "seed_0\\policy_000040.pt",
+    "seed_0\\policy_000045.pt",
+    "seed_0\\policy_000050.pt",
+    "seed_0\\policy_000055.pt",
+    "seed_0\\policy_000060.pt",
+    "seed_0\\policy_000065.pt",
+    "seed_0\\policy_000070.pt",
+    "seed_0\\policy_000075.pt",
+    "seed_0\\policy_000080.pt",
+    "seed_0\\policy_000085.pt",
+    "seed_0\\policy_000090.pt",
+    "seed_0\\policy_000095.pt",
+    "seed_0\\policy_000100.pt"
+  ]
+}

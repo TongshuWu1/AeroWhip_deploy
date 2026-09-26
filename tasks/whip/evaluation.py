@@ -3,7 +3,8 @@
 import hashlib
 import json
 import math
-from pathlib import Path
+import os
+from pathlib import Path, PureWindowsPath
 import re
 import shutil
 import sys
@@ -22,6 +23,53 @@ def digest(path):
 
 def read_json(path):
     return json.loads(Path(path).read_text(encoding='utf-8'))
+
+
+def relative_record_name(value):
+    """Interpret retained Windows/POSIX relative keys without changing hashes."""
+    path = PureWindowsPath(value)
+    if path.drive or path.root or '..' in path.parts or not path.parts:
+        raise ValueError(f'Expected a relative artifact path: {value}')
+    return path.as_posix()
+
+
+def discover_runs(folder):
+    """Find supported run protocols at any depth, including folder itself."""
+    runs = []
+    if not Path(folder).exists():
+        return runs
+    def unreadable(error):
+        raise error
+    for directory, children, files in os.walk(folder, onerror=unreadable):
+        children[:] = [name for name in children if not name.startswith('.')
+                       and name not in ('__pycache__', 'source_snapshot', 'snapshot_fixture', 'dependencies')]
+        if 'protocol.json' not in files:
+            continue
+        path = Path(directory)
+        try:
+            protocol = read_json(path/'protocol.json')
+            supported = (protocol.get('schema') in ('whip_single_scenario_v1', 'whip_stage1_v1')
+                         and protocol['experiment']['experiment']['mode'] == 'training')
+        except (OSError, ValueError, KeyError, TypeError, AttributeError):
+            continue
+        if supported:
+            runs.append(path.resolve())
+            children.clear()  # Do not search checkpoint/source copies within a run.
+    return sorted(runs, key=lambda path: (path.name, str(path)), reverse=True)
+
+
+def verify_artifacts(folder, paths, *, required=False):
+    manifest_path = Path(folder)/'artifacts.json'
+    if not required and not manifest_path.exists():
+        return
+    original = read_json(manifest_path)
+    manifest = {relative_record_name(key): value for key, value in original.items()}
+    if len(manifest) != len(original):
+        raise ValueError('Duplicate artifact paths in manifest')
+    for path in paths:
+        path = Path(path)
+        if manifest.get(path.relative_to(folder).as_posix()) != digest(path):
+            raise ValueError(f'Saved artifact hash mismatch: {path.name}')
 
 
 def policy_record(checkpoint):
@@ -61,9 +109,8 @@ def best_policy(records):
     return max(records, key=lambda row: (row['metrics']['return_mean'], -row['update'], -row['seed']))
 
 
-def inspect_policy(checkpoint):
-    """Read-only provenance check; no Torch import or CUDA initialization."""
-    from .resume import source_compatible
+def inspect_saved_policy(checkpoint):
+    """Validate retained inputs independently of today's execution backend."""
     record = policy_record(checkpoint)
     checkpoint = Path(record['checkpoint'])
     run = checkpoint.parent.parent
@@ -79,23 +126,86 @@ def inspect_policy(checkpoint):
     for name in ('scene', 'model', 'residual'):
         if hashes[name] != protocol['sources'][name]['sha256']:
             raise ValueError(f'Saved {name} hash does not match the training protocol')
-    manifest_path = run/'artifacts.json'
-    if manifest_path.exists():
-        manifest = {Path(k).as_posix(): v for k, v in read_json(manifest_path).items()}
-        for name, path in paths.items():
-            if manifest.get(path.relative_to(run).as_posix()) != hashes[name]:
-                raise ValueError(f'Saved artifact hash mismatch: {path.name}')
+    verify_artifacts(run, paths.values())
+    record.update(run=str(run), protocol=protocol, hashes=hashes,
+                  paths={key: str(path) for key, path in paths.items()})
+    return record
+
+
+def inspect_policy(checkpoint):
+    """Re-evaluation still requires compatible current mathematical source."""
+    from .resume import source_compatible
+    record = inspect_saved_policy(checkpoint)
+    protocol = record['protocol']
     orchestration = {'run_training.py', 'tasks/whip/experiment.py',
                      'tasks/whip/worker.py', 'tasks/whip/resume.py', 'tasks/whip/evaluation.py'}
     for name, expected in protocol['code_sha256'].items():
-        name = Path(name).as_posix()
+        name = relative_record_name(name)
         if name in orchestration or name.startswith('training/ui/'):
             continue
         if not source_compatible(name, expected, digest(ROOT/name), protocol):
             raise ValueError(f'Training implementation changed: {name}')
-    record.update(run=str(run), protocol=protocol, hashes=hashes,
-                  paths={key: str(path) for key, path in paths.items()})
     return record
+
+
+def saved_motion(checkpoint):
+    """Read a retained Stage-1 motion; no Torch, physics or reward execution."""
+    from simulation.configuration import load_configuration
+    record = inspect_saved_policy(checkpoint)
+    path = Path(record['checkpoint'])
+    motion = path.with_name(path.stem+'_motion.npz')
+    if not motion.is_file():
+        raise ValueError('No saved motion for this policy. Open an existing replay or use Evaluate on a compatible computer.')
+    verify_artifacts(Path(record['run']), [motion])
+    with np.load(motion, allow_pickle=False) as data:
+        arrays = {key: data[key] for key in data.files}
+    with np.load(record['paths']['diagnostics'], allow_pickle=False) as data:
+        if not np.array_equal(arrays['actions'], data['actions'][0]):
+            raise ValueError('Saved motion action does not match the evaluation record')
+        indices = data['event_indices'][0].tolist()
+        reasons = [label for label, key in (('command', 'command_valid'),
+                   ('numerical', 'numerical_valid'), ('envelope', 'envelope_valid'))
+                   if key in data and not bool(data[key][0])]
+        if not bool(data['valid'][0]) and not reasons:
+            reasons.append('score')
+    raw = record['protocol']['experiment']
+    if record['protocol']['schema'] != 'whip_stage1_v1':
+        raise ValueError('Use Open replay for this historical evaluation format')
+    scene = load_configuration(record['paths']['scene'])
+    initial = scene.initial_state.position_world_m
+    summary = dict(schema='whip_policy_evaluation_v1', source_run=record['run'],
+        seed=record['seed'], update=record['update'], metrics=record['metrics'],
+        saved_only=True, rejection_reasons=reasons,
+        playable=bool(arrays['state_valid'].all()), target_position_world_m=None,
+        stage1=raw['request'], event_indices=indices)
+    if 'workspace' in raw:
+        summary['workspace'] = dict(raw['workspace'], center_xy_world_m=initial[:2].tolist())
+    if 'strike_surface' in raw:
+        surface, request = raw['strike_surface'], raw['request']
+        # Presentation of the saved vertical region; no event search/reward.
+        normal = [math.cos(request['heading_rad']), math.sin(request['heading_rad']), 0.]
+        summary['strike_surface'] = dict(
+            center_world_m=[float(initial[0])+surface['distance_m']*normal[0],
+                            float(initial[1])+surface['distance_m']*normal[1], request['release_height_world_m']],
+            normal_world=normal, width_m=surface['width_m'], height_m=surface['height_m'],
+            maximum_entry_angle_deg=surface['maximum_entry_angle_deg'],
+            minimum_forward_speed_mps=request['tip_speed_mps'])
+        summary['event_fraction'] = record['metrics'].get('crossing_fraction_mean')
+    return summary, arrays, Path(record['paths']['scene'])
+
+
+def saved_replay(folder):
+    """A completed standalone replay is self-contained after relocation."""
+    folder = Path(folder).resolve()
+    paths = [folder/name for name in ('summary.json', 'rollout.npz', 'scene.toml')]
+    verify_artifacts(folder, paths, required=True)
+    summary = read_json(paths[0])
+    if summary.get('schema') != 'whip_policy_evaluation_v1':
+        raise ValueError('Unsupported saved replay')
+    summary['saved_only'] = True
+    with np.load(paths[1], allow_pickle=False) as data:
+        arrays = {key: data[key] for key in data.files}
+    return summary, arrays, paths[2]
 
 
 def evaluate(checkpoint, output, expected_hashes, progress=print):

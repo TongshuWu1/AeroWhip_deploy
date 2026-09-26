@@ -3,6 +3,4 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
-/runs/
 /tmp/
-/data/take_processing/

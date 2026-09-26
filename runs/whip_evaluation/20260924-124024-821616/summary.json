@@ -1,0 +1,172 @@
+{
+  "schema": "whip_policy_evaluation_v1",
+  "checkpoint": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\runs\\whip_stage1\\20260924-153459-218233\\seed_0\\policy_000070.pt",
+  "source_run": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\runs\\whip_stage1\\20260924-153459-218233",
+  "seed": 0,
+  "update": 70,
+  "target_position_world_m": null,
+  "target_width_m": null,
+  "metrics": {
+    "episodes": 1,
+    "valid_fraction": 1.0,
+    "command_admissible_fraction": 1.0,
+    "numerical_valid_fraction": 1.0,
+    "return_mean": 1.1976751335047617,
+    "return_min": 1.1976751335047617,
+    "return_max": 1.1976751335047617,
+    "valid_return_mean": 1.1976751335047617,
+    "acceleration_cost_mean": 0.0005110960256102146,
+    "score_mean": 1.198186229530372,
+    "event_fraction": 1.0,
+    "mechanical_mean": 0.6287471522259073,
+    "matching_mean": 0.9831950122617424,
+    "time_factor_mean": 0.9609103506505796,
+    "bend_mean": 0.32181284756500245,
+    "pulse_mean": 0.8631469410085455,
+    "coherence_mean": 0.8999132676215378,
+    "travel_m_mean": 0.24864954690219848,
+    "turn_rad_mean": 3.1280864183735244,
+    "spread_m_mean": 0.16038437612508477,
+    "transport_mps_mean": 1.5274036165180176,
+    "nonrigid_mps_mean": 7.228473558176621,
+    "release_mps_mean": 5.981014898335919,
+    "forward_mps_mean": 8.508311250742711,
+    "tip_speed_mps_mean": 8.547997353612095,
+    "height_error_m_mean": 0.035836897525941325,
+    "speed_error_mps_mean": 5.508311250742711,
+    "direction_error_rad_mean": 0.09639848412871745,
+    "release_time_s_mean": 2.7362754544594274,
+    "release_height_world_m_mean": 2.0358368975259413,
+    "wall_distance_m_mean": 0.0,
+    "crossing_fraction_mean": 0.627545445942725,
+    "plane_crossing_mean": 1.0,
+    "directed_strike_mean": 1.0,
+    "approach_reward_mean": 0.5940165830144221,
+    "strike_bonus_mean": 0.60416964651595,
+    "strike_success_mean": 1.0,
+    "strike_count_mean": 1.0,
+    "first_strike_time_s_mean": 2.7362754544594274,
+    "strike_fraction": 1.0
+  },
+  "saved_metrics": {
+    "episodes": 1,
+    "valid_fraction": 1.0,
+    "command_admissible_fraction": 1.0,
+    "numerical_valid_fraction": 1.0,
+    "return_mean": 1.1976751335047617,
+    "return_min": 1.1976751335047617,
+    "return_max": 1.1976751335047617,
+    "valid_return_mean": 1.1976751335047617,
+    "acceleration_cost_mean": 0.0005110960256102146,
+    "score_mean": 1.198186229530372,
+    "event_fraction": 1.0,
+    "mechanical_mean": 0.6287471522259073,
+    "matching_mean": 0.9831950122617424,
+    "time_factor_mean": 0.9609103506505796,
+    "bend_mean": 0.32181284756500245,
+    "pulse_mean": 0.8631469410085455,
+    "coherence_mean": 0.8999132676215378,
+    "travel_m_mean": 0.24864954690219848,
+    "turn_rad_mean": 3.1280864183735244,
+    "spread_m_mean": 0.16038437612508477,
+    "transport_mps_mean": 1.5274036165180176,
+    "nonrigid_mps_mean": 7.228473558176621,
+    "release_mps_mean": 5.981014898335919,
+    "forward_mps_mean": 8.508311250742711,
+    "tip_speed_mps_mean": 8.547997353612095,
+    "height_error_m_mean": 0.035836897525941325,
+    "speed_error_mps_mean": 5.508311250742711,
+    "direction_error_rad_mean": 0.09639848412871745,
+    "release_time_s_mean": 2.7362754544594274,
+    "release_height_world_m_mean": 2.0358368975259413,
+    "wall_distance_m_mean": 0.0,
+    "crossing_fraction_mean": 0.627545445942725,
+    "plane_crossing_mean": 1.0,
+    "directed_strike_mean": 1.0,
+    "approach_reward_mean": 0.5940165830144221,
+    "strike_bonus_mean": 0.60416964651595,
+    "strike_success_mean": 1.0,
+    "strike_count_mean": 1.0,
+    "first_strike_time_s_mean": 2.7362754544594274,
+    "strike_fraction": 1.0
+  },
+  "saved_action_equal": true,
+  "metrics_equal": true,
+  "return_difference": 0.0,
+  "rejection_reasons": [],
+  "playable": true,
+  "inputs": {
+    "checkpoint": {
+      "path": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\runs\\whip_stage1\\20260924-153459-218233\\seed_0\\policy_000070.pt",
+      "sha256": "a7b11670d71e7177c216dee10d8746b91e34fdf4b26e0c90c3c0bcdceafcbab1"
+    },
+    "metrics": {
+      "path": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\runs\\whip_stage1\\20260924-153459-218233\\seed_0\\policy_000070.json",
+      "sha256": "6de3228957ee7bf9e116b2ae1f2b72867bdddca0739cb1e16f58435f9d927254"
+    },
+    "diagnostics": {
+      "path": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\runs\\whip_stage1\\20260924-153459-218233\\seed_0\\policy_000070.npz",
+      "sha256": "f57f5b7f6971c0993b56fd2a9933cbb8d3a0147775af9d2b13fe048a453ece6b"
+    },
+    "protocol": {
+      "path": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\runs\\whip_stage1\\20260924-153459-218233\\protocol.json",
+      "sha256": "b2472a31002c2e9d0f643d78f77ff9c86a9fa0a06412f12dd052cfc3cec1ee84"
+    },
+    "scene": {
+      "path": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\runs\\whip_stage1\\20260924-153459-218233\\scene.toml",
+      "sha256": "91fa21032ce3ea93b5dfe655b5c210ecd83b3957bb184493c8c8a8968308424e"
+    },
+    "model": {
+      "path": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\runs\\whip_stage1\\20260924-153459-218233\\model.json",
+      "sha256": "6239cb9f4b829e80f872aa16fe530762d68e80728f425a7bccd9eb4710d2499c"
+    },
+    "residual": {
+      "path": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\runs\\whip_stage1\\20260924-153459-218233\\residual.pt",
+      "sha256": "3318953a60bba141b9b321024641122f2d82d5a77ffbb92da036089797efaf91"
+    }
+  },
+  "evaluation_source_sha256": "8ef5e032306e8e733e7f97571b05fb21b2a26f7ebe567f0d1627905510b0c06c",
+  "experiment_source_sha256": "9750874fc2ac08bb02e2dca76e7b9a1ba107cdf17ab67c3d964f9e97721cb9ae",
+  "training_episodes": 0,
+  "optimizer_updates": 0,
+  "stage1": {
+    "heading_rad": 0.0,
+    "elevation_rad": 0.0,
+    "release_height_world_m": 2.0,
+    "tip_speed_mps": 3.0
+  },
+  "stage1_speed_mode": "minimum",
+  "event_indices": [
+    248,
+    268,
+    273
+  ],
+  "strike_surface": {
+    "center_world_m": [
+      1.1,
+      0.0,
+      2.0
+    ],
+    "normal_world": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "width_m": 1.0,
+    "height_m": 0.6,
+    "maximum_entry_angle_deg": 30.0,
+    "minimum_forward_speed_mps": 3.0
+  },
+  "event_fraction": 0.627545445942725,
+  "workspace": {
+    "radius_m": 0.6,
+    "center_xy_world_m": [
+      0.0,
+      0.0
+    ],
+    "height_lower_world_m": 1.5,
+    "height_upper_world_m": 3.0
+  },
+  "workspace_source_sha256": "c145ddb5fd5f2f4f02ab03347ca5d76f7b7f1f29dc1cb89810f6d92564bcd475",
+  "workspace_satisfied": true
+}

@@ -1,0 +1,186 @@
+{
+  "schema": "whip_stage1_v1",
+  "experiment": {
+    "experiment": {
+      "name": "whip_stage1",
+      "mode": "training",
+      "device": "cuda",
+      "batch_size": 256,
+      "updates": 100,
+      "seeds": [
+        0
+      ],
+      "evaluation_interval": 5,
+      "scene": "configs/scenes/default.toml",
+      "model": "models/residual_20260921-000505.json"
+    },
+    "exploration": {
+      "smoothness_time_s": 2.0,
+      "amplitude_scale": 12.0
+    },
+    "cem": {
+      "elites": 26,
+      "alpha": 0.5,
+      "initial_std": 0.04,
+      "std_floor": 0.003
+    },
+    "trajectory": {
+      "command_rate_hz": 30.0,
+      "duration_s": 3.0,
+      "post_hold_s": 0.5,
+      "offset_lower_m": [
+        -0.75,
+        -0.75,
+        -0.5
+      ],
+      "offset_upper_m": [
+        0.75,
+        0.75,
+        0.7
+      ],
+      "max_speed_mps": 4.0,
+      "max_acceleration_mps2": 15.0,
+      "control_count": 32
+    },
+    "workspace": {
+      "radius_m": 0.75,
+      "height_lower_world_m": 1.5,
+      "height_upper_world_m": 2.7
+    },
+    "return": {
+      "acceleration_cost_weight": 0.01,
+      "failure_return": -1.0,
+      "drone_lower_world_m": [
+        -2.0,
+        -2.0,
+        1.0
+      ],
+      "drone_upper_world_m": [
+        2.0,
+        2.0,
+        3.0
+      ],
+      "maximum_tilt_deg": 60.0,
+      "minimum_cable_height_m": 0.05
+    },
+    "request": {
+      "heading_rad": 0.0,
+      "elevation_rad": 0.0,
+      "release_height_world_m": 2.0,
+      "tip_speed_mps": 3.0
+    },
+    "strike_surface": {
+      "distance_m": 1.0,
+      "width_m": 1.0,
+      "height_m": 0.6,
+      "maximum_entry_angle_deg": 30.0,
+      "approach_width_m": 0.35
+    },
+    "matching": {
+      "height_width_m": 0.35,
+      "speed_width_mps": 1.5,
+      "direction_width_deg": 30.0,
+      "time_preference": 0.05,
+      "speed_mode": "minimum"
+    },
+    "mechanics": {
+      "smoothing_sigma_fraction": 0.05,
+      "windows_s": [
+        0.2,
+        0.4,
+        0.6,
+        0.8
+      ],
+      "window_stride_s": 0.05,
+      "tip_lag_s": 0.15,
+      "event_start_s": 0.03,
+      "event_end_s": 3.03,
+      "turn_reference_rad": 0.5,
+      "travel_reference_fraction": 0.2,
+      "spread_scale_fraction": 0.25,
+      "nonrigid_reference_mps": 0.5,
+      "release_reference_mps": 0.5,
+      "forward_reference_mps": 1.0,
+      "rigid_pinv_rtol": 1e-08
+    }
+  },
+  "sources": {
+    "configuration": {
+      "path": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\configs\\experiments\\whip_stage1_directed.toml",
+      "sha256": "370accdca494f2eb4101a499935386d379a1c1be5ce57dd504e4bacae36a5ee4"
+    },
+    "scene": {
+      "path": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\configs\\scenes\\default.toml",
+      "sha256": "91fa21032ce3ea93b5dfe655b5c210ecd83b3957bb184493c8c8a8968308424e"
+    },
+    "model": {
+      "path": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\models\\residual_20260921-000505.json",
+      "sha256": "6239cb9f4b829e80f872aa16fe530762d68e80728f425a7bccd9eb4710d2499c"
+    },
+    "residual": {
+      "path": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\models\\residual_20260921-000505.pt",
+      "sha256": "3318953a60bba141b9b321024641122f2d82d5a77ffbb92da036089797efaf91"
+    }
+  },
+  "code_sha256": {
+    "run_training.py": "078773f0dccea8566e744ac38959fcfc7310f028b621cbd53065a11834c56eb1",
+    "tasks\\whip\\configuration.py": "585304764429e83181485ff3401283a420d3cbf33f6d6faa680adc6a46434002",
+    "tasks\\whip\\environment.py": "e2e88b20963dc024b24f096e3989be1fa134bbe755bedd9f1289cff6490ecc19",
+    "tasks\\whip\\evaluation.py": "8ef5e032306e8e733e7f97571b05fb21b2a26f7ebe567f0d1627905510b0c06c",
+    "tasks\\whip\\experiment.py": "7f629df192f5e3eea6d23edeb503d6a534d40c0acfbb428c57d0ab99792a0dea",
+    "tasks\\whip\\metrics.py": "f049297ab63a40841032dbc31f926c423d31f44f5357a19f2d89485b80798cba",
+    "tasks\\whip\\peak_scoring.py": "8cf26bf60d2b33128fc5dface3542ad2bfcd70cde38048d87bafb069bd8f75f6",
+    "tasks\\whip\\reach.py": "94c377845a809328e7b626a2af1714b7c9ed8448911b996d3fe8e6f3d6a5496f",
+    "tasks\\whip\\resume.py": "ec0c8f3a7fc97b23b61f670d935b02e8d71dc95c6c46ff1f7fb8c7a0f4a5cb0e",
+    "tasks\\whip\\reward.py": "0a90fe68cb2658e0d2ee0fc21e93c180149d72ac282e6d26aa285d0b1e6552f0",
+    "tasks\\whip\\scoring.py": "5a548f2cd7add85018c560282776d03ee1d406e87ce4404a71daa0756dd630c7",
+    "tasks\\whip\\skill.py": "4fb135a969490ad4c3b037f28d170e218f971fe822929a3a053af72f68d24cac",
+    "tasks\\whip\\skill_metrics.py": "452d76e11fe577774be039dce2e8b2733b857dbb473baa9e32c1ffa93fc5026f",
+    "tasks\\whip\\stage1.py": "47592ca995e5772532c83382c67b5d52ba55a9fa4428343386c3689903bb6c59",
+    "tasks\\whip\\stage1_configuration.py": "354ec37f33cf1bc7b5a0db235b645435ffbe2924e8cb8f83d2a02558eb48781a",
+    "tasks\\whip\\stage1_experiment.py": "678c8988f767f4ede1c7880531a6eb9d04afce4bb7dde4ca5cb92599d0d3eafb",
+    "tasks\\whip\\strike.py": "33fefcd4095c758b697579c5730b07b03b3946264cb6325309e47b6d72f80390",
+    "tasks\\whip\\worker.py": "2cd479a12d84a4390a25dee9c10641bc43d19f145458ed84ae5c21f1f014deef",
+    "tasks\\whip\\workspace.py": "78847c85fb0251c5da7f9c85ddec2945fd492fda34f70515da1e79b4341d894d",
+    "tasks\\whip\\__init__.py": "84b935f8af08e6a2291cab87cfe3e6b45e809ae3de14b25e4c8b6ed1585700cf",
+    "training\\cem.py": "c3261b4b4264f86ea173e725394cdac54bd5f669b3a27013645e4596594dc8b6",
+    "training\\configuration.py": "16cc88aee6f7fd84032f34d702425669682daf58ed4eb67da782ffbc469d4094",
+    "training\\episodic.py": "bf0a26538ccef68b7296d47175bb73206dcc4b8d16621c8f2befc5879e4cd9ba",
+    "training\\networks.py": "25ef8af5a7884384fca9a970e8cff2c1f69f9bf97a25927780e77ebf0be121f3",
+    "training\\trust_region.py": "08187c6f58e17fadd562d32eeb216cb4407f98c5a89138665193f0abd3aa2397",
+    "training\\__init__.py": "d32deaccd6d56e0b573b8b89b264b41fd28b847bd42e75bbb983a28f175e575a",
+    "training\\ui\\evaluation_window.py": "fedec4ab4612e78aefedb38e020757089a23fdf6bd2f54208522c1bff35412e7",
+    "training\\ui\\plots.py": "23b91598f801e00fbdb4513b6e298a7eef0c27d4f90b981352883fde01345bd7",
+    "training\\ui\\records.py": "c8a8b3fbad983d28ffd677ef881637b29450d338524b01044839754523aad47e",
+    "training\\ui\\window.py": "7852c190911d5f73c94eeeb04b85e4253dc0bdc293e11cb4253e17c2238f7f76",
+    "training\\ui\\__init__.py": "a5f47d2aafd6bff2da00ff32d7d0687eaf10c80cddd6a25422c9f6707ac69e65",
+    "trajectories\\bspline.py": "b680353fc70bd4f9938e057a8f4ac92b5e1290d436f63aa0b23e54aa8011007d",
+    "trajectories\\bspline_torch.py": "ce1ac1dc8496df9990d1f60150af0de8dc930949f20f441ec540a8b9ca9171d3",
+    "trajectories\\exploration.py": "6b159bd31dc54ce95e9d0e4bc82b31d0cc57a2042a5df8e714d4dfef72944505",
+    "trajectories\\full_state.py": "a310482e24968d09ad6468eab435c3997ae1cb68b19df70ad826decf2b552646",
+    "trajectories\\__init__.py": "76f29f0020609e6370923a606a3f07b8456282e920ca96499b7e417a4736407e",
+    "simulation\\batched_rollout.py": "3ace202f6e2828448a143985db1d32d246a978b40e2e46e4db6a7c60142186b2",
+    "simulation\\configuration.py": "95b56023277bc4d64a1285e957199978b08468c72ea53796222d6a990c3ee008",
+    "simulation\\controller_interface.py": "869242bf6af36427d49adcc11a86d6995502045e560f9f905a280c788e92b877",
+    "simulation\\rollout.py": "a67b8be4ba06ea105b7a7c8dbdcd37e037efbb49ccb0398564511a1957ef070b",
+    "simulation\\runtime.py": "254d7c4c82ea6e8ef11b7c764f647120c5d9a5474873109bad76a2510ce12877",
+    "simulation\\state.py": "6183ec3130558dc09caef8d9bc80522a7f04d154ed76cdd53105d523684f3b97",
+    "simulation\\timing.py": "ee91e0c2c02534edc6edad0781be754e30d7ae37423bdd166deab9fea78f2229",
+    "simulation\\__init__.py": "059dfc67be25f054e6fa7f458a025cd0a926a97d81277eb1a3ddbac607fd0cc1",
+    "simulation\\dynamics\\coupled.py": "27ad4e7248287a5ec84d8575c535d3b2983c93791bfa9f86b3d5daca65d0ec68",
+    "simulation\\dynamics\\coupled_control.py": "401e10c6c1eebbbcc9612e8ba991629bdde6dd2cce6e71df5898c25a3bf8bbba",
+    "simulation\\dynamics\\coupled_runtime.py": "937c1826c5fe1ccf11384de1b68d8102ee8d192d1af7cde59f7c3c64bcaab04f",
+    "simulation\\dynamics\\dder_math.py": "80ab7de452ad9c58c1b71e1a09d9cae032221ce030dfb1d33f7e97b25c75ee64",
+    "simulation\\dynamics\\residuals.py": "9c2e77cb357f9b675dab3f71db4ddb2802a3dfc4c00b9bd1baf877c9122d1a4a",
+    "simulation\\dynamics\\rotations.py": "68e92ac02cb15f2c7b21ccb9e185bdc4a954a43d02db7f5885a0f6609b466c5d",
+    "simulation\\dynamics\\__init__.py": "0c0e239db15abb2aaa1726695602c9535c07bef00145a8f7a543c6f95d93c642"
+  },
+  "method": "Smoothed diagonal latent CEM; fixed initial state/request, not a contextual policy or iCEM",
+  "score": "Multiplicative directed-surface Stage1Reward; no hit bonus; crossing diagnostics are not whip labels",
+  "evaluation": "Batch-one transformed CEM mean; best sample stored separately; no held-out/generalization claim",
+  "versions": {
+    "torch": "2.11.0+cu128",
+    "numpy": "2.5.3"
+  },
+  "gpu": "NVIDIA GeForce RTX 4080"
+}

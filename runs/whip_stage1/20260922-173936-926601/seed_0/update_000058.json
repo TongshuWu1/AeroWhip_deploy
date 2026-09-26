@@ -1,0 +1,41 @@
+{
+  "seed": 0,
+  "update": 58,
+  "samples": {
+    "episodes": 256,
+    "valid_fraction": 0.82421875,
+    "command_admissible_fraction": 0.82421875,
+    "numerical_valid_fraction": 0.82421875,
+    "return_mean": 0.15730182584521063,
+    "return_min": -1.0,
+    "return_max": 0.43355736128489425,
+    "valid_return_mean": 0.404119750788502,
+    "acceleration_cost_mean": 0.000799955876157748,
+    "score_mean": 0.40491970666465976,
+    "event_fraction": 0.82421875,
+    "mechanical_mean": 0.4323110056682155,
+    "matching_mean": 0.9588495148194704,
+    "time_factor_mean": 0.9768740690589032,
+    "bend_mean": 0.11338269850303712,
+    "pulse_mean": 0.8144449495595701,
+    "coherence_mean": 0.7695105832247292,
+    "travel_m_mean": 0.13279059925324208,
+    "turn_rad_mean": 3.771936036498765,
+    "spread_m_mean": 0.21285192109704573,
+    "transport_mps_mean": 1.1280381596275169,
+    "nonrigid_mps_mean": 5.126347615183117,
+    "release_mps_mean": 4.400926201226648,
+    "forward_mps_mean": 7.162951144134391,
+    "tip_speed_mps_mean": 7.313672131194122,
+    "height_error_m_mean": -0.008506802503041512,
+    "speed_error_mps_mean": 4.313672131194121,
+    "direction_error_rad_mean": 0.18599425827321767,
+    "release_time_s_mean": 1.6188151658767775,
+    "release_height_world_m_mean": 1.2414931974969587
+  },
+  "learner": {
+    "latent_std_mean": 0.012391253795507385,
+    "elite_return_mean": 0.42324875004988
+  },
+  "elapsed_s": 36.07999830000335
+}

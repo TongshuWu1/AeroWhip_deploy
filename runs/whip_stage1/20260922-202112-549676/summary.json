@@ -1,0 +1,8 @@
+{
+  "mode": "training",
+  "status": "stopped",
+  "seeds": [],
+  "training_episodes": 0,
+  "cumulative_training_episodes": 0,
+  "elapsed_seconds": 2.310609199979808
+}

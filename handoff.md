@@ -17,8 +17,11 @@ direction, not approval to implement a replacement architecture.
   observation, not permission to start anything; inspect actual process commands
   again before future experiments. Project follow-up automations were already
   paused at the preceding audit.
-- The latest request only authorizes preserving current changes, writing this
-  handoff, committing, and pushing to the existing private repository.
+- The latest approved follow-up is cross-computer access to past evaluation
+  results: portable folder discovery, saved-state viewing, and committing/pushing
+  the retained `runs/whip_stage1/` and `runs/whip_evaluation/` folders. This does
+  not authorize new training, physics changes, or a transfer of the separate
+  performance investigations.
 
 ## What the user wants now
 
@@ -197,12 +200,33 @@ still describes an earlier 4 s / upper height 2.60 m edit. Preserve the actual
 user-edited configuration; do not restore it to match stale prose. These are
 historical search settings, not the redesign requirements.
 
-`runs/`, `tmp/`, `.venv/`, IDE files and `data/take_processing/` are Git-ignored.
-This source-code push does not transfer training runs, audit arrays, or the raw
-flight library. Some older evidence is in sibling
-`AeroWhip_archive/20260922-cleanup/`. A fresh clone lacks that local evidence;
-request it if needed instead of inventing results or silently rerunning jobs.
-Tracked model checkpoints remain in `models/`.
+At the user's request on 2026-09-26, `/runs/` and `/data/take_processing/` were
+removed from `.gitignore`, making retained simulations, training results and the
+take catalog eligible for tracking. Temporary PDF previews in `/tmp/`, virtual
+environments, IDE files, Python caches and package metadata remain ignored.
+Removing an ignore rule did not itself commit or upload files: commit `74d6879`
+was a source checkpoint without these result directories. The subsequent user
+approved pushing the retained training/evaluation folders, about 480 MiB total:
+11 Stage-1 run directories containing 168 completed policy motions, and 24
+standalone evaluation directories (23 complete, one without a completed replay).
+Some runs are stopped/incomplete; preserving them does not claim completion.
+Other research artifacts remain local. All newly exposed directories together
+total about 5.02 GiB; do not stage/upload the remainder without authorization.
+Some older evidence is outside this repository in sibling
+`AeroWhip_archive/20260922-cleanup/`, and the catalog may refer to external raw
+recordings. Neither is included by this ignore-rule change. Request missing
+evidence rather than inventing results or silently rerunning jobs.
+Previously tracked model checkpoints remain in `models/`.
+
+`run_evaluation.py` now scans the local `runs/` recursively; **Folder** selects
+another results collection or a single run. **View saved** displays the selected
+Stage-1 motion and **Open replay** reads an existing evaluation `summary.json`
+with its sibling scene, rollout and manifest. These modes work without the
+original GPU because they do not simulate anything. **Evaluate** still requires
+the saved library/GPU identity and compatible mathematical source. Do not relax
+those checks to make a historical replay appear to be a new exact reproduction.
+Relocation/offscreen checks and all 168 saved motions passed; no physical rollout,
+native 3D test or training was performed. Saved model/data bytes were preserved.
 
 Local run `runs/whip_stage1/20260924-153459-218233` has UI name
 **Training milestone 2**. Renaming only changed local `display.json`, not the

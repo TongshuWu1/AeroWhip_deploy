@@ -1,0 +1,13 @@
+{
+  "status": "stopped",
+  "reason": "UI Stop or UI disconnected",
+  "checkpoints": [
+    "seed_0\\policy_000050.pt",
+    "seed_0\\policy_000055.pt",
+    "seed_0\\policy_000060.pt",
+    "seed_0\\policy_000065.pt",
+    "seed_0\\policy_000070.pt",
+    "seed_0\\policy_000075.pt",
+    "seed_0\\policy_000080.pt"
+  ]
+}

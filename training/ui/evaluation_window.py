@@ -3,7 +3,7 @@
 from dataclasses import replace
 from datetime import datetime
 import json
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 import sys
 from time import perf_counter
 
@@ -16,7 +16,9 @@ from .records import run_display_name
 class EvaluationWindow(QtWidgets.QWidget):
     def __init__(self, root, backend):
         super().__init__()
-        self.root, self.backend = Path(root), backend
+        self.root, self.backend = Path(root).resolve(), backend
+        self.runs_folder = self.root/'runs'
+        self.saved_selection = None
         self.selection = self.process = self.output = None
         self.replay = self.simulation_window = self.viewer = None
         self.scene_controls = None
@@ -32,8 +34,11 @@ class EvaluationWindow(QtWidgets.QWidget):
         self.run_combo.setSizeAdjustPolicy(QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.run_combo.setMinimumContentsLength(22)
         self.refresh_button = QtWidgets.QPushButton('Refresh Best')
+        self.folder_button = QtWidgets.QPushButton('Folder…')
+        self.folder_button.setToolTip(str(self.runs_folder))
         row = QtWidgets.QHBoxLayout()
         row.addWidget(self.run_combo, 1)
+        row.addWidget(self.folder_button)
         row.addWidget(self.refresh_button)
         form.addRow('Run', row)
         self.policy_combo = QtWidgets.QComboBox()
@@ -47,7 +52,13 @@ class EvaluationWindow(QtWidgets.QWidget):
         layout.addWidget(self.details)
         self.evaluate_button = QtWidgets.QPushButton('Evaluate')
         self.evaluate_button.setMinimumHeight(34)
-        layout.addWidget(self.evaluate_button)
+        self.saved_button = QtWidgets.QPushButton('View saved')
+        self.open_replay_button = QtWidgets.QPushButton('Open replay…')
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(self.saved_button)
+        row.addWidget(self.evaluate_button)
+        row.addWidget(self.open_replay_button)
+        layout.addLayout(row)
         self.status = QtWidgets.QLabel('Select a policy. Evaluation starts only when you press Evaluate.')
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
@@ -115,10 +126,13 @@ class EvaluationWindow(QtWidgets.QWidget):
         self.log.setMaximumHeight(90)
         layout.addWidget(self.log)
         self.refresh_button.clicked.connect(self.refresh_runs)
+        self.folder_button.clicked.connect(self.choose_runs_folder)
         self.run_combo.currentIndexChanged.connect(self.select_run)
         self.policy_combo.currentIndexChanged.connect(self.select_policy)
         self.browse_button.clicked.connect(self.browse_policy)
         self.evaluate_button.clicked.connect(self.start_evaluation)
+        self.saved_button.clicked.connect(self.view_saved)
+        self.open_replay_button.clicked.connect(self.open_saved_replay)
         self.play_button.clicked.connect(self.toggle_play)
         self.replay_button.clicked.connect(self.restart_play)
         self.release_button.clicked.connect(self.seek_release)
@@ -133,18 +147,12 @@ class EvaluationWindow(QtWidgets.QWidget):
 
     def refresh_runs(self):
         selected = self.run_combo.currentData()
-        runs = []
-        paths = [p for name in ('whip_single_scenario', 'whip_stage1') for p in (self.root/'runs'/name).glob('*')]
-        for path in sorted(paths, key=lambda p: p.name, reverse=True):
-            try:
-                protocol = self.backend.read_json(path/'protocol.json')
-                if (protocol.get('schema') in ('whip_single_scenario_v1', 'whip_stage1_v1')
-                        and protocol['experiment']['experiment']['mode'] == 'training'):
-                    runs.append(str(path.resolve()))
-            except (OSError, ValueError, KeyError):
-                continue
-        if selected and selected not in runs:
-            runs.append(selected)
+        self._discovery_error = None
+        try:
+            runs = [str(path) for path in self.backend.discover_runs(self.runs_folder)]
+        except OSError as exc:
+            runs = []
+            self._discovery_error = str(exc)
         self.run_combo.blockSignals(True)
         self.run_combo.clear()
         for path in runs:
@@ -154,6 +162,13 @@ class EvaluationWindow(QtWidgets.QWidget):
             self.run_combo.setCurrentIndex(runs.index(selected))
         self.run_combo.blockSignals(False)
         self.select_run()
+
+    def choose_runs_folder(self):
+        folder = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select results folder', str(self.runs_folder))
+        if folder:
+            self.runs_folder = Path(folder).resolve()
+            self.folder_button.setToolTip(str(self.runs_folder))
+            self.refresh_runs()
 
     def select_run(self, *_):
         run = self.run_combo.currentData()
@@ -170,18 +185,29 @@ class EvaluationWindow(QtWidgets.QWidget):
         self.select_policy()
 
     def select_policy(self, *_):
-        self.selection = None
+        self.selection = self.saved_selection = None
         self.evaluate_button.setEnabled(False)
+        self.saved_button.setEnabled(False)
         row = self.policy_combo.currentData()
         if row is None:
-            self.details.setText('No completed policy evaluation in this run. Refresh after an evaluation is saved.')
+            if not self.run_combo.count():
+                self.details.setText(self._discovery_error or
+                    f'No saved training runs found in:\n{self.runs_folder}\n'
+                    'Choose Folder or copy/download the saved runs. Source code alone does not contain results.')
+            else:
+                self.details.setText('No completed policy evaluations in this run. Copy the complete run folder, including seed folders and policy .pt/.json/.npz files.')
             return
         try:
-            record = self.backend.inspect_policy(row['checkpoint'])
+            record = self.backend.inspect_saved_policy(row['checkpoint'])
         except (OSError, ValueError, KeyError) as exc:
             self.details.setText(str(exc))
             return
-        self.selection = record
+        self.saved_selection = record
+        checkpoint = Path(record['checkpoint'])
+        has_motion = checkpoint.with_name(checkpoint.stem+'_motion.npz').is_file()
+        self.saved_button.setEnabled(has_motion)
+        self.saved_button.setToolTip('Play recorded states; no physics or training.' if has_motion else
+            'No dense motion was saved for this checkpoint. Open an existing replay or Evaluate.')
         raw = record['protocol']['experiment']
         if raw['experiment']['name'] == 'whip_stage1':
             request = raw['request']
@@ -210,21 +236,25 @@ class EvaluationWindow(QtWidgets.QWidget):
                 f"\nWorkspace: radius {workspace['radius_m']:g} m · "
                 f"Z {workspace['height_lower_world_m']:g}–{workspace['height_upper_world_m']:g} m")
         self.details.setToolTip(record['checkpoint'])
-        self.evaluate_button.setEnabled(True)
+        try:
+            self.selection = self.backend.inspect_policy(row['checkpoint'])
+        except (OSError, ValueError, KeyError) as exc:
+            self.details.setText(self.details.text()+f'\nRe-evaluation unavailable: {exc}')
+        self.evaluate_button.setEnabled(self.selection is not None)
 
     def browse_policy(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, 'Select evaluated policy',
-            str(self.root/'runs'), 'Policy checkpoint (*.pt)')
+            str(self.runs_folder), 'Policy checkpoint (*.pt)')
         if not path:
             return
         try:
-            record = self.backend.inspect_policy(path)
+            record = self.backend.inspect_saved_policy(path)
         except (OSError, ValueError, KeyError) as exc:
             QtWidgets.QMessageBox.warning(self, 'Cannot select policy', str(exc))
             return
         index = self.run_combo.findData(record['run'])
         if index < 0:
-            self.run_combo.addItem(Path(record['run']).name, record['run'])
+            self.run_combo.addItem(run_display_name(record['run']), record['run'])
             index = self.run_combo.count()-1
         self.run_combo.setCurrentIndex(index)
         self.select_run()
@@ -232,6 +262,25 @@ class EvaluationWindow(QtWidgets.QWidget):
             if self.policy_combo.itemData(index)['checkpoint'] == record['checkpoint']:
                 self.policy_combo.setCurrentIndex(index)
                 break
+
+    def view_saved(self):
+        if self.process is not None or self.saved_selection is None:
+            return
+        try:
+            result = self.backend.saved_motion(self.saved_selection['checkpoint'])
+            self.load_result(None, saved=result)
+        except (OSError, ValueError, KeyError) as exc:
+            self.status.setText(str(exc))
+
+    def open_saved_replay(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, 'Open saved replay',
+            str(self.runs_folder), 'Replay summary (summary.json)')
+        if path:
+            try:
+                result = self.backend.saved_replay(Path(path).parent)
+                self.load_result(Path(path).parent, saved=result)
+            except (OSError, ValueError, KeyError) as exc:
+                self.status.setText(str(exc))
 
     def set_playback_enabled(self, enabled):
         for widget in (self.play_button, self.replay_button, self.timeline, self.speed_combo):
@@ -256,7 +305,8 @@ class EvaluationWindow(QtWidgets.QWidget):
         self.status.setText('Preparing evaluation… Training is not modified.')
         self.output = self.root/'runs/whip_evaluation'/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
         self.progress.show()
-        for widget in (self.run_combo, self.policy_combo, self.refresh_button, self.browse_button, self.evaluate_button):
+        for widget in (self.run_combo, self.policy_combo, self.refresh_button, self.browse_button,
+                       self.evaluate_button, self.folder_button, self.saved_button, self.open_replay_button):
             widget.setEnabled(False)
         process = QtCore.QProcess(self)
         self.process = process
@@ -299,8 +349,12 @@ class EvaluationWindow(QtWidgets.QWidget):
         process, self.process = self.process, None
         process.deleteLater()
         self.progress.hide()
-        for widget in (self.run_combo, self.policy_combo, self.refresh_button, self.browse_button):
+        for widget in (self.run_combo, self.policy_combo, self.refresh_button, self.browse_button,
+                       self.folder_button, self.open_replay_button):
             widget.setEnabled(True)
+        self.saved_button.setEnabled(self.saved_selection is not None and Path(
+            self.saved_selection['checkpoint']).with_name(
+            Path(self.saved_selection['checkpoint']).stem+'_motion.npz').is_file())
         self.evaluate_button.setEnabled(self.selection is not None)
         try:
             if code != 0 or exit_status != QtCore.QProcess.ExitStatus.NormalExit:
@@ -312,7 +366,7 @@ class EvaluationWindow(QtWidgets.QWidget):
         if self._close_when_finished:
             self.close()
 
-    def load_result(self, output, *, show_scene=True):
+    def load_result(self, output, *, show_scene=True, saved=None):
         from simulation.configuration import load_configuration
         from viewer.replay import StateReplay
         if self.simulation_window is not None:
@@ -320,9 +374,11 @@ class EvaluationWindow(QtWidgets.QWidget):
         self.replay = self.summary = None
         self.configure_release()
         self.set_playback_enabled(False)
-        summary = self.backend.read_json(Path(output)/'summary.json')
+        summary = saved[0] if saved is not None else self.backend.read_json(Path(output)/'summary.json')
         self.summary = summary
-        self.loaded_label.setText(f"{run_display_name(summary['source_run'])}\nSeed {summary['seed']} · Update {summary['update']}")
+        source_run = summary['source_run']
+        name = run_display_name(source_run) if Path(source_run).is_dir() else PureWindowsPath(source_run).name
+        self.loaded_label.setText(f"{name}\nSeed {summary['seed']} · Update {summary['update']}")
         reach_fields = {
             'score_mean': ('score_mean', 'Reach score'),
             'target_score_mean': ('reach_progress_mean', 'Reach progress'),
@@ -345,20 +401,27 @@ class EvaluationWindow(QtWidgets.QWidget):
             label.setText(text)
             value = summary['metrics'][metric_key]
             field.setText('—' if value is None else f'{value:.6f}')
-        same = summary['metrics_equal'] and summary['saved_action_equal']
-        self.comparison.setText('Matches saved evaluation exactly' if same else
-            f"Differs from saved evaluation · reward Δ {summary['return_difference']:+.9g}")
-        self.comparison.setStyleSheet('' if same else 'color: #a65d10;')
+        if summary.get('saved_only'):
+            self.comparison.setText('Saved result · not re-evaluated')
+            self.comparison.setStyleSheet('')
+        else:
+            same = summary['metrics_equal'] and summary['saved_action_equal']
+            self.comparison.setText('Matches saved evaluation exactly' if same else
+                f"Differs from saved evaluation · reward Δ {summary['return_difference']:+.9g}")
+            self.comparison.setStyleSheet('' if same else 'color: #a65d10;')
         reasons = summary['rejection_reasons']
         self.status.setText('Rejected: '+', '.join(reasons) if reasons else 'Ready · simulated evaluation, not real-flight evidence')
-        self.status.setToolTip(str(output))
+        self.status.setToolTip(str(saved[2].parent if saved is not None else output))
         if not summary['playable']:
             self.status.setText(self.status.text()+'. No numerically valid motion to replay.')
             return
-        with np.load(Path(output)/'rollout.npz', allow_pickle=False) as data:
-            self.replay = StateReplay({key: data[key] for key in data.files})
+        if saved is not None:
+            self.replay = StateReplay(saved[1])
+        else:
+            with np.load(Path(output)/'rollout.npz', allow_pickle=False) as data:
+                self.replay = StateReplay({key: data[key] for key in data.files})
         self.configure_release()
-        scene = load_configuration(Path(output)/'scene.toml')
+        scene = load_configuration(saved[2] if saved is not None else Path(output)/'scene.toml')
         target = summary.get('target_position_world_m')
         self.scene = replace(scene, viewer=replace(scene.viewer,
             target_position_world_m=None if target is None else np.asarray(target, dtype=float)))
