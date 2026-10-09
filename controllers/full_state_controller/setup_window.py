@@ -69,12 +69,18 @@ class SetupWindow(QtWidgets.QDialog):
     def choose_scene(self):
         path,_ = QtWidgets.QFileDialog.getOpenFileName(self,'Scene',str(self.root/'configs/scenes'),'Scene (*.toml)')
         if path:
-            self.scene.setCurrentIndex(self.add_path(self.scene,path))
+            try:
+                self.scene.setCurrentIndex(self.add_path(self.scene,path))
+            except ValueError as exc:
+                self.error.setText(str(exc))
 
     def choose_trajectory(self):
         path,_ = QtWidgets.QFileDialog.getOpenFileName(self,'Trajectory',str(self.root/'data/trajectories'),'CSV (*.csv)')
         if path:
-            self.trajectory.setCurrentIndex(self.add_path(self.trajectory,path))
+            try:
+                self.trajectory.setCurrentIndex(self.add_path(self.trajectory,path))
+            except ValueError as exc:
+                self.error.setText(str(exc))
 
     def choose_setup(self):
         path,_ = QtWidgets.QFileDialog.getOpenFileName(self,'Setup',str(self.root/'configs'),'Configuration (*.json)')
@@ -82,7 +88,11 @@ class SetupWindow(QtWidgets.QDialog):
             self.load_setup(path)
 
     def load_setup(self,path):
-        self.model_path = project_path(path)
+        try:
+            self.model_path = project_path(path)
+        except ValueError as exc:
+            self.error.setText(str(exc))
+            return False
         return self.validate_selection()
 
     def validate_selection(self,*_):

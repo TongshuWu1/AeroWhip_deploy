@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from time import sleep
+from project_paths import project_path
 
 
 def atomic_save(path, writer):
@@ -10,8 +11,8 @@ def atomic_save(path, writer):
     ``writer`` serializes to the supplied temporary Path. This shared boundary
     covers JSON and Torch artifacts without changing their formats.
     """
-    path=Path(path)
-    temporary=path.with_suffix(path.suffix+'.tmp')
+    path=project_path(path)
+    temporary=project_path(path.with_suffix(path.suffix+'.tmp'))
     for attempt in range(6):
         try:
             writer(temporary)

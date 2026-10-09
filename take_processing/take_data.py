@@ -13,10 +13,12 @@ from take_processing.paths import rehearsal_archive, resolve_recording_path
 
 
 def read_json(path):
+    path = project_path(path)
     return json.loads(path.read_text(encoding="utf-8-sig")) if path.is_file() else {}
 
 
 def digest(path):
+    path = project_path(path)
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
@@ -58,11 +60,12 @@ def discover(folder):
         if path.name.startswith("experiment_"):
             continue
         try:
+            path = project_path(path)
             with path.open(encoding="utf-8-sig", newline="") as stream:
                 header = next(csv.reader(stream), [])
             if "Format Version" in header and "Capture Frame Rate" in header:
                 candidates.append(path.resolve())
-        except (OSError, UnicodeError, csv.Error):
+        except (OSError, ValueError, UnicodeError, csv.Error):
             continue
     return sorted(set(candidates))
 
@@ -134,7 +137,7 @@ def load_take(path):
         return result
     result.alignment_applied = True
     notes.append("Saved clock alignment" if alignment.get("clock_verified") else "Estimated clock alignment")
-    command_path = logger.with_suffix(".commands.csv")
+    command_path = project_path(logger.with_suffix(".commands.csv"))
     if command_path.is_file():
         try:
             commands = np.atleast_1d(np.genfromtxt(command_path, delimiter=",", names=True, encoding="utf-8-sig"))

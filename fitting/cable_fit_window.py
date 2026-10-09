@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (QDialog, QDoubleSpinBox, QFileDialog, QFormLayout
     QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout)
 
 from simulation.model_configuration import DEFAULT_FIT_MODEL
+from project_paths import project_path
 
 
 class CableFitWorker(QThread):
@@ -39,7 +40,7 @@ class CableFitWorker(QThread):
 class CableFitWindow(QDialog):
     def __init__(self, root, parent=None):
         super().__init__(parent)
-        self.root = Path(root)
+        self.root = project_path(root)
         self.worker = self.result_path = self.run_folder = None
         self._close_when_done = False
         self.setWindowTitle('Cable fit')
@@ -115,7 +116,10 @@ class CableFitWindow(QDialog):
     def choose_model(self):
         path, _ = QFileDialog.getOpenFileName(self, 'Fit setup or saved model', self.model.text(), 'Configuration (*.json)')
         if path:
-            self.model.setText(path)
+            try:
+                self.model.setText(str(project_path(path)))
+            except ValueError as exc:
+                self.status.setText(str(exc))
 
     def start_fit(self):
         if self.worker is not None:
@@ -142,7 +146,7 @@ class CableFitWindow(QDialog):
         self.worker.start()
 
     def show_progress(self, event):
-        self.run_folder = Path(event['run'])
+        self.run_folder = project_path(event['run'])
         self.open_button.setEnabled(True)
         if self.worker is not None and self.worker.cancelled.is_set():
             return
@@ -158,7 +162,7 @@ class CableFitWindow(QDialog):
             self.log.appendPlainText(message)
 
     def fit_completed(self, folder):
-        self.result_path = Path(folder)
+        self.result_path = project_path(folder)
         summary = json.loads((self.result_path/'summary.json').read_text(encoding='utf-8'))
         rows = []
         for role, label in (('training', 'Fitting'), ('comparison', 'Comparison')):

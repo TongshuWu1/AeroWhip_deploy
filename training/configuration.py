@@ -13,12 +13,9 @@ from tasks.whip.stage1_configuration import (Stage1Configuration, BendReleaseCon
     ReleaseMatchingConfiguration, StrikeSurfaceConfiguration)
 from tasks.whip.workspace import CylinderWorkspace, WorkspacePenalty
 
-SAC_DEFAULT = ROOT / 'configs/learning/whip_stage1_curriculum.json'
-STAGED_PRESETS = {i: ROOT / f'configs/learning/whip_stage{i}_ppo_staged_v1.json' for i in (1, 2, 3)}
-# Historical API/presets remain available for exact legacy tests and replay.
-# Standard CLI/stage selector uses the explicitly versioned, untrained cone recipes.
+# CLI and low-level API select the same current fixed-target recipe.
 FROZEN_PRESETS = {i: ROOT / f'configs/learning/whip_stage{i}_ppo_cone25_v4.json' for i in (1, 2, 3, 4)}
-DEFAULT = STAGED_PRESETS[1]
+DEFAULT = FROZEN_PRESETS[1]
 RUN_SCHEMA = 'sac_stage1_velocity_v2'
 CHECKPOINT_SCHEMA = 'sac_stage1_checkpoint_v7'
 

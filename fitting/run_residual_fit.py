@@ -31,7 +31,7 @@ from fitting.run_fit import prepare_split, save, report_progress
 from fitting.run_fit import SPLIT
 from fitting.dataset import load_split
 from fitting.artifacts import atomic_save
-from project_paths import project_path
+from project_paths import project_path, project_reference
 from take_processing.take_data import digest
 from take_processing.library import verify_sources
 from take_processing.paths import flight_batches_path, select_recording_root
@@ -60,7 +60,7 @@ def main():
     model_sources.update(split_sources)
     model_hash=configuration_digest(base)
     if base['residual']['status']=='fitted':
-        model_sources['base_residual']={'path':str(project_path(base['residual']['checkpoint'])),
+        model_sources['base_residual']={'path':project_reference(base['residual']['checkpoint']),
                                         'sha256':base['residual']['sha256']}
     if args.stage=='cable':
         if base['residual']['status'] != 'unfitted':
@@ -73,7 +73,7 @@ def main():
         if network.completed_stages != ['cable']:
             raise ValueError('Select the cable-stage checkpoint; do not refit both branches together')
     run_id=datetime.now().strftime('%Y%m%d-%H%M%S')
-    output=ROOT/'runs/residual_fit'/run_id;output.mkdir(parents=True,exist_ok=False)
+    output=project_path(ROOT/'runs/residual_fit'/run_id);output.mkdir(parents=True,exist_ok=False)
     started=perf_counter()
     def progress(row):
         row={**row,'total_elapsed_s':perf_counter()-started}

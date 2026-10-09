@@ -24,7 +24,7 @@ from fitting.coupled_fit import window_weights
 from fitting.recorded_replay import prepare_recorded_replay
 from fitting.run_fit import SPLIT
 from fitting.dataset import validate_split
-from project_paths import ROOT, project_path
+from project_paths import ROOT, project_path, project_reference
 from simulation.tensor_model import TensorModel
 from simulation.model_configuration import load_model_configuration
 from take_processing.library import verify_sources
@@ -213,10 +213,10 @@ def fit_cable(root, model_path, settings=None, *, output_root=None, comparison_r
     identities = _identities(model_path, base)
     for relative in ('fitting/cable_fit.py', 'fitting/run_fit.py', 'fitting/coupled_fit.py','fitting/dataset.py',
                      'take_processing/paths.py', 'take_processing/library.py'):
-        identities[relative] = dict(path=str(ROOT/relative), sha256=digest(ROOT/relative))
+        identities[relative] = dict(path=project_reference(ROOT/relative), sha256=digest(ROOT/relative))
     if load_model_configuration(model_path) != base:
         raise RuntimeError('Model changed during loading')
-    parent = project_path(output_root) if output_root is not None else ROOT/'runs/cable_fit'
+    parent = project_path(output_root if output_root is not None else ROOT/'runs/cable_fit')
     folder = parent/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     folder.mkdir(parents=True, exist_ok=False)
     started = perf_counter()
@@ -233,7 +233,7 @@ def fit_cable(root, model_path, settings=None, *, output_root=None, comparison_r
     def verify():
         _check(cancelled)
         for identity in identities.values():
-            if digest(Path(identity['path'])) != identity['sha256']:
+            if digest(project_path(identity['path'])) != identity['sha256']:
                 raise RuntimeError('Code, model or binary changed during fitting')
         for window in windows:
             verify_sources(window['metadata'])
@@ -280,7 +280,7 @@ def fit_cable(root, model_path, settings=None, *, output_root=None, comparison_r
                 _write(path, config, exclusive=True)
                 trial_ids = deepcopy(identities)
                 trial_ids['base_model'] = trial_ids['model']
-                trial_ids['model'] = dict(path=str(path), sha256=digest(path))
+                trial_ids['model'] = dict(path=project_reference(path), sha256=digest(path))
                 selected = fitting if role == 'training' else comparison
                 label = f'{role} · EI ×{ei:.5g} · Cb ×{cb:.5g} · external drag ×{drag:.5g}'
                 emit(dict(phase='evaluation', completed=0, total=len(selected), message=label))

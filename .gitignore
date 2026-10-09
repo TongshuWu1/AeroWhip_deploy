@@ -12,3 +12,6 @@ __pycache__/
 /simulation/_native*.so
 /simulation/_tensor_native*.so
 /runs/
+/data/take_processing/catalog.json
+/data/recordings/*
+!/data/recordings/.gitkeep

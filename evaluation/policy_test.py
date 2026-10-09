@@ -15,7 +15,7 @@ import torch
 
 from evaluation.records import load_checkpoint, evaluation_contract, verify_contract, task_stage
 from fitting.artifacts import atomic_save
-from project_paths import ROOT
+from project_paths import ROOT, project_path, project_reference
 from simulation.configuration import load_configuration
 from simulation.state import quaternion_xyzw_to_rotation_matrix, rotation_matrix_to_quaternion_xyzw
 from tasks.whip.deterministic_evaluation import DeterministicEvaluationEnvironment
@@ -132,8 +132,10 @@ def require_idle(directory=None):
     active = [row for row in rows if not own(row)]
     if active:
         raise RuntimeError('Policy test waits for training/evaluation workers to exit: '+str(active))
-    if (RESULTS/'worker.lock').exists() and directory is None:
+    if project_path(RESULTS/'worker.lock').exists() and directory is None:
         raise RuntimeError('Policy tester lock exists; inspect its owner instead of deleting or relaunching')
+    if project_path(ROOT/'runs/context_evaluation/worker.lock').exists():
+        raise RuntimeError('Context evaluation lock exists; inspect its owner instead of deleting or relaunching')
 
 
 def checkpoint_context(checkpoint):
@@ -141,7 +143,8 @@ def checkpoint_context(checkpoint):
     info = load_checkpoint(checkpoint)
     snapshot = info['snapshot']
     import tempfile
-    with tempfile.TemporaryDirectory(prefix='aerowhip-case-') as temp:
+    temporary_root=project_path(ROOT/'tmp'); temporary_root.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='aerowhip-case-',dir=temporary_root) as temp:
         path = Path(temp)/'scene.toml'
         path.write_text(snapshot['scene_text'],encoding='utf-8')
         scene = load_configuration(path)
@@ -150,18 +153,18 @@ def checkpoint_context(checkpoint):
 
 
 def prepare(checkpoint, case, *, root=RESULTS):
-    checkpoint = Path(checkpoint).resolve()
+    checkpoint = project_path(checkpoint)
     info, scene, cfg = checkpoint_context(checkpoint)
     snapshot = info['snapshot']
     contract = evaluation_contract(snapshot,'current_code')
     require_idle()
     warnings = case_warnings(snapshot,scene,cfg,case)
-    path = Path(root)/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+    path = project_path(root)/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     path.mkdir(parents=True,exist_ok=False)
     save_json(path/'configuration.json',snapshot)
     atomic_save(path/'scene.toml',lambda p:p.write_text(snapshot['scene_text'],encoding='utf-8'))
     save_json(path/'case.json',case)
-    save_json(path/'request.json',dict(protocol=PROTOCOL,checkpoint=str(checkpoint),
+    save_json(path/'request.json',dict(protocol=PROTOCOL,checkpoint=project_reference(checkpoint),
         checkpoint_sha256=info['sha256'],round=info['round'],case_sha256=digest(case),
         warnings=warnings,**contract))
     return path
@@ -186,9 +189,10 @@ def frozen_actor(info, env):
 
 @torch.no_grad()
 def run(directory):
-    directory = Path(directory).resolve()
-    RESULTS.mkdir(parents=True,exist_ok=True)
-    global_lock, lock = RESULTS/'worker.lock',directory/'worker.lock'
+    directory = project_path(directory)
+    results=project_path(RESULTS)
+    results.mkdir(parents=True,exist_ok=True)
+    global_lock, lock = results/'worker.lock',directory/'worker.lock'
     started = perf_counter()
     log = EventLog(directory)
     def emit(**event): log(dict(event,elapsed_s=perf_counter()-started))

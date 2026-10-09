@@ -215,7 +215,10 @@ class TakeManager(QMainWindow):
             return
         folder = QFileDialog.getExistingDirectory(self, "Import recordings", str(self.folder))
         if folder:
-            self.import_folder(folder, select_root=True)
+            try:
+                self.import_folder(folder, select_root=True)
+            except (OSError, ValueError) as exc:
+                QMessageBox.warning(self, 'Import recordings', str(exc))
 
     def fit_cable(self):
         if self.busy() or not self.confirm_pending():

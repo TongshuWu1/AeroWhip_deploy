@@ -17,10 +17,9 @@ dependencies = [
 
 [project.optional-dependencies]
 build = ["pybind11==3.0.1"]
-poster = ["matplotlib", "PyMuPDF"]
 
 [tool.setuptools]
-py-modules = ["project_paths"]
+py-modules = ["project_paths", "model_catalog"]
 
 [tool.setuptools.packages.find]
 where = ["."]

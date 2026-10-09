@@ -10,7 +10,7 @@ import numpy as np
 import torch
 
 from fitting.recorded_replay import prepare_recorded_replay
-from project_paths import ROOT, project_path
+from project_paths import ROOT, project_path, project_reference
 from simulation.configuration import (InitialStateConfiguration, PlatformConfiguration,
                                       load_configuration)
 from simulation.tensor_model import TensorModel
@@ -76,7 +76,7 @@ def _identities(model_path, config, configuration_sources=None):
                      'native/tensor_physics.cpp', 'native/material_frame.inc',
                      'native/tensor_material.inc', 'native/prescribed_material.inc'):
         paths[relative] = ROOT / relative
-    identities = {key: {'path': str(path), 'sha256': digest(path)} for key, path in paths.items()}
+    identities = {key: {'path': project_reference(path), 'sha256': digest(path)} for key, path in paths.items()}
     identities.update(configuration_sources)
     verify_configuration_sources(identities)
     return identities
@@ -235,14 +235,14 @@ def _compare_prepared(model, replay, identities, *, mode='prescribed_cable',
         arrays.update(native_command_arrival_time_s=replay.command_times_s, native_commands=replay.commands)
     verify_sources({'sources': metadata['sources']})
     for identity in identities.values():
-        if digest(Path(identity['path'])) != identity['sha256']:
+        if digest(project_path(identity['path'])) != identity['sha256']:
             raise RuntimeError('Source code or model changed during comparison; result not accepted')
     return metadata, arrays
 
 
 def save_comparison(metadata, arrays, output_root=None):
     """Save only a completed comparison, exclusively; never overwrite a run."""
-    root = project_path(output_root) if output_root is not None else ROOT/'runs/calibration'
+    root = project_path(output_root if output_root is not None else ROOT/'runs/calibration')
     folder = root / datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     folder.mkdir(parents=True, exist_ok=False)
     path = folder/'comparison.json'

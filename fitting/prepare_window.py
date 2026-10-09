@@ -1,5 +1,6 @@
 """Causal native-100-Hz flight windows for the coupled model."""
 from pathlib import Path
+from project_paths import project_reference
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -150,7 +151,8 @@ def prepare_window(path, model, *, start_s, duration_s=2.5, history_s=.1):
                        rotations[history_steps+1:].copy(),take.cable[start+1:last+1].copy(),model.dt)
     window.validate(model)
     verify_sources(entry)
-    metadata = {"take":str(path),"recording_group":group,"sources":sources,
+    sources = {key: dict(value, path=project_reference(value['path'])) for key, value in sources.items()}
+    metadata = {"take":project_reference(path),"recording_group":group,"sources":sources,
         "start_elapsed_s":float(take.time[start]),"end_elapsed_s":float(take.time[last]),
         "start_source_s":float(take.source_time[start]),"start_frame":int(take.frame[start]),
         "end_frame":int(take.frame[last]),"alignment":take.alignment,

@@ -7,7 +7,7 @@ from pathlib import Path
 import torch
 
 from fitting.artifacts import atomic_save
-from project_paths import ROOT
+from project_paths import ROOT, project_path, project_reference, contained_child
 from training.configuration import digest, load, checkpoint_schema, algorithm, episode_budget, validate, training_stage, require_launchable
 
 RUNS = ROOT/'runs/sac_stage1'
@@ -40,7 +40,7 @@ def save_json(path, value):
 
 
 def read_json(path):
-    return json.loads(Path(path).read_text(encoding='utf-8-sig'))
+    return json.loads(project_path(path).read_text(encoding='utf-8-sig'))
 
 
 def execution_hashes():
@@ -72,8 +72,9 @@ def validate_actor_source(saved, snapshot):
     if old['model'] != snapshot['model'] or old['scene_text'] != snapshot['scene_text']:
         raise ValueError('Actor transfer requires the same physical model and initial scene')
     current = execution_hashes()
-    for key, value in current.items():
-        if key.split('/')[0] in ('simulation', 'controllers', 'native') and old['execution_hashes'].get(key) != value:
+    previous = old['execution_hashes']
+    for key in previous.keys() | current.keys():
+        if key.split('/')[0] in ('simulation', 'controllers', 'native') and previous.get(key) != current.get(key):
             raise ValueError('Physical execution changed since the actor checkpoint: '+key)
     for key in ('policy_rate_hz', 'action_interface', 'velocity_limit_mps', 'hidden_units'):
         if old['settings'][key] != snapshot['settings'][key]:
@@ -92,7 +93,7 @@ def create_run(settings, resume=None, *, task=None, root=None, initialize_actor=
     parent = None
     initialization_payload = None
     if resume:
-        parent = Path(resume).resolve()
+        parent = project_path(resume)
         saved = torch.load(parent,map_location='cpu',weights_only=True)
         if saved.get('schema') != checkpoint_schema(saved['snapshot']['settings']):
             raise ValueError('Resume requires a current learner checkpoint. '
@@ -120,9 +121,11 @@ def create_run(settings, resume=None, *, task=None, root=None, initialize_actor=
             raise ValueError('New recovery Stage4 requires an explicit precision Stage3 actor checkpoint')
         if initialize_actor:
             import io
-            source = Path(initialize_actor).resolve()
+            source = project_path(initialize_actor)
             initialization_payload = source.read_bytes()
             saved_actor = torch.load(io.BytesIO(initialization_payload),map_location='cpu',weights_only=True)
+            if training_stage(settings) == 2 and training_stage(saved_actor['snapshot']['settings']) != 1:
+                raise ValueError('Stage2 must initialize from a Stage1 actor')
             if settings.get('stage3_role') == 'precision_v1':
                 source_settings = saved_actor['snapshot']['settings']
                 source_stage = training_stage(source_settings)
@@ -135,7 +138,7 @@ def create_run(settings, resume=None, *, task=None, root=None, initialize_actor=
                 raise ValueError('Recovery Stage4 must initialize from a precision Stage3 actor')
             validate_actor_source(saved_actor,snapshot)
             snapshot['policy_initialization'] = dict(
-                source_checkpoint=str(source), source_sha256=hashlib.sha256(initialization_payload).hexdigest(),
+                source_checkpoint=project_reference(source), source_sha256=hashlib.sha256(initialization_payload).hexdigest(),
                 source_identity=saved_actor['identity'], source_round=saved_actor['round'],
                 source_episodes=saved_actor['episodes'], source_steps=saved_actor['steps'],
                 transfer='actor_only_v1', value_and_optimizers='fresh',
@@ -144,7 +147,7 @@ def create_run(settings, resume=None, *, task=None, root=None, initialize_actor=
                     else 'source elapsed offset plus new-run transitions'))
     require_launchable(snapshot['settings'])
     snapshot['identity'] = identity(snapshot)
-    root = run_root(snapshot['settings']) if root is None else Path(root)
+    root = project_path(run_root(snapshot['settings']) if root is None else root)
     # identity must not recursively include itself in subsequent comparisons.
     path = root/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     path.mkdir(parents=True,exist_ok=False)
@@ -152,7 +155,7 @@ def create_run(settings, resume=None, *, task=None, root=None, initialize_actor=
     (path/'scene.toml').write_text(snapshot['scene_text'],encoding='utf-8')
     if initialization_payload is not None:
         atomic_save(path/'initial-actor.pt', lambda p:p.write_bytes(initialization_payload))
-    save_json(path/'request.json',dict(resume=str(parent) if parent else None,
+    save_json(path/'request.json',dict(resume=project_reference(parent) if parent else None,
         initialize_actor='initial-actor.pt' if initialization_payload is not None else None))
     if parent and saved.get('curriculum', {}).get('review_round') is not None:
         # A paused first-stage review must remain reviewable after Resume.
@@ -163,14 +166,14 @@ def create_run(settings, resume=None, *, task=None, root=None, initialize_actor=
             if row['replay']:
                 name = row['replay']
                 if Path(name).name != name: raise ValueError('Invalid review replay filename')
-                payload = (parent.parent/name).read_bytes()
+                payload = contained_child(parent.parent,name).read_bytes()
                 atomic_save(path/name, lambda p, payload=payload:p.write_bytes(payload))
         save_json(path/'curriculum_review.json', review)
     return path
 
 
 class EventLog:
-    def __init__(self, path): self.path = path
+    def __init__(self, path): self.path = project_path(path)
 
     def __call__(self, event):
         event = clean(dict(event,wall_time=datetime.now().isoformat(timespec='seconds')))
@@ -188,7 +191,7 @@ def save_checkpoint(path, value):
 
 
 def events(path):
-    source = Path(path)/'events.jsonl'
+    source = project_path(Path(path)/'events.jsonl')
     if not source.exists(): return []
     result = []
     for line in source.read_text(encoding='utf-8').splitlines():

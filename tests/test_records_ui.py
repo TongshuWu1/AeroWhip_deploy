@@ -3,10 +3,10 @@ from copy import deepcopy
 import json
 import os
 from pathlib import Path
-import tempfile
 import unittest
 from unittest.mock import patch, MagicMock
 import torch
+from helpers import project_temporary
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6 import QtWidgets
@@ -25,7 +25,7 @@ class ProvenanceTests(unittest.TestCase):
         cls.hashes = {"simulation/model.py": "physical", "training/ppo.py": "old"}
 
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory()
+        self.temporary = project_temporary()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
 
@@ -99,11 +99,17 @@ class ProvenanceTests(unittest.TestCase):
                 records.prepare(path, root=self.root/'outputs')
         self.assertFalse((self.root/'outputs').exists())
 
+    def test_policy_test_worker_also_blocks_evaluation(self):
+        with patch.object(records, 'active_workers', return_value=[
+                dict(ProcessId=123, CommandLine='python -m evaluation.policy_test --run runs/test')]):
+            with self.assertRaisesRegex(ValueError, 'idle'):
+                records.require_evaluation_idle()
+
 
 class InterfaceTests(unittest.TestCase):
     def setUp(self):
         self.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-        self.temp = tempfile.TemporaryDirectory()
+        self.temp = project_temporary()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         _, snapshot, _, _ = load(FROZEN_PRESETS[1])
@@ -154,6 +160,16 @@ class InterfaceTests(unittest.TestCase):
             self.assertEqual(dialog.settings,settings)
             self.assertEqual(dialog.task,snapshot['task'])
             self.assertEqual(dialog.result(),QtWidgets.QDialog.DialogCode.Accepted)
+
+    def test_settings_save_rejects_outside_project_without_writing(self):
+        from project_paths import ROOT
+        destination = ROOT.parent/'outside-training-settings.json'
+        with patch.object(QtWidgets.QFileDialog, 'getSaveFileName', return_value=(str(destination), '')), \
+             patch.object(QtWidgets.QMessageBox, 'warning') as warning, \
+             patch('training.ui.window.save_json') as write:
+            self.window.save_settings()
+            write.assert_not_called()
+            warning.assert_called_once()
 
     def test_active_or_resume_configuration_can_be_inspected_but_not_retuned(self):
         dialog=SettingsDialog(self.window.settings,self.window.task,read_only=True)

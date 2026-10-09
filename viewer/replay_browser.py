@@ -4,29 +4,34 @@ import json
 from pathlib import Path
 import numpy as np
 from PySide6 import QtCore, QtGui, QtWidgets
-from project_paths import ROOT
+from project_paths import ROOT, project_path
+from model_catalog import packaged_stages, packaged_stage
 from viewer.replay_data import DEFAULT_RUN, PresentationData, read_events
 
 
 def run_stage(directory):
-    snapshot = json.loads((Path(directory) / 'configuration.json').read_text())
+    snapshot = json.loads(project_path(Path(directory) / 'configuration.json').read_text())
     return snapshot['settings'].get('training_stage', 1)
 
 
 def discover_runs(root=ROOT):
-    roots = [Path(root) / 'runs' / name for name in
+    roots = [project_path(root) / 'runs' / name for name in
              ('ppo_stage4', 'ppo_stage3', 'ppo_stage2', 'ppo_stage1', 'sac_stage1')]
-    return sorted((directory for folder in roots if folder.exists()
+    runs = [directory for folder in roots if folder.exists()
                    for directory in folder.iterdir()
-                   if directory.is_dir() and (directory / 'configuration.json').exists()),
+                   if directory.is_dir() and (directory / 'configuration.json').exists()]
+    return sorted(runs + [entry['directory'] for entry in packaged_stages(root)],
                   key=lambda p: p.name, reverse=True)
 
 
 def resolve_selection(path):
     """Checkpoint selection locates its run only: no actor loading/inference."""
-    path = Path(path).resolve()
+    path = project_path(path)
     if not path.exists():
         raise ValueError('Selected file/folder does not exist')
+    packaged = packaged_stage(path)
+    if packaged is not None:
+        return packaged['directory'], path.name if path.suffix.lower()=='.npz' else None
     if path.is_dir():
         directory, filename = path, None
     elif path.suffix.lower() in ('.pt', '.json', '.npz', '.jsonl'):
@@ -59,7 +64,7 @@ def replay_choices(directory):
 class ReplayBrowser(QtWidgets.QMainWindow):
     def __init__(self, selected=None, filename=None, *, root=ROOT):
         super().__init__()
-        self.root = Path(root)
+        self.root = project_path(root)
         self.extra_runs = set()
         self.motion = None
         self.setWindowTitle('AeroWhip · Replay')
@@ -113,8 +118,13 @@ class ReplayBrowser(QtWidgets.QMainWindow):
     def refresh_runs(self, preferred=None):
         # QPushButton passes bool; only Path/string is a selection request.
         preferred = preferred if isinstance(preferred, (str, Path)) else self.runs.currentData()
-        directories = sorted(set(discover_runs(self.root)) | self.extra_runs,
-                             key=lambda p: p.name, reverse=True)
+        try:
+            directories = sorted(set(discover_runs(self.root)) | self.extra_runs,
+                                 key=lambda p: p.name, reverse=True)
+        except (OSError, ValueError, KeyError) as exc:
+            self.dispose()
+            self.message.setText('Discovery unavailable: '+str(exc))
+            return
         with QtCore.QSignalBlocker(self.runs):
             self.runs.clear()
             for directory in directories:
@@ -134,9 +144,16 @@ class ReplayBrowser(QtWidgets.QMainWindow):
 
     def select_run(self, *_):
         directory = self.runs.currentData()
+        try:
+            choices = replay_choices(directory) if directory else []
+        except (OSError, ValueError, KeyError) as exc:
+            with QtCore.QSignalBlocker(self.replays):
+                self.replays.clear()
+            self.dispose()
+            self.message.setText('Replay unavailable: '+str(exc))
+            return
         with QtCore.QSignalBlocker(self.replays):
             self.replays.clear()
-            choices = replay_choices(directory) if directory else []
             for filename, event in choices:
                 phase = event.get('phase', 'Saved file').replace('_', ' ')
                 label = f"Collection {event.get('round', '—')} · {phase} · {filename or 'NO REPLAY (invalid/unavailable)'}"
@@ -193,13 +210,13 @@ class ReplayBrowser(QtWidgets.QMainWindow):
             self.select_filename(filename)
 
     def choose_folder(self):
-        path = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select training run', str(self.root / 'runs'))
+        path = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select training run / packaged evidence', str(self.root))
         if path:
             self.try_open(path)
 
     def choose_file(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, 'Select training checkpoint or replay',
-            str(self.root / 'runs'), 'Training / replay files (*.pt *.npz *.json *.jsonl)')
+            str(self.root / 'models'), 'Training / replay files (*.pt *.npz *.json *.jsonl)')
         if path:
             self.try_open(path)
 
@@ -246,7 +263,7 @@ def main():
             painter = QtGui.QPainter(frame)
             painter.drawImage(QtCore.QRect(top_left, child.size()), vtk_image)
             painter.end()
-            if not frame.save(str(args.snapshot.resolve())):
+            if not frame.save(str(project_path(args.snapshot))):
                 app.exit(1)
                 return
             print(json.dumps(motion.data.evidence()), flush=True)

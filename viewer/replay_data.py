@@ -5,11 +5,12 @@ import json
 from pathlib import Path
 
 import numpy as np
+from project_paths import project_path, contained_child
+from model_catalog import packaged_event
 
 
 DEMO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_RUN = DEMO_ROOT / 'runs/ppo_stage4/20261007-034135-720530'
-FINAL_SHA256 = 'f02b850b8f49cbeb06a0caf7883035eef991b6f1bf972c812bce738d7781c178'
+DEFAULT_RUN = DEMO_ROOT / 'models/milestone-20261009/evidence/stage4'
 
 
 def sha256(path):
@@ -102,7 +103,7 @@ class PresentationData:
         from simulation.configuration import load_configuration
         from training.configuration import task_configuration
         from viewer.replay import StateReplay
-        directory = Path(directory).resolve()
+        directory = project_path(directory)
         rows = read_events(directory)
         if filename is None:
             evaluations = [row for row in rows if row.get('phase') == 'evaluation']
@@ -119,23 +120,23 @@ class PresentationData:
             event = matching[-1] if matching else {}
         if event.get('replay') and event['replay'] != filename:
             raise ValueError('Event and selected replay reference disagree')
-        summary_path = directory / 'summary.json'
+        summary_path = contained_child(directory, 'summary.json')
         summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
-        snapshot = json.loads((directory / 'configuration.json').read_text())
+        snapshot = json.loads(contained_child(directory, 'configuration.json').read_text())
         scene = load_configuration(directory / 'scene.toml')
-        case_path = directory / 'case.json'
+        case_path = contained_child(directory, 'case.json')
         if event.get('protocol') == 'stationary_target_policy_test_v1':
             from evaluation.policy_test import case_scene
             from training.configuration import digest
             case = json.loads(case_path.read_text())
-            request = json.loads((directory/'request.json').read_text())
+            request = json.loads(contained_child(directory, 'request.json').read_text())
             if event.get('case') != case or request.get('case_sha256') != digest(case):
                 raise ValueError('Saved test case differs from its frozen request/result')
             if event.get('target_surface',{}).get('center_world_m') != case['target_position_world_m']:
                 raise ValueError('Saved test surface differs from its actual case target')
             scene, _ = case_scene(scene,case)
         config = task_configuration(snapshot['task'], snapshot['settings'], snapshot['model'], scene)
-        with np.load(directory / filename, allow_pickle=False) as data:
+        with np.load(contained_child(directory, filename), allow_pickle=False) as data:
             replay = StateReplay(dict(data))
         surface = config.strike_surface.description(scene.initial_state.position_world_m, config.request)
         if 'target_surface' in event:
@@ -162,11 +163,9 @@ class PresentationData:
                 # Stage1/2 reward selects a mechanics/proximity event, not a hit.
                 verify_recorded_metrics(strike, event)
                 strike['kind'] = 'Scored whip event (not a selected target crossing)'
-        hashes = {name: sha256(directory / name) for name in
+        hashes = {name: sha256(contained_child(directory, name)) for name in
                   (filename, 'configuration.json', 'scene.toml', 'summary.json', 'latest.pt', 'case.json', 'request.json')
                   if (directory / name).exists()}
-        if directory == DEFAULT_RUN.resolve() and hashes.get('latest.pt') != FINAL_SHA256:
-            raise ValueError('Protected nominal FINAL checkpoint hash changed')
         return cls(directory, filename, event, summary, snapshot, scene, config, replay, surface, strike, hashes)
 
     @property
@@ -193,7 +192,10 @@ class PresentationData:
 
 def read_events(directory):
     """Ignore a writer's incomplete last line, not complete invalid evaluations."""
-    source = Path(directory) / 'events.jsonl'
+    packaged = packaged_event(directory)
+    if packaged is not None:
+        return [packaged]
+    source = contained_child(directory, 'events.jsonl')
     if not source.exists():
         return []
     return [json.loads(line) for line in source.read_bytes().splitlines(keepends=True)

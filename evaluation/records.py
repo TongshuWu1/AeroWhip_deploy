@@ -14,7 +14,8 @@ import numpy as np
 import torch
 
 from fitting.artifacts import atomic_save
-from project_paths import ROOT
+from project_paths import ROOT, project_path, project_reference, contained_child
+from model_catalog import packaged_stages
 from training.artifacts import events, execution_hashes, read_json, save_json
 from training.configuration import digest
 
@@ -52,6 +53,9 @@ def discover_stages(stage=None, root=None):
         for path in found:
             if stage is None or task_stage(read_json(path/'configuration.json')) == stage:
                 paths.append(path)
+    if root is None:
+        paths.extend(entry['directory'] for entry in packaged_stages()
+                     if stage is None or entry['stage']['stage'] == stage)
     return sorted(set(paths), key=lambda p: p.name, reverse=True), warnings
 
 
@@ -59,7 +63,7 @@ def active_workers():
     """Inspect actual Python commands, not stale locks or GUI process names."""
     if os.name == 'nt':
         script = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'python*' -and "
-                  "$_.CommandLine -match '\\b(training|evaluation)\\.worker\\b' } | "
+                  "$_.CommandLine -match '\\b(training\\.worker|evaluation\\.(worker|policy_test))\\b' } | "
                   "Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress")
         result = subprocess.run(['powershell', '-NoProfile', '-Command', script],
             capture_output=True, text=True, check=True, timeout=15,
@@ -75,7 +79,7 @@ def active_workers():
     for line in result.stdout.splitlines():
         parts = line.strip().split(None, 1)
         if len(parts) == 2 and int(parts[0]) != os.getpid() and re.search(
-                r'\bpython[\w.]*\b.*\s-m\s+(training|evaluation)\.worker\b', parts[1]):
+                r'\bpython[\w.]*\b.*\s-m\s+(training\.worker|evaluation\.(worker|policy_test))\b', parts[1]):
             rows.append(dict(ProcessId=int(parts[0]), CommandLine=parts[1]))
     return rows
 
@@ -85,7 +89,7 @@ def require_evaluation_idle(owned_directory=None):
     workers = []
     for row in active_workers():
         args = [a.strip('"') for a in shlex.split(row['CommandLine'], posix=False)]
-        if '-m' in args and args.index('-m')+1 < len(args) and args[args.index('-m')+1] == 'evaluation.worker':
+        if '-m' in args and args.index('-m')+1 < len(args) and args[args.index('-m')+1] in ('evaluation.worker', 'evaluation.policy_test'):
             workers.append(row)
     if owned_directory is not None:
         def own_launcher(row):
@@ -102,6 +106,9 @@ def require_evaluation_idle(owned_directory=None):
         raise ValueError('Fresh evaluation waits until other evaluation workers are idle '
                          f'(active PIDs: {", ".join(str(w["ProcessId"]) for w in workers)}). '
                          'View saved remains available; no worker was stopped.')
+    for folder in ('policy_tests', 'context_evaluation'):
+        if project_path(ROOT/'runs'/folder/'worker.lock').exists():
+            raise ValueError('Evaluation lock exists in runs/'+folder+'; inspect ownership before starting. No lock was removed.')
 
 
 def sha256(path):
@@ -109,14 +116,14 @@ def sha256(path):
 
 
 def child(directory, filename):
-    path = (Path(directory)/filename).resolve()
-    if path.parent != Path(directory).resolve():
+    path = contained_child(directory, filename)
+    if path.parent != project_path(directory):
         raise ValueError('Replay must be a file inside its selected run')
     return path
 
 
 def discover(root):
-    root = Path(root).resolve()
+    root = project_path(root)
     candidates = [root] if (root/'configuration.json').exists() else (
         sorted(root.iterdir(), reverse=True) if root.is_dir() else [])
     result, warnings = [], []
@@ -133,7 +140,7 @@ def discover(root):
 
 def load_checkpoint(path):
     # Read a single immutable byte sequence even if a live trainer replaces the file.
-    payload = Path(path).read_bytes()
+    payload = project_path(path).read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
     saved = torch.load(io.BytesIO(payload), map_location='cpu', weights_only=True)
     if saved.get('schema') not in ('ppo_stage1_checkpoint_v1','sac_stage1_checkpoint_v1','sac_stage1_checkpoint_v2','sac_stage1_checkpoint_v3','sac_stage1_checkpoint_v4','sac_stage1_checkpoint_v5','sac_stage1_checkpoint_v6','sac_stage1_checkpoint_v7'):
@@ -227,7 +234,7 @@ class Selection:
 
 
 def selections(directory):
-    directory = Path(directory).resolve()
+    directory = project_path(directory)
     snapshot = read_json(directory/'configuration.json')
     all_rows = events(directory)
     rows = [e for e in all_rows if e.get('phase') == 'evaluation']
@@ -264,14 +271,14 @@ def prepare(checkpoint, *, root=None, mode='exact_source', recovery_target=None)
         raise ValueError('Recovery target must be explicitly current or final')
     if recovery_target is not None and mode != 'current_code':
         raise ValueError('Strike/return is a new protocol; select current-code evaluation')
-    checkpoint = Path(checkpoint).resolve()
+    checkpoint = project_path(checkpoint)
     info = load_checkpoint(checkpoint)
     snapshot = info['snapshot']
     contract = evaluation_contract(snapshot, mode)
     require_evaluation_idle()
     if root is None:
         root = PPO_RESULTS if snapshot['settings'].get('algorithm', 'sac') == 'ppo' else RESULTS
-    path = Path(root)/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
+    path = project_path(root)/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     path.mkdir(parents=True, exist_ok=False)
     save_json(path/'configuration.json', snapshot)
     atomic_save(path/'scene.toml', lambda p: p.write_text(snapshot['scene_text'], encoding='utf-8'))
@@ -283,8 +290,8 @@ def prepare(checkpoint, *, root=None, mode='exact_source', recovery_target=None)
         if event and event.get('replay'):
             replay = child(checkpoint.parent, event['replay'])
             if replay.exists():
-                reference = dict(path=str(replay), sha256=sha256(replay), event=event)
-    request = dict(checkpoint=str(checkpoint), checkpoint_sha256=info['sha256'],
+                reference = dict(path=project_reference(replay), sha256=sha256(replay), event=event)
+    request = dict(checkpoint=project_reference(checkpoint), checkpoint_sha256=info['sha256'],
                    round=info['round'], reference=reference, **contract)
     if recovery_target is not None:
         from dataclasses import asdict
@@ -319,7 +326,7 @@ def envelope_observation(arrays, snapshot):
 def compare_reference(arrays, event, reference):
     if reference is None:
         return dict(status='No matching saved evaluation for this checkpoint iteration')
-    path = Path(reference['path'])
+    path = project_path(reference['path'])
     if not path.exists() or sha256(path) != reference['sha256']:
         return dict(status='Reference missing or changed; comparison not performed')
     with np.load(path, allow_pickle=False) as source:

@@ -1,12 +1,12 @@
 """Current fixed-target stage contracts using local presets and synthetic state."""
 from dataclasses import replace
 from pathlib import Path
-import tempfile
 import unittest
 from unittest.mock import patch
 
 import numpy as np
 import torch
+from helpers import project_temporary
 
 from training.artifacts import create_run
 from training.configuration import FROZEN_PRESETS, iteration_budget, load, require_launchable
@@ -71,7 +71,7 @@ class PipelineTests(unittest.TestCase):
         original = self.presets[3][0]
         for key, value in [('target_sampler', 'lateral_vertical_grid_v1'),
                            ('stage3_actor_training', 'combined_goal_head_v1')]:
-            with self.subTest(key=key), tempfile.TemporaryDirectory() as directory:
+            with self.subTest(key=key), project_temporary() as directory:
                 root = Path(directory)/'new-runs'
                 with self.assertRaisesRegex(ValueError, 'retired'):
                     create_run(dict(original, **{key: value}), root=root)

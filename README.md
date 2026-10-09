@@ -68,22 +68,42 @@ python validate_stages.py --output validation.json
 Replace `NEW_STAGE1_RUN` with a completed compatible run. Use the same explicit
 handoff for Stages3 and4. Opening Training without `--start` stays idle.
 Saved replay renders recorded states without running physics. The Training UI
-also provides a manual saved-policy simulation tester. A changed target is a
-diagnostic, not demonstrated adaptation.
+also provides a manual saved-policy simulation tester. Replay and policy-source
+browsers discover the four packaged milestone stages without archived run folders.
+The tester displays source-compatibility failures and disables fresh simulation
+for incompatible checkpoints; source loading is not a successful simulation.
+A changed target is a diagnostic, not demonstrated adaptation.
 
 Shared physical settings are in `configs/simulation.json`; initial conditions
 are in `configs/scenes/default.toml`. Physical refitting starts with
 `python fitting/run_refit.py --base-model configs/simulation.json`.
 It saves candidates and comparisons without installing a new default model.
-Source recordings are external and selected through Take Processing/fitting.
+To use recorded data, copy the collection into `data/recordings/` first, preserving
+its `data/flight_batches` and linked rehearsal layout. Original external recordings
+are not moved or deleted. The personal take catalog and local folder preference
+are generated locally and ignored by Git; a clone starts with an empty collection.
+
+## Project-local files
+
+Settings, models, trajectories, recordings, results, and UI open/save selections
+must resolve inside this checkout. Relative paths use the project root, not the
+terminal's working directory. Outside paths, home shortcuts, and symlink/junction
+escapes are rejected. Copy inputs into the project before selecting them. Newly
+written source/checkpoint references are project-relative; historical evidence is
+not rewritten. These are application checks, not an operating-system sandbox.
 
 ## Milestone evidence and recovery
 
 The selected completed chain used 80/80/120/60 collections. It predates the
 current relative-goal observation addition, so its saved interfaces remain as
-recorded. Its final actors load for inference on the current physical model;
-source differences prevent a claim of exact historical resume or new current-
-source training. The later October 9 campaign stopped in Stage1 at 68 collections
+recorded. Its final actors load for CPU synthetic inference and saved replay.
+The latest containment/UI changes affect files covered by the physical-source
+guard, although no physics equations or numerical settings changed. That strict
+guard intentionally blocks fresh plant evaluation/actor transfer of these old
+checkpoints; rebuilding on another OS also changes registered binary hashes.
+Linux checkpoint reevaluation needs a separately validated compatibility path,
+not a silent hash bypass. Exact historical resume is not supported by this cleanup.
+The later October 9 campaign stopped in Stage1 at 68 collections
 and did not produce a replacement Stage1-4 chain.
 
 [The model manifest](models/milestone-20261009/manifest.json) records hashes,
@@ -91,7 +111,11 @@ initialization links, settings, summaries, and essential saved evaluations.
 Nominal precision/recovery results do not establish workspace containment,
 varied-target robustness, or flight readiness. The small current-pipeline
 regression suite is self-contained and has no archived run-fixture dependency:
-65 checks in seven modules passed on the current Windows checkout.
+74 checks in eight modules ran on Windows: 73 passed, one symlink-creation check
+was skipped for missing Windows privileges. A separate junction-escape check
+passed. Presets, packaged evidence, CPU actor inference, and idle UI selection/
+save rejection also passed in a relocated source copy from another working
+directory. This was not a fresh native build or Linux/interactive-3D validation.
 
 Development runs, old tests, and original documentation are recoverable in the
 external archive `AeroWhip-development-archive-20261009`; its location and

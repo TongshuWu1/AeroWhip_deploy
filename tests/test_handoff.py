@@ -1,13 +1,13 @@
 """Synthetic actor transfer and checkpoint guards for the current four stages."""
 from copy import deepcopy
 from pathlib import Path
-import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 import torch
 
-from helpers import exact_state
+from helpers import exact_state, project_temporary
 from training.artifacts import (create_run, identity, read_json,
                                 save_checkpoint, validate_actor_source)
 from training.configuration import FROZEN_PRESETS, load
@@ -160,24 +160,53 @@ class HandoffTests(unittest.TestCase):
                      lambda saved: saved['snapshot'].update(scene_text='incompatible'),
                      lambda saved: saved['snapshot']['settings'].update(policy_rate_hz=20),
                      lambda saved: saved['snapshot']['execution_hashes'].update(
-                         {'simulation/model.py': 'changed-physical-source'})]
+                         {'simulation/model.py': 'changed-physical-source'}),
+                     lambda saved: saved['snapshot']['execution_hashes'].update(
+                         {'simulation/deleted.py': 'removed-source'})]
         with patch('training.artifacts.execution_hashes', return_value=self.hashes):
             validate_actor_source(self.checkpoint(), self.target_snapshot())
             for mutate in mutations:
                 with self.subTest(mutate=mutate), self.assertRaises(ValueError):
                     validate_actor_source(self.checkpoint(mutate=mutate), self.target_snapshot())
 
+    def test_resume_rejects_nonfinite_networks_and_adam_before_loading(self):
+        agent = self.agent()
+        original = deepcopy(agent.state_dict())
+        for name in ('actor', 'value', 'actor_optimizer', 'value_optimizer'):
+            with self.subTest(name=name):
+                saved = deepcopy(original)
+                if name.endswith('optimizer'):
+                    saved[name]['state'][0] = {'exp_avg': torch.tensor(float('nan'))}
+                else:
+                    next(v for v in saved[name].values() if v.is_floating_point()).fill_(float('nan'))
+                with self.assertRaisesRegex(ValueError, 'Nonfinite PPO saved '+name):
+                    agent.load_state_dict(saved)
+                self.assertTrue(exact_state(agent.state_dict(), original))
+
+    def test_frozen_evaluation_factory_preserves_all_four_current_actor_layouts(self):
+        from evaluation.policy_test import frozen_actor
+        for stage in (1, 2, 3, 4):
+            with self.subTest(stage=stage):
+                agent = self.agent(stage)
+                columns, _, _, options = self.interfaces[stage]
+                env = SimpleNamespace(actor_columns=columns, action_size=3,
+                                      policy_encoder_options=options, device='cpu')
+                actor = frozen_actor(dict(snapshot=self.presets[stage][1],
+                                         actor=agent.actor.state_dict()), env)
+                self.assertTrue(exact_state(actor.state_dict(), agent.actor.state_dict()))
+                self.assertFalse(any(p.requires_grad for p in actor.parameters()))
+
     def test_fresh_run_stage_guards_and_recorded_actor_only_provenance(self):
         with patch('training.artifacts.execution_hashes', return_value=self.hashes):
-            for source_stage, target_stage in [(1, 3), (2, 4)]:
-                with self.subTest(source=source_stage, target=target_stage), tempfile.TemporaryDirectory() as folder:
+            for source_stage, target_stage in [(1, 3), (2, 4), (3, 2), (4, 2)]:
+                with self.subTest(source=source_stage, target=target_stage), project_temporary() as folder:
                     source = Path(folder)/'source.pt'
                     save_checkpoint(source, self.checkpoint(source_stage))
                     root = Path(folder)/'new-runs'
                     with self.assertRaises(ValueError):
                         create_run(self.presets[target_stage][0], root=root, initialize_actor=source)
                     self.assertFalse(root.exists())
-            with tempfile.TemporaryDirectory() as folder:
+            with project_temporary() as folder:
                 source = Path(folder)/'source.pt'
                 saved = self.checkpoint()
                 save_checkpoint(source, saved)

@@ -8,7 +8,7 @@ import json
 from pathlib import Path
 import tomllib
 
-from project_paths import ROOT, project_path
+from project_paths import ROOT, project_path, project_reference
 
 
 DEFAULT_MODEL = ROOT/'configs/simulation.json'
@@ -22,11 +22,11 @@ def _read(value, role, sources, root=ROOT):
     if not isinstance(value, (str, Path)):
         raise ValueError(f'{role} must be a configuration path or mapping')
     path = project_path(value)  # Validate native/foreign absolute path semantics.
-    relative = Path(str(value).replace('\\', '/')).expanduser()
+    relative = Path(str(value).replace('\\', '/'))
     if not relative.is_absolute():
         path = project_path(project_path(root)/relative)
     data = path.read_bytes()
-    sources[role] = {'path': str(path), 'sha256': hashlib.sha256(data).hexdigest()}
+    sources[role] = {'path': project_reference(path), 'sha256': hashlib.sha256(data).hexdigest()}
     text = data.decode('utf-8-sig')
     result = tomllib.loads(text) if path.suffix.lower() == '.toml' else json.loads(text)
     if not isinstance(result, dict):
@@ -36,7 +36,7 @@ def _read(value, role, sources, root=ROOT):
 
 def verify_configuration_sources(sources):
     for role, identity in sources.items():
-        if hashlib.sha256(Path(identity['path']).read_bytes()).hexdigest() != identity['sha256']:
+        if hashlib.sha256(project_path(identity['path']).read_bytes()).hexdigest() != identity['sha256']:
             raise RuntimeError(f'{role} configuration changed during use')
 
 

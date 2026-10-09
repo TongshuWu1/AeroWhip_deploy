@@ -110,7 +110,8 @@ def record_simple_collection(directory, env, returns, valid, score, round_number
 
 
 def run(directory):
-    directory = Path(directory).resolve()
+    from project_paths import project_path
+    directory = project_path(directory)
     # Never attach another worker to a run, even when a stale lock needs review.
     lock = directory/'worker.lock'
     with lock.open('x',encoding='utf-8') as stream: stream.write(str(os.getpid()))
@@ -215,7 +216,7 @@ def run(directory):
                   entropy_step_offset=agent.entropy_step_offset,entropy_weight=agent.entropy_weight,
                   message='Actor-only stage transfer; value, optimizers, RNG and run counters are fresh')
         if request['resume']:
-            saved = torch.load(request['resume'],map_location=env.device,weights_only=True)
+            saved = torch.load(project_path(request['resume']),map_location=env.device,weights_only=True)
             if saved.get('schema') != checkpoint_schema(settings):
                 raise ValueError('Resume requires a matching learner checkpoint; SAC/PPO cannot be interchanged')
             if saved['identity'] != snapshot['identity']: raise ValueError('Resume snapshot does not match checkpoint')

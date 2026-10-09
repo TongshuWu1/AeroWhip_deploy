@@ -16,7 +16,7 @@ from simulation.configuration import load_configuration
 from tasks.whip.deterministic_evaluation import DeterministicEvaluationEnvironment
 from training.artifacts import EventLog, clean, read_json, save_json
 from training.configuration import task_configuration, validate, evaluation_settings
-from training.sac import Actor
+from evaluation.policy_test import frozen_actor
 from training.curriculum import TargetCurriculum
 from tasks.whip.learned_recovery import make_scorer
 from tasks.whip.stage1 import Stage1Scorer
@@ -24,7 +24,8 @@ from tasks.whip.stage1 import Stage1Scorer
 
 @torch.no_grad()
 def run(directory):
-    directory = Path(directory).resolve()
+    from project_paths import project_path
+    directory = project_path(directory)
     lock = directory/'worker.lock'
     with lock.open('x', encoding='utf-8') as f:
         f.write(str(os.getpid()))
@@ -86,16 +87,7 @@ def run(directory):
             columns = info['actor']['encoder.columns']
             if not torch.equal(columns, torch.tensor(env.actor_columns)):
                 raise ValueError('Actor observation columns do not match this environment')
-            if 'stage4_recovery_policy' in settings:
-                from training.ppo import make_ppo_actor
-                actor = make_ppo_actor(settings,env.actor_columns,env.action_size,**env.policy_encoder_options)
-            else:
-                actor = Actor(env.actor_columns, settings['hidden_units'], settings['initial_log_std'],env.action_size,
-                              **(env.policy_encoder_options if cfg.recovery is not None else {}))
-            actor.load_state_dict(info['actor'], strict=True)
-            actor.to(env.device).eval().requires_grad_(False)
-            if not all(bool(torch.isfinite(p).all()) for p in actor.parameters()):
-                raise ValueError('Checkpoint contains nonfinite actor weights')
+            actor = frozen_actor(info, env)
             env.reset()
             last_notice, done = perf_counter(), False
             while not stopped():

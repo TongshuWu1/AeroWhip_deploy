@@ -14,6 +14,7 @@ from viewer.drone_model import add_drone_model
 from viewer.environment import add_environment, configure_lighting
 from take_processing.take_data import discover, load_take
 from project_paths import project_path
+from take_processing.paths import DEFAULT_RECORDINGS
 
 ROOT = Path(__file__).resolve().parents[1]
 COLORS = {"Desired": "#2563eb", "Command": "#e88724", "Measured": "#15803d", "Predicted": "#ad70dc"}
@@ -67,6 +68,7 @@ class ReplayWindow(QMainWindow):
         scale = self.devicePixelRatioF()
         self.resize(round(1440/scale), round(900/scale))
         self.data = None
+        self.folder = project_path(folder if folder is not None else DEFAULT_RECORDINGS)
         self.worker = None
         self.playing = False
         self.elapsed = 0.0
@@ -137,7 +139,10 @@ class ReplayWindow(QMainWindow):
     def open_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Take folder", str(self.folder))
         if folder:
-            self.populate(folder)
+            try:
+                self.populate(folder)
+            except (OSError, ValueError) as exc:
+                self.statusBar().showMessage(str(exc))
 
     def pause(self):
         self.playing = False

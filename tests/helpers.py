@@ -3,8 +3,16 @@
 No saved campaign data, trained policy, or flight recording is required.
 """
 import torch
+import tempfile
+from project_paths import ROOT, project_path
 from training.configuration import FROZEN_PRESETS, load
 from training.ppo import PPO
+
+
+def project_temporary():
+    directory = project_path(ROOT/'tmp')
+    directory.mkdir(exist_ok=True)
+    return tempfile.TemporaryDirectory(prefix='test-', dir=directory)
 
 
 def exact_state(a, b):

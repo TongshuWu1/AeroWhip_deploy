@@ -150,7 +150,7 @@ def main():
     args.output.mkdir(parents=True,exist_ok=False)
     execution_hashes={str(p.relative_to(ROOT)):digest(p)
         for folder in ('fitting','simulation','controllers/full_state_controller','native')
-        for p in (ROOT/folder).rglob('*') if p.suffix in ('.py','.cpp','.h','.hpp','.inc','.pyd')}
+        for p in (ROOT/folder).rglob('*') if p.suffix in ('.py','.cpp','.h','.hpp','.inc','.pyd','.so')}
     save(args.output/'protocol.json',{'base_model_sha256':model_hash,'base_model':model.config,
         'base_model_hash_kind':'resolved_configuration','base_model_sources':model_sources,
         'split':metadata,'parameters':dict(zip(NAMES,BOUNDS)),'iterations':args.iterations,

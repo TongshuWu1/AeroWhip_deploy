@@ -397,7 +397,7 @@ class TrainingWindow(QtWidgets.QMainWindow):
         if filename:
             try:
                 settings,snapshot,_,_=load(filename)
-                self.settings,self.snapshot,self.task=settings,snapshot,snapshot['task']; self.config_path=Path(filename)
+                self.settings,self.snapshot,self.task=settings,snapshot,snapshot['task']; self.config_path=project_path(filename)
                 self.sync_budget_control(); self.update_description()
             except Exception as exc: self.error(exc)
 
@@ -405,10 +405,10 @@ class TrainingWindow(QtWidgets.QMainWindow):
         filename,_=QtWidgets.QFileDialog.getSaveFileName(self,'Save training settings',str(self.config_path),'JSON (*.json)')
         if not filename: return False
         try:
-            path=Path(filename); task_path=path.with_name(path.stem+'_task.json')
+            path=project_path(filename); task_path=path.with_name(path.stem+'_task.json')
             if task_path==path: raise ValueError('Separate task filename required')
             self.settings['training_episodes']=self.rounds.value()
-            self.settings['task']=str(task_path.relative_to(ROOT)).replace('\\','/') if task_path.is_relative_to(ROOT) else str(task_path)
+            self.settings['task']=task_path.relative_to(ROOT).as_posix()
             save_json(task_path,self.task); save_json(path,self.settings); self.config_path=path
             return True
         except Exception as exc: self.error(exc); return False
@@ -431,9 +431,10 @@ class TrainingWindow(QtWidgets.QMainWindow):
             self.config_label.setText(f'Actor-only transfer; fresh value and optimizers. Entropy clock: {clock}. Not exact resume.')
 
     def choose_checkpoint(self):
-        path,_=QtWidgets.QFileDialog.getOpenFileName(self,'Select learner checkpoint',str(ROOT/'runs'),'Checkpoint (*.pt)')
+        path,_=QtWidgets.QFileDialog.getOpenFileName(self,'Select learner checkpoint',str(ROOT/'models'),'Checkpoint (*.pt)')
         if path:
             try:
+                path=project_path(path)
                 import torch
                 saved = torch.load(path,map_location='cpu',weights_only=True)
                 settings = saved['snapshot']['settings']
@@ -724,12 +725,12 @@ def main(*, auto_start=False, settings_path=None, resume_checkpoint=None, initia
     window=TrainingWindow(settings_path or FROZEN_PRESETS[1]); window.show()
     if resume_checkpoint is not None:
         import torch
-        checkpoint=Path(resume_checkpoint).resolve()
+        checkpoint=project_path(resume_checkpoint)
         saved=torch.load(checkpoint,map_location='cpu',weights_only=True)
         configure_resume(window,checkpoint,saved,requested_settings)
     if initialize_actor is not None:
         window.mode.setCurrentIndex(2)
-        window.initialize_actor_path=Path(initialize_actor).resolve()
+        window.initialize_actor_path=project_path(initialize_actor)
         window.checkpoint_label.setText('Actor only: '+str(window.initialize_actor_path))
     if auto_start:
         # Enter the GUI event loop first. Never launch a detached headless worker.

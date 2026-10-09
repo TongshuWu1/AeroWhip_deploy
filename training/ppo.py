@@ -663,6 +663,19 @@ class PPO:
     def load_state_dict(self, saved):
         if saved.get('interface') != self.interface:
             raise ValueError('PPO checkpoint interface differs; SAC weights/replay are not a PPO continuation')
+        def finite(value):
+            if isinstance(value, torch.Tensor):
+                return bool(torch.isfinite(value).all())
+            if isinstance(value, dict):
+                return all(finite(v) for v in value.values())
+            if isinstance(value, (list, tuple)):
+                return all(finite(v) for v in value)
+            return not isinstance(value, float) or math.isfinite(value)
+        for name in ('actor', 'value', 'actor_optimizer', 'value_optimizer'):
+            if name not in saved:
+                raise ValueError('Missing PPO saved '+name)
+            if not finite(saved.get(name)):
+                raise ValueError('Nonfinite PPO saved '+name)
         if 'goal_columns' in self.interface:
             expected = torch.tensor(self.interface['goal_columns'])
             for network in ('actor','value'):

@@ -25,7 +25,7 @@ from simulation.rollout import rollout
 from simulation.runtime import Simulation
 from simulation.model import native_module
 from simulation.model_configuration import load_model_configuration, verify_configuration_sources
-from project_paths import project_path
+from project_paths import project_path, project_reference
 
 
 def _digest(path):
@@ -47,7 +47,7 @@ def main():
 
     try:
         paths = {name: project_path(getattr(args, name)) for name in ('trajectory', 'config', 'model')}
-        sources = {name: {'path': str(path), 'sha256': _digest(path)} for name, path in paths.items()}
+        sources = {name: {'path': project_reference(path), 'sha256': _digest(path)} for name, path in paths.items()}
         config = load_configuration(paths['config'])
         model, model_sources = load_model_configuration(paths['model'], with_sources=True)
         sources.update({'model_'+key: value for key,value in model_sources.items()})

@@ -172,7 +172,8 @@ class ControllerWindow(QtWidgets.QWidget):
         self.plot.set_trajectory(self.trajectory, self.component.currentText())
 
     def choose_file(self):
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, 'Load trajectory', '', 'CSV files (*.csv)')
+        folder = Path(__file__).resolve().parents[2]/'data/trajectories'
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, 'Load trajectory', str(folder), 'CSV files (*.csv)')
         if path:
             self.load_path(path)
 

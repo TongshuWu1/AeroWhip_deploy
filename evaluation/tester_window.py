@@ -8,8 +8,9 @@ from PySide6 import QtCore, QtWidgets
 
 from evaluation.policy_test import (prepare, checkpoint_context, initial_case, case_warnings,
                                     rpy_quaternion, PROTOCOL)
-from evaluation.records import discover_stages, task_stage
-from project_paths import ROOT
+from evaluation.records import discover_stages, task_stage, evaluation_contract
+from project_paths import ROOT, project_path
+from model_catalog import checkpoint_for_directory
 from simulation.state import quaternion_xyzw_to_rotation_matrix
 from training.artifacts import read_json
 from training.ui.preview import EvaluationPreview
@@ -99,10 +100,19 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
 
     def refresh_runs(self):
         self.runs.blockSignals(True); self.runs.clear()
-        paths,_=discover_stages(self.stage.currentData())
+        try:
+            paths,_=discover_stages(self.stage.currentData())
+        except (OSError, ValueError, KeyError) as exc:
+            self.runs.blockSignals(False)
+            self.info=None; self.test.setEnabled(False); self.status.setText(str(exc))
+            return
         for path in paths:
-            if (path/'latest.pt').exists():
-                self.runs.addItem(f'S{task_stage(read_json(path/"configuration.json"))} · {path.name}',str(path/'latest.pt'))
+            try:
+                checkpoint=checkpoint_for_directory(path)
+                if checkpoint.exists():
+                    self.runs.addItem(f'S{task_stage(read_json(path/"configuration.json"))} · {path.parent.name}/{path.name}',str(checkpoint))
+            except (OSError, ValueError) as exc:
+                self.status.setText(str(exc))
         self.runs.blockSignals(False)
         self.select_run()
 
@@ -110,11 +120,12 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
         if self.runs.currentData(): self.load_source(Path(self.runs.currentData()))
 
     def browse(self):
-        filename,_=QtWidgets.QFileDialog.getOpenFileName(self,'Learned policy checkpoint',str(ROOT/'runs'),'Checkpoint (*.pt)')
+        filename,_=QtWidgets.QFileDialog.getOpenFileName(self,'Learned policy checkpoint',str(ROOT/'models'),'Checkpoint (*.pt)')
         if filename: self.load_source(Path(filename))
 
     def load_source(self,path):
         try:
+            path=project_path(path)
             info,scene,cfg=checkpoint_context(path)
             self.info,self.scene,self.cfg=info,scene,cfg
             self.checkpoint.setText(str(path.resolve()))
@@ -153,6 +164,7 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
         if self.info is None: return
         try:
             warnings=case_warnings(self.info['snapshot'],self.scene,self.cfg,self.case())
+            evaluation_contract(self.info['snapshot'], 'current_code')
             self.warning.setText('\n\n'.join(warnings))
             self.test.setEnabled(self.process.state()==QtCore.QProcess.ProcessState.NotRunning)
         except Exception as exc:
@@ -161,6 +173,8 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
     def busy(self,active):
         for widget in self.selectors+[self.inputs]: widget.setEnabled(not active)
         self.test.setEnabled(not active and self.info is not None); self.stop.setEnabled(active)
+        if not active:
+            self.update_warnings()
 
     def clear_preview(self,message):
         self.preview.dispose();self.preview.pending=None;self.preview.loaded_key=None
@@ -225,10 +239,10 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
         filename,_=QtWidgets.QFileDialog.getOpenFileName(self,'Saved policy test',str(ROOT/'runs/policy_tests'),'Summary (summary.json)')
         if not filename: return
         try:
-            directory=Path(filename).parent
+            directory=project_path(filename).parent
             request=read_json(directory/'request.json')
             if request['protocol']!=PROTOCOL: raise ValueError('Select a policy-test result')
-            self.load_source(Path(request['checkpoint']))
+            self.load_source(Path(request['checkpoint']))  # load_source resolves against ROOT, not cwd.
             if self.info is not None and self.info['sha256']!=request['checkpoint_sha256']:
                 self.info=None;self.test.setEnabled(False)
                 self.source.setText('Recorded checkpoint differs from the current file. Saved motion remains viewable; select a source for new tests.')

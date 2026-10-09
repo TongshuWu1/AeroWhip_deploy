@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from pathlib import Path
+from project_paths import project_reference
 
 import numpy as np
 import torch
@@ -259,8 +260,9 @@ def prepare_recorded_replay(path, model, *, start_s, duration_s, history_s=.1,
             delay_s=float(model.config["controller"]["command_delay_s"]))
     group, grouping = session_name(path)
     verify_sources({"sources": sources})
+    sources = {key: dict(value, path=project_reference(value['path'])) for key, value in sources.items()}
     metadata = {
-        "take": str(path), "sources": sources, "recording_group": group, "grouping": grouping,
+        "take": project_reference(path), "sources": sources, "recording_group": group, "grouping": grouping,
         "requested_start_elapsed_s": float(start_s), "start_elapsed_s": float(take.time[start]),
         "end_elapsed_s": float(take.time[last]), "start_source_s": float(take.source_time[start]),
         "end_source_s": float(take.source_time[last]), "start_frame": int(take.frame[start]),

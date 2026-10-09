@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from project_paths import project_path
+from project_paths import project_path, project_reference
 from take_processing.take_data import digest
 
 
@@ -41,4 +41,4 @@ def load_split(path, default):
     result=validate_split(json.loads(path.read_text(encoding='utf-8-sig')))
     if digest(path)!=before:
         raise RuntimeError('Dataset split changed while reading')
-    return result, {'dataset_split': {'path':str(path),'sha256':before}}
+    return result, {'dataset_split': {'path':project_reference(path),'sha256':before}}

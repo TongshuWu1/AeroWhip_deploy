@@ -16,7 +16,7 @@ selects an explicit settings file, and `--initialize-actor` performs actor-only
 transfer. Exact resume is a separate, source-checked path.
 [run_replay.py](../run_replay.py) renders saved arrays without inference/physics.
 The manual policy tester remains available from Training.
-[Take Processing](../take_processing/run_take_processing.py) manages external
+[Take Processing](../take_processing/run_take_processing.py) manages project-local
 recordings and fitting. [validate_stages.py](../validate_stages.py) runs the small
 self-contained current-pipeline regression suite; `--output` optionally writes
 its result. It does not launch a training campaign.
@@ -29,6 +29,27 @@ working directory. [configs/simulation.json](../configs/simulation.json) selects
 physics, geometric controller, motors, and the unfitted aerodynamic schema.
 [configs/scenes/default.toml](../configs/scenes/default.toml) sets the initial
 state and viewer.
+
+## Filesystem and UI portability
+
+Shared path validation resolves file-dialog selections and relative inputs inside
+the checkout, rejecting outside/home/foreign-drive paths and resolved symlink or
+junction escapes. Run-owned replay references must additionally stay inside their
+owning folder. Shared artifact writers and settings/trajectory exports use these
+checks; new model-source, actor-source, resume, and evaluation request references
+are project-relative. Existing historical evidence is immutable. This is
+application-level containment, not an OS sandbox or protection against hostile
+concurrent filesystem replacement.
+
+[model_catalog.py](../model_catalog.py) discovers manifest-packaged stages in the
+policy-source/replay browsers. It verifies registered artifact bytes and maps the
+original final-evaluation replay filename to `final-replay.npz` in memory only;
+recorded metric checks remain unchanged. Default replay selects packaged Stage4.
+The empty Take Replay window initializes its folder before opening the picker.
+Invalid file selections are reported without outside writes. The low-level
+Training default now matches the current Stage1 preset selected by the launcher.
+The evaluation worker uses the same frozen actor factory as the policy tester,
+including all current goal/phase columns; this does not change task scoring.
 
 ## Physical model, units, and timing
 
@@ -201,7 +222,16 @@ interfaces without the later relative goal. Current CPU loading, exact actor-sta
 restoration, finite synthetic inference, and physical-model/scene compatibility
 were checked in milestone selection. Task/training execution sources have
 changed, and unused study modules were archived; the final compatibility record
-lists those differences. Exact historical resume/reproduction is not claimed.
+lists the earlier milestone differences, not approval of later source changes.
+The subsequent containment/UI edits changed physically guarded Python files
+(`simulation/model_configuration.py` and full-state controller UI/launcher paths),
+without changing equations, parameters, rewards, thresholds, or timesteps.
+The existing physical-source and binary-hash guards therefore reject fresh plant
+reevaluation/actor transfer from the packaged historical checkpoints. Policy
+Tester still loads them for inspection but disables incompatible fresh tests.
+Saved replay and CPU synthetic inference work. Rebuilding native binaries on
+Linux requires separate compatibility validation; these guards were not loosened.
+Exact historical resume/reproduction is not claimed.
 No checkpoint is relabeled as trained with current observations. Evidence
 contains saved settings/model/task/scene, summaries, initialization links,
 historical audits, and final nominal evaluation/replay for each stage.
@@ -223,8 +253,15 @@ default or physical fit was promoted during cleanup.
 
 ## Recordings and fitting
 
-Source recordings remain external. Take Processing resolves an explicit local
-selection or opens a folder picker. Fitting checks catalog/alignment/source
+Original source recordings remain external and untouched. For active use, copy
+the collection inside `data/recordings/` with its original `data/flight_batches`
+and linked rehearsal layout. Take Processing selects only project-contained
+collections; it no longer infers an external root from historical catalog paths.
+The prior personal catalog was backed up byte-identically under
+`runs/maintenance/20261009-containment/catalog-before.json` before removal from
+tracked files. New catalogs and local preferences are ignored by Git. A clone
+has an empty recording folder and needs user-supplied data for fitting.
+Fitting checks catalog/alignment/source
 hashes and complete 100 Hz windows. Missing observations are masked, not invented.
 Causal history initializes velocities; twist and initial motors remain assumptions
 where telemetry is absent. Command-driven and measured-boundary replay answer
@@ -251,9 +288,11 @@ each OS/Python ABI. There is no Python solver fallback. Windows requires MSVC/
 SDK; the supplied non-Windows branch uses strict floating-point compiler flags.
 The compact suite covers current settings, scientific criteria, observation/
 action and handoff contracts, checkpoint restoration, recovery, and bounded
-numerical behavior. All 65 checks across seven modules passed on this Windows
-checkout (OS exit 0, including the CUDA optimizer restart check); 128 retained
-Python files parsed and `pip check` reported no broken requirements. The suite
+numerical behavior. The latest 74 checks across eight modules ran on this Windows
+checkout (OS exit 0, including the CUDA optimizer restart check): 73 passed and
+one symlink-creation test was skipped because Windows denied link privileges.
+A separate native junction probe rejected the escape and removed only its own
+link. The suite
 includes short native numerical steps, not a new trained-policy evaluation.
 Experiment-specific fixtures are archived. Passing this
 suite does not establish learned-policy or flight success.
@@ -268,3 +307,21 @@ Linux/hardware. A narrow settings-dialog fix preserves boolean types on accept;
 all four current presets now round-trip unchanged. No physical model, reward,
 success criterion or stage default changed. [Milestone verification](milestone.json)
 records the external archive, SHA-256 preservation evidence and actual checks.
+
+2026-10-09 containment/UI follow-up: approved project-local open/save boundaries,
+portable new references, empty-take-picker repair, packaged discovery, and strict
+Stage2-source/deleted-physical-source/nonfinite-PPO restore checks were implemented.
+All 52 manifest artifact hashes (including four checkpoints) remain exact. All
+four saved replay metrics and CPU synthetic actor loads passed; an unbuilt,
+relocated source copy also passed configuration, replay/inference and idle-UI
+selection/save-rejection checks from a foreign cwd. The default replay audit
+passed without plant/inference steps. Retained diagnostic results are under
+`runs/maintenance/20261009-containment/`; its first portability helper invocation
+passed the checks but failed a diagnostic output-path assertion, which was fixed
+without relaxing production/scientific checks. No training or policy plant test
+was started. Interactive 3D appearance and Linux remain unverified. A preceding
+fresh Windows native build succeeded, but Windows Application Control blocked
+import of its new tensor extension; no security setting was bypassed. This
+follow-up did not rerun that build. Git-clone/editable use is documented; standalone
+wheel/sdist operation is not validated. Historical checkpoint source guards are
+still restrictive as described above, not a claim of plug-and-play flight use.
