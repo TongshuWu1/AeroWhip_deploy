@@ -1,0 +1,3 @@
+# Physics-only default. Structured cable/drone aerodynamic fits are separate candidates.
+schema = "structured_aerodynamic_residual_v1"
+status = "unfitted"

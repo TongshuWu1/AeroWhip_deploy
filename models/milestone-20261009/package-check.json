@@ -1,0 +1,55 @@
+{
+  "schema": "aerowhip_milestone_package_check_v1",
+  "os_exit_code": 0,
+  "passed": true,
+  "CPU_only": true,
+  "plant_rollout": false,
+  "GPU": false,
+  "training": false,
+  "old_run_files_read": false,
+  "file_count_at_check": 50,
+  "total_bytes_at_check": 15978541,
+  "manifest_sha256_at_check": "603b3437f3bb178c6c22feb75fb57c35802b3f767f25fae6b1774ee8652b5b49",
+  "scope": "All manifest-listed file hashes and lengths, exact file set, checkpoint identities, saved actor tensor reload, CPU frozen-actor synthetic deterministic inference, saved scene/task reconstruction, and finite valid final replay arrays. This report was added after that verification.",
+  "stages": [
+    {
+      "stage": 1,
+      "checkpoint": "stage1.pt",
+      "saved_actor_reload_exact": true,
+      "CPU_frozen_actor_inference_finite": true,
+      "saved_scene_and_task_load": true,
+      "final_replay_all_states_valid": true,
+      "replay_frames": 451
+    },
+    {
+      "stage": 2,
+      "checkpoint": "stage2.pt",
+      "saved_actor_reload_exact": true,
+      "CPU_frozen_actor_inference_finite": true,
+      "saved_scene_and_task_load": true,
+      "final_replay_all_states_valid": true,
+      "replay_frames": 451
+    },
+    {
+      "stage": 3,
+      "checkpoint": "stage3.pt",
+      "saved_actor_reload_exact": true,
+      "CPU_frozen_actor_inference_finite": true,
+      "saved_scene_and_task_load": true,
+      "final_replay_all_states_valid": true,
+      "replay_frames": 451
+    },
+    {
+      "stage": 4,
+      "checkpoint": "stage4.pt",
+      "saved_actor_reload_exact": true,
+      "CPU_frozen_actor_inference_finite": true,
+      "saved_scene_and_task_load": true,
+      "final_replay_all_states_valid": true,
+      "replay_frames": 659
+    }
+  ],
+  "unchanged_scientific_criteria": true,
+  "verification_tool": "Python CPU reader, evaluation.records.load_checkpoint, evaluation.policy_test.frozen_actor and NumPy saved-array inspection.",
+  "limitation": "Synthetic inference and reading original recorded nominal cases are not new policy rollouts, Linux validation or hardware tests."
+}

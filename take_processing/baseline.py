@@ -4,6 +4,8 @@ from pathlib import Path
 import numpy as np
 from take_processing.take_data import read_json, digest
 from take_processing.library import verify_sources
+from project_paths import project_path
+from take_processing.paths import collection_root
 
 
 @dataclass
@@ -19,7 +21,7 @@ class Baseline:
 def discover_baselines(take, root):
     source_hash = digest(take.path)
     found = []
-    for path in sorted(Path(root).glob('*/*.json'), reverse=True):
+    for path in sorted(project_path(root).glob('*/*.json'), reverse=True):
         if path.name == 'summary.json' or not path.with_suffix('.npz').is_file():
             continue
         try:
@@ -32,10 +34,13 @@ def discover_baselines(take, root):
 
 
 def load_baseline(path, take):
-    meta = read_json(Path(path))
+    path = project_path(path)
+    meta = read_json(path)
     if meta['sources']['tracking']['sha256'] != digest(take.path):
         raise ValueError('Baseline belongs to a different recording')
-    verify_sources({'sources':meta['sources']})
+    verify_sources({'sources':meta['sources']}, root=collection_root(take.path.parent))
+    if meta.get('arrays_sha256') is not None and digest(path.with_suffix('.npz')) != meta['arrays_sha256']:
+        raise ValueError('Comparison array archive hash mismatch')
     with np.load(Path(path).with_suffix('.npz'), allow_pickle=False) as archive:
         a = {key:archive[key].copy() for key in archive.files}
     t = a['time_from_initial_s']

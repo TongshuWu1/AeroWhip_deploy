@@ -1,0 +1,10 @@
+# Nominal simulation controller, not identified firmware gains or flight approval.
+# Translation gains: critically damped 2 rad/s XY, 2.5 rad/s Z.
+position_gain_s_inv2 = [4.0, 4.0, 6.25]
+velocity_gain_s_inv = [4.0, 4.0, 5.0]
+# Attitude bandwidth chosen independently of the old fitted response model.
+attitude_frequency_rad_s = [20.0, 20.0, 15.0]
+attitude_damping_ratio = [1.0, 1.0, 1.0]
+# Explicit experimental clock, not inferred from 100 Hz observations.
+controller_period_s = 0.005
+command_delay_s = 0.03

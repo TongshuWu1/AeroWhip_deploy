@@ -1,4 +1,5 @@
 [simulation]
+backend = "native"
 # 100 Hz outer step with internal substeps from the physical model.
 timestep_s = 0.01
 

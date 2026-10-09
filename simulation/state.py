@@ -46,6 +46,34 @@ class DroneState:
 
 
 @dataclass(frozen=True)
+class ForceTelemetry:
+    """Instantaneous model forces in world coordinates, not measured motor data."""
+    center_of_mass_world_m: FloatArray
+    thrust_world_n: FloatArray
+    cable_force_world_n: FloatArray  # cable-on-drone only; excludes vehicle air drag
+
+
+@dataclass(frozen=True)
+class ActuatorTelemetry:
+    """Model-only motor effort; wrench order is collective N, body XYZ Nm."""
+    motor_thrust_n: FloatArray
+    delivered_wrench: FloatArray
+    requested_wrench: FloatArray | None
+    unclipped_motor_thrust_n: FloatArray | None
+    target_motor_thrust_n: FloatArray | None
+
+    @property
+    def saturated(self):
+        if self.unclipped_motor_thrust_n is None:
+            return None
+        return self.unclipped_motor_thrust_n != self.target_motor_thrust_n
+
+    @property
+    def wrench_error(self):
+        return None if self.requested_wrench is None else self.requested_wrench-self.delivered_wrench
+
+
+@dataclass(frozen=True)
 class SimulationState:
     time_s: float
     drone: DroneState
@@ -53,6 +81,9 @@ class SimulationState:
     cable_node_positions_world_m: FloatArray
     cable_node_velocities_world_mps: FloatArray
     cable_marker_indices: NDArray[np.int64]
+    forces: ForceTelemetry | None = None
+    actuation: ActuatorTelemetry | None = None
+    cable_material_angles_rad: FloatArray | None = None
 
 
 def rotation_matrix_to_quaternion_xyzw(rotation: FloatArray) -> FloatArray:

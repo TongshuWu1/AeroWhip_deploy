@@ -1,0 +1,458 @@
+{
+  "schema": "ppo_stage1_velocity_v1",
+  "reward_delivery": "causal_best_event_differences_v1",
+  "settings": {
+    "algorithm": "ppo",
+    "task": "configs/tasks/whip_stage4_cone25_v2.json",
+    "model": "configs/simulation.json",
+    "scene": "configs/scenes/default.toml",
+    "device": "cuda",
+    "seed": 1,
+    "parallel_environments": 128,
+    "evaluation_environments": 64,
+    "training_episodes": 7680,
+    "evaluation_interval_episodes": 512,
+    "policy_rate_hz": 10,
+    "action_interface": "velocity_v1",
+    "velocity_limit_mps": [
+      2,
+      2,
+      0.8
+    ],
+    "workspace_penalty": {
+      "weight": 0.1,
+      "distance_scale_m": 0.1
+    },
+    "learning_rate": 0.0003,
+    "batch_size": 256,
+    "hidden_units": 128,
+    "initial_log_std": -0.3,
+    "reward_scale": 100,
+    "discount": 1,
+    "ppo": {
+      "epochs": 5,
+      "clip_ratio": 0.2,
+      "gae_lambda": 0.95,
+      "value_loss_weight": 0.5,
+      "max_grad_norm": 0.5,
+      "target_kl": 0.02,
+      "post_step_kl": {
+        "maximum_trials": 8
+      },
+      "transfer_entropy_clock": "stage_local",
+      "entropy": {
+        "initial_weight": 0.005,
+        "final_weight": 0.001,
+        "hold_fraction": 0.2,
+        "anneal_end_fraction": 1
+      }
+    },
+    "training_stage": 4,
+    "stage4_role": "learned_recovery_v1",
+    "stage4_recovery_policy": {
+      "architecture": "frozen_whip_pd_residual_v1",
+      "position_gain_s_inv": 1.5,
+      "velocity_damping": 0.4,
+      "cable_length_m": 0.9525,
+      "initial_log_std": -1.6
+    },
+    "plateau_detection": {
+      "mode": "warn",
+      "minimum_collections": 40,
+      "window_collections": 8,
+      "patience_checks": 3,
+      "check_interval_collections": 1,
+      "require_entropy_floor": true,
+      "minimum_gain": {
+        "return": 0.005,
+        "quality": 0.005,
+        "rate": 0.02,
+        "containment_m": 0.005
+      }
+    }
+  },
+  "task": {
+    "episode": {
+      "duration_s": 8,
+      "settling_s": 0.5,
+      "termination": "full_horizon_v1"
+    },
+    "workspace": {
+      "radius_m": 0.55,
+      "height_lower_world_m": 1.5,
+      "height_upper_world_m": 2.6
+    },
+    "return": {
+      "acceleration_cost_weight": 0,
+      "acceleration_cost_scale_mps2": 15,
+      "failure_return": -1,
+      "maximum_tilt_deg": 60,
+      "minimum_cable_height_m": 0.05
+    },
+    "request": [
+      0,
+      0,
+      2,
+      3
+    ],
+    "strike_surface": {
+      "distance_m": 1.1,
+      "width_m": 0.1,
+      "height_m": 0.1,
+      "maximum_entry_angle_deg": 30,
+      "approach_width_m": 0.35,
+      "strike_bonus_weight": 0
+    },
+    "matching": {
+      "height_width_m": 0.35,
+      "speed_width_mps": 1.5,
+      "direction_width_deg": 30,
+      "time_preference": 0,
+      "speed_mode": "minimum",
+      "mechanics_credit_weight": 1,
+      "shaping_weight": 1,
+      "center_weight": 0,
+      "center_sigma_m": 0.05,
+      "reward_mode": "directed_precision_v1",
+      "hit_speed_weight": 0,
+      "hit_straightness_weight": 0,
+      "hit_speed_scale_mps": 3,
+      "alignment_mode": "cone_plateau_v1",
+      "alignment_cone_deg": 25
+    },
+    "mechanics": {
+      "smoothing_sigma_fraction": 0.05,
+      "windows_s": [
+        0.2,
+        0.4,
+        0.6,
+        0.8
+      ],
+      "window_stride_s": 0.05,
+      "tip_lag_s": 0.15,
+      "turn_reference_rad": 0.5,
+      "travel_reference_fraction": 0.2,
+      "spread_scale_fraction": 0.25,
+      "nonrigid_reference_mps": 0.5,
+      "release_reference_mps": 0.5,
+      "forward_reference_mps": 1,
+      "rigid_pinv_rtol": 1e-08
+    },
+    "recovery": {
+      "whip_duration_s": 4.5,
+      "recovery_duration_s": 4,
+      "weight": 0.5,
+      "timing_mode": "after_first_geometric_hit_v1",
+      "quality_mode": "return_and_cable_settle_v1",
+      "position_scale_m": 0.2,
+      "velocity_scale_mps": 0.3,
+      "final_hold_s": 1,
+      "position_tolerance_m": 0.1,
+      "speed_tolerance_mps": 0.15,
+      "return_position_scale_m": 1,
+      "return_velocity_scale_mps": 0.5,
+      "cable_velocity_scale_mps": 1,
+      "cable_horizontal_scale_m": 0.25,
+      "cable_speed_tolerance_mps": 0.2,
+      "cable_horizontal_tolerance_m": 0.1
+    }
+  },
+  "model": {
+    "drone": {
+      "mass_kg": 0.145,
+      "tracking_origin": "top_plate_center",
+      "center_of_mass_tracking_m": [
+        0,
+        0,
+        -0.018
+      ],
+      "inertia_body_about_com_kg_m2": [
+        [
+          0.00013649333333333333,
+          0,
+          0
+        ],
+        [
+          0,
+          0.00013649333333333333,
+          0
+        ],
+        [
+          0,
+          0,
+          0.00024166666666666667
+        ]
+      ],
+      "initial_inertia_box_size_m": [
+        0.1,
+        0.1,
+        0.036
+      ],
+      "upper_plate_thickness_m": 0.006,
+      "plate_gap_m": 0.025,
+      "lower_plate_thickness_m": 0.005,
+      "battery_thickness_m": 0.015
+    },
+    "attachment": {
+      "type": "point_clamp_der_halfcell_v1",
+      "position_tracking_m": [
+        0,
+        0,
+        -0.051
+      ],
+      "transmit_direct_moment": true,
+      "tangent_body": [
+        0,
+        0,
+        -1
+      ]
+    },
+    "cable": {
+      "total_mass_kg": 0.017,
+      "diameter_m": 0.0035,
+      "marker_interval_lengths_m": [
+        0.063,
+        0.087,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1,
+        0.1025,
+        0.1,
+        0.1
+      ],
+      "moving_marker_masses_kg": [
+        0.0009604520191835018,
+        0.0009604520191835018,
+        0.0009604520191835018,
+        0.0009604520191835018,
+        0.0009604520191835018,
+        0.0009604520191835018,
+        0.0009604520191835018,
+        0.0009604520191835018,
+        0.0009604520191835018,
+        0.0009604520191835018
+      ],
+      "EI_n_m2": 1.1789398730482201e-08,
+      "Cb_n_m2_s": 8.174015593606011e-05,
+      "external_drag_s_inv": 0.08137620273661342,
+      "constitutive_model": "der_material_kelvin_voigt_v1",
+      "GJ_n_m2": 1.1789398730482201e-08,
+      "Ct_n_m2_s": 8.174015593606012e-06
+    },
+    "simulation": {
+      "timestep_s": 0.01,
+      "gravity_world_m_s2": [
+        0,
+        0,
+        -9.80665
+      ],
+      "physics_timestep_s": 0.0016666666666666668,
+      "segments_per_marker_interval": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "constraint_iterations": 4
+    },
+    "controller": {
+      "position_gain_s_inv2": [
+        4.0,
+        4.0,
+        6.25
+      ],
+      "velocity_gain_s_inv": [
+        4.0,
+        4.0,
+        5.0
+      ],
+      "attitude_frequency_rad_s": [
+        20.0,
+        20.0,
+        15.0
+      ],
+      "attitude_damping_ratio": [
+        1.0,
+        1.0,
+        1.0
+      ],
+      "controller_period_s": 0.005,
+      "command_delay_s": 0.03
+    },
+    "actuator": {
+      "calibration_status": "uncalibrated",
+      "allocation": "inverse_clip",
+      "motor_positions_com_m": [
+        [
+          0.05,
+          0.05,
+          0
+        ],
+        [
+          -0.05,
+          0.05,
+          0
+        ],
+        [
+          -0.05,
+          -0.05,
+          0
+        ],
+        [
+          0.05,
+          -0.05,
+          0
+        ]
+      ],
+      "yaw_torque_per_thrust_m": [
+        0.01,
+        -0.01,
+        0.01,
+        -0.01
+      ],
+      "minimum_thrust_n": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "maximum_thrust_n": [
+        0.7943386499999998,
+        0.7943386499999998,
+        0.7943386499999998,
+        0.7943386499999998
+      ],
+      "response_time_s": [
+        0.015,
+        0.015,
+        0.015,
+        0.015
+      ],
+      "initial_thrust_n": [
+        0.3971693249999999,
+        0.3971693249999999,
+        0.3971693249999999,
+        0.3971693249999999
+      ]
+    },
+    "residual": {
+      "schema": "structured_aerodynamic_residual_v1",
+      "status": "unfitted"
+    }
+  },
+  "model_sources": {
+    "model": {
+      "path": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\configs\\simulation.json",
+      "sha256": "d221680c3de83cdf9665bf1d13026079a60ab0e66691d6b634b511ec3e7c85db"
+    },
+    "physics": {
+      "path": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\configs\\physics\\drone_cable.json",
+      "sha256": "16319209aa90bc91348c957e240f457ea3f8a447fe5c3f60f1c66a5074f14a8d"
+    },
+    "controller": {
+      "path": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\configs\\controllers\\geometric.toml",
+      "sha256": "b4f94257cc87756e20156f9426ce26cb6330bf5410a3fc9302bf938f511212af"
+    },
+    "actuator": {
+      "path": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\configs\\actuators\\drone.json",
+      "sha256": "e90e4c647c5ce01cc1a68625d5225cae5b963cc5f72f828702a2a43e76628dc6"
+    },
+    "residual_config": {
+      "path": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\configs\\residuals\\current.toml",
+      "sha256": "52add1864d3a874007d15e7056fec4cb278ddf61d81f21279513ee921cbfa680"
+    }
+  },
+  "scene_text": "[simulation]\nbackend = \"native\"\n# 100 Hz outer step with internal substeps from the physical model.\ntimestep_s = 0.01\n\n[initial_state]\nposition_world_m = [0.0, 0.0, 2.0]\nquaternion_body_to_world_xyzw = [0.0, 0.0, 0.0, 1.0]\nlinear_velocity_world_mps = [0.0, 0.0, 0.0]\nangular_velocity_body_radps = [0.0, 0.0, 0.0]\n\n[platform]\n# Centered under the drone and battery, at the battery's bottom surface.\nattachment_offset_body_m = [0.0, 0.0, -0.051]\ncable_segment_lengths_m = [0.063, 0.087, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1025, 0.1, 0.1]\n\n[viewer]\nwindow_size_px = [1440, 900]\n# Start at this pixel size rather than filling a high-resolution monitor.\nstart_maximized = false\nbackground_rgb = [0.73, 0.77, 0.80]\nground_z_m = 0.0\nground_size_m = 8.0\ngrid_spacing_m = 0.5\nworld_axis_length_m = 0.25\nbody_axis_length_m = 0.10\n# Measured clear distances between CAD faces and the cable attachment.\nplate_gap_m = 0.025\n# Battery thickness: battery top touches the lower plate; root is at its bottom.\ncable_attachment_drop_m = 0.015\n# Visual estimate from the video; not an aerodynamic parameter.\nrotor_radius_m = 0.038\n# Slow-motion visual rotation only; not measured RPM or a thrust input.\nvisual_rotor_rpm = 90.0\ncable_radius_m = 0.0018\ncable_marker_radius_m = 0.006\n",
+  "execution_hashes": {
+    "controllers/__init__.py": "89bafe3c0c6f779717cbd49e3ab9ff9362529892852b45007186dc0eee970a64",
+    "controllers/full_state_controller/__init__.py": "2af4a28b18331dd98c5860a8483246cd65de47afe0a97e6b6596157449c4eb4a",
+    "controllers/full_state_controller/bspline_window.py": "2cb343872e95d726ef12de2a9066cc18d03992425a787b71dea64edb4ffb2ba4",
+    "controllers/full_state_controller/controller_window.py": "95a8c53f2d15c67bb79d1a03a7dc9b630e8e4a97db8f516a3e64a6e92e701004",
+    "controllers/full_state_controller/geometric_controller.py": "45d65cfb641ecfa717f3bbc6e9c136ff33c0f8f752d43271caa54e5aa36677e2",
+    "controllers/full_state_controller/preset_window.py": "bdb0afc8e37f5722945cd59ff66af46d18743fdca5b7887937b466772b525720",
+    "controllers/full_state_controller/run_controller.py": "6e03657972336af475cfadea99b70019c32a0e7299a86790dac0a422f5c5f578",
+    "controllers/full_state_controller/run_headless.py": "a0fe848382e38c8f43fc32e353afb0f3e241063688cc5c60b19e0faf22e82637",
+    "controllers/full_state_controller/setup_window.py": "f152cfb874fbb52e550218bd25d18e2b933567cbfb975a726baf9a6a04adf33c",
+    "controllers/full_state_controller/tensor_controller.py": "bf7be894a48d8b8a8b1800c4768123e072526b77ac25627ff26a3707f86bd9b5",
+    "controllers/gamepad_controller/__init__.py": "5e5fbb4a4fc8d096bc89e6243d6e2b48fc77736000433a5e50fc2e8e55935956",
+    "controllers/gamepad_controller/manual_control.py": "287c06478f005f74f74ac2d5a30b22337529e5738d5e550708f8176c5650cb93",
+    "controllers/gamepad_controller/run_controller.py": "1d7ee11ac2e080f804b315f4e88542450db1f338863e3468b3ef6bdd11e34bbb",
+    "controllers/gamepad_controller/virtual_gamepad.py": "b039a10e64f21559e84cbc7e5498092a3cdadf908b7695d9272be676f1332288",
+    "controllers/gamepad_controller/xbox_input.py": "d15adc5ea6005212dbb9c86c63783b875ccaa9b260d42abc1aebdacd1a986535",
+    "native/actuator.cpp": "d588c511617b177d2745574b75b13961b0854d22a2e42216ffe41194879752a5",
+    "native/actuator.hpp": "8db76bb69784c2d644068bf30c53f5ba39b3314eb77707891c650ce88e27e2da",
+    "native/bindings.cpp": "a6447a4ecb8fab1d30b439d32421220a8289016b90e23eb92b0c4041fbde1e95",
+    "native/engine.cpp": "6a242afcd84ddd679c64384f684fa1050497fc92a75f55f92ab63f77918a7496",
+    "native/engine.hpp": "58375cae9619133b9ec8f52ebd33b6f26f6d13624f5784436c01f8a9a1d22050",
+    "native/material_frame.inc": "4a0915ecf8a04427e00ce46335828346bbca49ed8f5d10d6dbdaf654a3541611",
+    "native/prescribed_material.inc": "2272147f2fa289d65111ce0602154e8c3dec10ebea70a890c708adfe114f2e88",
+    "native/runtime.cpp": "bc2d7ef6c81b98c24b3d2f159b081a21f4192917c98765d4c2b834acaae535ee",
+    "native/runtime.hpp": "58706b9c25ba2a043224cc9528ce7e267b563bc8545e3853ddd4e250eb1e268c",
+    "native/tensor_bindings.cpp": "85f4e763f6420759e4ea35128c179db19211d1b7a893d9a01ad81dd7bbe07408",
+    "native/tensor_material.inc": "29efac35b99054e2523912059fcab24535ab6e2f3b807c1989082ae652a36cf2",
+    "native/tensor_physics.cpp": "f71d25e5d0c0be9597d70bfb8fcf0c317b84d2acf1d710ee4eb339c9e836b8c9",
+    "simulation/__init__.py": "059dfc67be25f054e6fa7f458a025cd0a926a97d81277eb1a3ddbac607fd0cc1",
+    "simulation/_native.cp312-win_amd64.pyd": "20855f4e024784087298dab9ddd89d02b07ecc381f79dc330066b4f61de6aa5e",
+    "simulation/_tensor_native.cp312-win_amd64.pyd": "78be6d15f27b613c053029aa011293f55665f0b957c80bd90559dbfd183ff3bc",
+    "simulation/actuator.py": "30bc2c17437a191b0b66cca64b91331c64e434a677c193eda2a0bc49216ea997",
+    "simulation/batched_rollout.py": "cf5c023e7d63e7c5b22ee7af0307170a79a1f616e5204092b9ddae3442c13645",
+    "simulation/configuration.py": "63c98284716aeade70378d6615a01e96cd0256172158188a826f1af15dd2fb96",
+    "simulation/controller_interface.py": "869242bf6af36427d49adcc11a86d6995502045e560f9f905a280c788e92b877",
+    "simulation/model.py": "2baf0d8d910e5c36c4d3d95d252dbe4cda715ffcb09345118b1332f60d4c8b8d",
+    "simulation/model_configuration.py": "ad0768d2dc6d9ffecf5b489cd3e4b48d1ebe0a887464d584bf690b636b70eb22",
+    "simulation/native_runtime.py": "49a2d50682db7bc5a55ec85a8a1bace05c0f8a3ddc92f66936acec5d6e160d77",
+    "simulation/prescribed_cable.py": "7001c28d20fa3159b93b64cac7bc9947c0efaa4ddeacf85707e1653498e73d9b",
+    "simulation/rollout.py": "0e2ed777078eb917268931b4b2e6fcbfc82697f2ad265d758dd4b4d5db08a041",
+    "simulation/runtime.py": "80e46de5ab23725a3433100c13f8d8dd4266bdaeb7f99775234b1bc30c211cc3",
+    "simulation/state.py": "63400b86800cb413636afdc2531d2a568b910994cad032cb1e69234594cc904e",
+    "simulation/tensor_model.py": "b161eba1b1f33360f2c611cd8d201daf4397593ee39b0fe993e7c5e4e1552d0f",
+    "simulation/timing.py": "ee91e0c2c02534edc6edad0781be754e30d7ae37423bdd166deab9fea78f2229",
+    "tasks/__init__.py": "e92450696a287bcbafe7be3669b2badd81f062980e43446fcd92bcef322ece69",
+    "tasks/whip/__init__.py": "4862ced6cae31d4d1ff371ddd2710f8a78976e063c81534f8b4034920356f518",
+    "tasks/whip/analysis/__init__.py": "6f0708f063dbc5f90aa1074d4f32d2635858ce16030dd2a15c4001633c793f46",
+    "tasks/whip/analysis/bend_tracking.py": "1d10fc6682eef5a3b011ace56bba2e41d8069f5d7df13a026ea34c9b84bba269",
+    "tasks/whip/analysis/propagation.py": "4c440096d60e025f79ca4bc8066d136b4794d6e9938db85b190438824e3299e4",
+    "tasks/whip/analysis/synthetic_cases.py": "0f23438bdcfe4ea7a7a3768add90d5254bfc147d11c0352c4d8583e3bbb8b0d1",
+    "tasks/whip/configuration.py": "6eda418c6a179c5d51750250bb0e6a252115bb864933ef8bc651451506bc245b",
+    "tasks/whip/deterministic_evaluation.py": "e3dbf5097ef3c8dd4179d30eef852cf0041f1bd36199c9608e6b983b2c412e33",
+    "tasks/whip/learned_recovery.py": "20180ac05df1895190e55c6135fe302c2e197638cc25cd871d45218a4da7f3a2",
+    "tasks/whip/sac_environment.py": "c1273f66ca17b9099845ec76faaef7fc234b3df712c533ae2cb3c3ca0c8217c1",
+    "tasks/whip/stage1.py": "de377bfa62e8e1afa0d9a9191c689f6891ff23c588e22b631a04b06dc11ed1a3",
+    "tasks/whip/stage1_configuration.py": "b484c0e3cffb0a1ee1189120b0a6e2a3efd4850ee1984b367ba51becbe34f302",
+    "tasks/whip/strike.py": "571c64c8763d37425379a7409d72726f13d6b6ec59bfe2b82f03b7a0d8b5f40e",
+    "tasks/whip/workspace.py": "074556513a939c2e96e0d770cbc0a4e9230875685c1b0fd122cb3526b8721d78",
+    "training/__init__.py": "59e33bcdca21912b1da2e268a6db2b2b55a21a1972d26a65e6ebdff2253bbbc9",
+    "training/artifacts.py": "a65292fe99fbcfdbdc4061989b1a6d9d336222b29506d8b99c30daf3ab1ba548",
+    "training/configuration.py": "afe2c40b9f3fbb4f07381c6292b485ca9a6c8ac1df4f46f27708db1aa184c5ea",
+    "training/curriculum.py": "c8b37d0d2509a3394602511a8f58b0ce60e018176100b3c402e14e1e068ea75b",
+    "training/plateau.py": "c8511d3c2bf4cbc392f56bc7a6b06e9417a4b5a6aae464febceba5f187ade708",
+    "training/ppo.py": "50cb31b6beee63d97e51fff218308f5384e8460318c6a28500efe19fc329a0ab",
+    "training/sac.py": "e0dc4fc7e768a0ee56ef3de1bc4a33e6c9bf0ddef24f1f58b502dbc43715d009",
+    "training/ui/__init__.py": "fa1ee964a74cd2eaf8889866fc06065f675e2d6e22d154b57dd90919724a7c91",
+    "training/ui/plots.py": "a05cc2d43b8c33e41f9e089880d9464ca4c59332a677b447bad67c9812585d8f",
+    "training/ui/preview.py": "fdad21e4e9e2f97a82b28771c37e0a16b056ed89f437fea08297d917f80ef8d6",
+    "training/ui/replay_window.py": "7bfd742e83fa8175a1331304ded92ad78305d75731fd405f3b4b78357449841a",
+    "training/ui/window.py": "b0483322f3dfaf6e0d733c955e757ba0ab7119443a47eaec147d65e73348e454",
+    "training/worker.py": "e333a2ae63efd8ac2523242247b119c2db0b2b1186de32d6f19ed519ff3f17f3"
+  },
+  "policy_initialization": {
+    "source_checkpoint": "C:\\Users\\wts28\\Documents\\PHD\\AeroWhip_deploy\\runs\\ppo_stage3\\20261007-001712-887951\\latest.pt",
+    "source_sha256": "804aa1ed48bfef2d227571f68d8086f7b4b5ea9f6734a59e9b53012f36bc1e82",
+    "source_identity": "4f695915cbb395436284506e5902ab8028ca5d39d912906c26d514704cd2fa4e",
+    "source_round": 120,
+    "source_episodes": 15360,
+    "source_steps": 691200,
+    "transfer": "actor_only_v1",
+    "value_and_optimizers": "fresh",
+    "exploration_clock": "stage-local transitions; source offset intentionally reset"
+  },
+  "identity": "b442784795e0cea5de085fdeba56c3300a95581e2da83141978ca8c45d5064e2"
+}

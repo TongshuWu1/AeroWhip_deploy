@@ -2,10 +2,12 @@
 
 World position refers to the top-of-drone tracking origin, not the COM.
 Acceleration is kinematic feedforward (gravity is added by the inner controller).
-Yaw is in radians; omega is body-frame rad/s and must currently be zero.
+Yaw is in radians; omega is rad/s in the nominal desired body frame. The fitted
+controller requires zero rates; the optional geometric controller consumes them.
 """
 
 import numpy as np
+from project_paths import project_path
 from simulation.timing import TIME_EPS, validate_command_times
 
 
@@ -16,7 +18,7 @@ COLUMNS = ('time_s', 'x', 'y', 'z', 'vx', 'vy', 'vz', 'ax', 'ay', 'az',
 class FullStateTrajectory:
     timestep_s = 1/30
 
-    def __init__(self, samples):
+    def __init__(self, samples, *, jerk_world=None):
         values = np.array(samples, dtype=np.float64, copy=True)
         if values.ndim != 2 or values.shape[1] != len(COLUMNS) or len(values) < 2:
             raise ValueError('Expected at least two rows of time, P/V/A, yaw and body angular velocity')
@@ -27,19 +29,30 @@ class FullStateTrajectory:
         intervals = np.diff(self.time_s)
         self.timestep_s = (float(intervals[0]) if
             np.allclose(intervals, intervals[0], rtol=0, atol=TIME_EPS) else None)
-        if np.any(values[:, 11:] != 0):
-            raise ValueError('Nonzero body angular-rate feedforward is not supported by the fitted controller')
+        self.has_body_rates = bool(np.any(values[:, 11:] != 0))
+        self.jerk_world = None
+        if jerk_world is not None:
+            jerk = np.array(jerk_world, dtype=np.float64, copy=True)
+            if jerk.shape != (len(values),3) or not np.isfinite(jerk).all() or self.has_body_rates:
+                raise ValueError('Analytic jerk requires finite XYZ rows and no explicit body rates')
+            if np.any(np.abs(jerk[-1]) > 1e-10) or np.any(values[:,10] != values[0,10]):
+                raise ValueError('Analytic jerk references require fixed yaw and zero final jerk for hold')
+            jerk.flags.writeable = False
+            self.jerk_world = jerk
         if np.any(np.abs(values[-1, 4:10]) > 1e-10):
             raise ValueError('End the trajectory at rest: final velocity and acceleration must be zero')
-        # Existing plant command: P(3), V(3), A(3), yaw, yaw-rate (zero).
-        self._commands = np.column_stack((values[:, 1:11], np.zeros(len(values))))
+        if np.any(values[-1,11:] != 0):
+            raise ValueError('End the trajectory at rest: final body rates must be zero')
+        # Preserve legacy packet identity when rates are zero; no change to fits.
+        self._commands = (values[:,1:14].copy() if self.has_body_rates else
+                          np.column_stack((values[:, 1:11], np.zeros(len(values)))))
         self._commands[-1, 3:9] = 0.0
         self._commands.flags.writeable = False
 
     @classmethod
     def load(cls, path):
         """CSV units: metres, seconds, radians; omega is body-frame rad/s."""
-        rows = np.atleast_1d(np.genfromtxt(path, delimiter=',', names=True, encoding='utf-8-sig'))
+        rows = np.atleast_1d(np.genfromtxt(project_path(path), delimiter=',', names=True, encoding='utf-8-sig'))
         legacy = ('time_s', 'px_m', 'py_m', 'pz_m', 'vx_m_s', 'vy_m_s', 'vz_m_s',
                   'ax_m_s2', 'ay_m_s2', 'az_m_s2', 'yaw_rad', 'yaw_rate_rad_s')
         if rows.dtype.names == legacy:
@@ -58,12 +71,17 @@ class FullStateTrajectory:
         # Hold the final position/yaw indefinitely; pause/reset need no cursor state.
         return self._commands[min(step_index, len(self._commands)-1)].copy()
 
-    def save(self, path):
+    def save(self, path, *, transform=None):
         """Preserve source timestamps; never resample commands during export."""
         rows = np.zeros((self.sample_count, len(COLUMNS)))
         rows[:, 0] = self.time_s
         rows[:, 1:11] = self._commands[:, :10]
-        np.savetxt(path, rows, delimiter=',', header=','.join(COLUMNS), comments='', fmt='%.17g')
+        for i, command in enumerate(self._commands):
+            if transform is not None:
+                command = transform(command, None if self.jerk_world is None else self.jerk_world[i])
+            if len(command) == 13:
+                rows[i,11:14] = command[10:13]
+        np.savetxt(project_path(path), rows, delimiter=',', header=','.join(COLUMNS), comments='', fmt='%.17g')
 
     @property
     def sample_count(self):
@@ -90,6 +108,17 @@ class FullStateTrajectory:
         first = np.searchsorted(self.time_s, start_s-TIME_EPS, side='left')
         last = np.searchsorted(self.time_s, end_s-TIME_EPS, side='left')
         return tuple((float(self.time_s[i]), self.command(i)) for i in range(first, last))
+
+    def reference_events(self, start_s, end_s, transform):
+        """Pure reference preparation; neither future state nor plant force is used."""
+        first = np.searchsorted(self.time_s, start_s-TIME_EPS, side='left')
+        last = np.searchsorted(self.time_s, end_s-TIME_EPS, side='left')
+        return tuple((float(self.time_s[i]), transform(self.command(i),
+            None if self.jerk_world is None else self.jerk_world[i])) for i in range(first,last))
+
+    def validate_controller(self):
+        if self._commands.shape[1] not in (11,13) or not np.isfinite(self._commands).all():
+            raise ValueError('Expected finite full-state references')
 
     def preview(self, component):
         offset = {'Position': 0, 'Velocity': 3, 'Acceleration': 6}[component]
@@ -123,4 +152,7 @@ class FullStateTrajectory:
         rows[:, 4] = .25*velocity
         rows[:, 7] = .25*acceleration
         rows[:, 10] = yaw
-        return cls(rows)
+        jerk = np.zeros((len(t),3))
+        active = (t>=1.) & (t<3.)
+        jerk[active,0] = .25*(60-360*s[active]+360*s[active]**2)/8.
+        return cls(rows, jerk_world=jerk)

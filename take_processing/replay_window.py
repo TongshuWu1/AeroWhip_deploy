@@ -13,6 +13,7 @@ from simulation.state import DroneState, quaternion_xyzw_to_rotation_matrix
 from viewer.drone_model import add_drone_model
 from viewer.environment import add_environment, configure_lighting
 from take_processing.take_data import discover, load_take
+from project_paths import project_path
 
 ROOT = Path(__file__).resolve().parents[1]
 COLORS = {"Desired": "#2563eb", "Command": "#e88724", "Measured": "#15803d", "Predicted": "#ad70dc"}
@@ -125,7 +126,7 @@ class ReplayWindow(QMainWindow):
             self.timeline.setEnabled(False)
 
     def populate(self, folder):
-        self.folder = Path(folder).resolve()
+        self.folder = project_path(folder)
         self.takes.blockSignals(True)
         self.takes.clear()
         for path in discover(self.folder):
@@ -266,7 +267,11 @@ class ReplayWindow(QMainWindow):
             self.plotter.remove_actor(actor, render=False)
         self.prediction = prediction
         self.checks['Predicted'].setEnabled(prediction is not None)
-        self.checks['Predicted'].setToolTip('Saved coupled-model baseline; shown only over its simulated interval')
+        prescribed = prediction is not None and prediction.metadata.get('mode') == 'prescribed_cable'
+        self.checks['Predicted'].setText('Predicted cable' if prescribed else 'Predicted')
+        self.checks['Predicted'].setToolTip(
+            'Saved cable prediction driven by measured attachment motion; drone pose is prescribed, not predicted'
+            if prescribed else 'Saved coupled-model baseline; shown only over its simulated interval')
         if prediction is not None:
             color=COLORS['Predicted']
             path=self.plotter.add_mesh(segments(prediction.position,prediction.time),color=color,line_width=3,render=False)
@@ -328,6 +333,10 @@ class ReplayWindow(QMainWindow):
             visible=0<=j<len(b.time) and b.time[0]-1e-9<=now<=b.time[-1]+1e-9
             for actor in self.layers['Predicted'][1:]:
                 actor.SetVisibility(bool(visible and self.checks['Predicted'].isChecked()))
+            if b.metadata.get('mode') == 'prescribed_cable':
+                # The measured drone is the input, not a second prediction.
+                self.layers['Predicted'][0].SetVisibility(False)
+                self.predicted_body.SetVisibility(False)
             if visible:
                 transform=np.eye(4);transform[:3,:3]=b.rotation[j];transform[:3,3]=b.position[j]
                 self.predicted_body.user_matrix=transform

@@ -1,1 +1,1 @@
-"""Optional training presentation; no simulation or learner implementation."""
+"""Visible SAC training and saved-rollout inspection."""

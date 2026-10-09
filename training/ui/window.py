@@ -1,694 +1,737 @@
-"""User-owned training process and saved-run inspection, separate from simulation."""
-
-import hashlib
+"""Visible PPO/SAC orchestration; manual and automatic start share one handler."""
 from copy import deepcopy
-import json
 from pathlib import Path
 import sys
-from time import perf_counter
+from PySide6 import QtCore, QtWidgets
 
-from PySide6 import QtCore, QtGui, QtWidgets
+from project_paths import ROOT, project_path
+from training.configuration import DEFAULT, FROZEN_PRESETS, load, task_configuration, evaluation_settings, algorithm, training_stage
+from training.artifacts import RUNS, PPO_RUNS, PPO_STAGE2_RUNS, PPO_STAGE3_RUNS, PPO_STAGE4_RUNS, create_run, read_json, save_json, events
+from training.ui.plots import MetricPlot
+from training.ui.preview import EvaluationPreview
 
-from .plots import MetricPlot
-from .records import RunHistory, load_history, run_display_name
 
+class SettingsDialog(QtWidgets.QDialog):
+    def __init__(self, settings, task, parent=None, *, read_only=False):
+        super().__init__(parent)
+        self.setWindowTitle('Configure training experiment'); self.resize(820,780)
+        self.settings,self.task = deepcopy(settings),deepcopy(task)
+        self.fields = []; self.controls = {}
+        layout = QtWidgets.QVBoxLayout(self)
+        note = QtWidgets.QLabel('Read-only saved configuration. Active runs and exact resumes cannot be retuned.' if read_only else
+            'Changes apply to the next experiment only. Active runs are frozen. Resume keeps the saved configuration; changing reward or task creates a new experiment.')
+        note.setWordWrap(True); layout.addWidget(note)
+        tabs = QtWidgets.QTabWidget(); layout.addWidget(tabs)
+        used=set()
+        def subset(keys):
+            used.update(keys)
+            return {k:self.settings[k] for k in keys if k in self.settings}
+        groups = [
+            ('Run & compute',subset(('device','seed','parallel_environments','evaluation_environments','training_episodes','evaluation_interval_episodes','policy_rate_hz','velocity_limit_mps','plateau_detection'))),
+            ('Learner & exploration',subset(('learning_rate','batch_size','hidden_units','initial_log_std','discount','ppo','exploration','initial_temperature','target_entropy','target_update_tau','replay_episodes','gradient_updates_per_round','minimum_replay_transitions'))),
+            ('Reward & boundary',dict(learning=subset(('reward_scale','workspace_penalty')),return_costs=self.task['return'],matching=self.task['matching'])),
+            ('Target & episode',dict(episode=self.task['episode'],workspace=self.task['workspace'],strike_surface=self.task['strike_surface'],request=self.task['request'],**subset(('target_curriculum',)))),
+            ('Advanced / diagnostics',dict(sources={k:v for k,v in self.settings.items() if k not in used},mechanics=self.task['mechanics']))]
+        # Subset dictionaries share nested values; scalar edits are written back
+        # through their owner, not left in the temporary presentation grouping.
+        learning_owners={id(values):(self.settings) for _,values in groups[:2]}
+        learning_owners[id(groups[2][1]['learning'])]=self.settings
+        learning_owners[id(groups[4][1]['sources'])]=self.settings
+        learning_owners[id(groups[3][1])]=self.task
+        for name,values in groups:
+            scroll = QtWidgets.QScrollArea(); scroll.setWidgetResizable(True)
+            contents = QtWidgets.QWidget(); form = QtWidgets.QFormLayout(contents)
+            form.setRowWrapPolicy(QtWidgets.QFormLayout.RowWrapPolicy.WrapLongRows)
+            scroll.setWidget(contents); tabs.addTab(scroll,name)
+            def add(mapping,form,prefix=''):
+                for key,value in mapping.items():
+                    path=prefix+key
+                    owner=learning_owners.get(id(mapping),mapping)
+                    if key=='target_curriculum': owner=self.settings
+                    label = {
+                        'training_episodes': 'Training episodes',
+                        'parallel_environments': 'Collection environments',
+                        'evaluation_environments': 'Evaluation actor lanes (one physical case)',
+                        'gradient_updates_per_round': 'Gradient updates per full collection',
+                        'evaluation_interval_episodes': 'Evaluation interval (episodes)',
+                        'batch_size': 'Optimizer minibatch size',
+                        'initial_weight': 'Initial entropy bonus weight',
+                        'final_weight': 'Final entropy bonus weight',
+                        'target_entropy': 'Final target entropy (nats)',
+                        'initial_target_entropy': 'Initial target entropy (nats)',
+                        'hold_transitions': 'Initial exploration hold (training steps)',
+                        'anneal_end_transitions': 'Exploration decay ends (training steps)',
+                        'hold_fraction': 'Entropy hold (fraction of episode budget)',
+                        'anneal_end_fraction': 'Entropy decay ends (fraction of episode budget)',
+                        'learning_rate': 'Learning rate', 'batch_size': 'Minibatch transitions',
+                        'policy_rate_hz': 'Action frequency [Hz]', 'velocity_limit_mps': 'Velocity limits X / Y / Z [m/s]',
+                        'reward_scale': 'Reward multiplier', 'radius_m': 'Horizontal radius [m]',
+                        'height_lower_world_m': 'Minimum drone height [m]', 'height_upper_world_m': 'Maximum drone height [m]',
+                        'duration_s': 'Maneuver duration [s]', 'settling_s': 'Maximum settling interval [s]',
+                        'distance_m': 'Wall distance [m]', 'width_m': 'Target full width [m]', 'height_m': 'Target full height [m]',
+                        'center_sigma_m': 'Center accuracy scale [m]', 'center_weight': 'Center accuracy weight',
+                        'target_kl': 'Maximum cohort-mean policy KL', 'time_preference': 'Earlier-strike preference',
+                        'request': 'Heading [rad] / reserved / target height [m] / forward speed [m/s]',
+                    }.get(key, key.replace('_',' ').capitalize())
+                    help_text = {
+                        'parallel_environments':'Episodes simulated together in each collection. More lanes require more memory; speed is not guaranteed to improve.',
+                        'evaluation_environments':'Actor batch layout only. Deterministic evaluation runs one native physical lane from a fixed initial condition, not independent trials.',
+                        'training_episodes':'Total episode budget including earlier completed episodes when resuming; not an iteration count.',
+                        'evaluation_interval_episodes':'Evaluation happens when this cumulative episode boundary is crossed, plus first and final collections.',
+                        'reward_scale':'Multiplies task returns for optimization. It does not change strike qualification or physical units.',
+                        'workspace_penalty':'Outside-only soft cost. Zero inside/on the workspace; no action filter or enforced confinement.',
+                        'time_preference':'Legacy: earlier-event factor. Simple hit modes: total elapsed-time cost over a full episode, not a movement charge.',
+                        'reward_mode':'Frozen reward version. Changing it creates a new experiment; old checkpoints retain their original objective.',
+                        'center_weight':'Accuracy shaping weight. Reward changes define a new experiment, not an exact continuation.',
+                        'target_kl':'With the enabled post-update safeguard, trial actor updates are checked against cohort-mean KL; not a pointwise action guarantee.',
+                        'initial_weight':'PPO entropy bonus coefficient, not a guaranteed achieved entropy.',
+                        'hold_transitions':'Exploration hold measured in collected transitions, not episodes or wall-clock seconds.',
+                        'anneal_end_transitions':'Transition count where linear exploration decay reaches its final value.',
+                        'hold_fraction':'0.1 means hold initial entropy for the first 10% of completed training episodes. Evaluation and discarded collections do not count.',
+                        'anneal_end_fraction':'0.8 means reach final entropy at 80% of the original episode budget; checkpoint resume preserves that budget, even if extended.',
+                        'plateau_detection':'Stage-aware ALL-lane rolling-window heuristic, not proof of convergence. Warn or safely stop at a completed collection boundary. Never before40 collections; hard episode budget remains the cap.',
+                        'minimum_collections':'Minimum completed training collections before plateau stopping. Cannot be less than40; failures/user stops remain possible earlier.',
+                        'mechanics':'Research diagnostic definitions; changing them changes the interpretation of a whip, not merely the display.',
+                        'termination':'Geometric quality mode stops at the first geometric forward target hit; retained strict tasks stop at the first qualified hit. No unexecuted suffix is learned.',
+                    }.get(key,'Stored configuration key: '+path)
+                    if isinstance(value,dict):
+                        box = QtWidgets.QGroupBox(label); inner=QtWidgets.QFormLayout(box)
+                        box.setToolTip(help_text)
+                        form.addRow(box); add(value,inner,path+'.'); continue
+                    if value is None:
+                        form.addRow(label,QtWidgets.QLabel('Pending identification / approval'))
+                        continue
+                    if isinstance(value,list):
+                        row = QtWidgets.QWidget(); items=QtWidgets.QHBoxLayout(row); items.setContentsMargins(0,0,0,0)
+                        controls=[]
+                        for number in value:
+                            control=QtWidgets.QDoubleSpinBox(); control.setDecimals(9); control.setRange(-1e6,1e6); control.setValue(number)
+                            items.addWidget(control); controls.append(control)
+                        row.setToolTip(help_text); self.controls[path]=controls
+                        form.addRow(label,row); self.fields.append((owner,key,lambda controls=controls:[c.value() for c in controls]))
+                        continue
+                    elif key=='target_observation':
+                        control=QtWidgets.QLabel('Target position relative to initial drone position (world axes)')
+                    elif key=='stage3_actor_training':
+                        control=QtWidgets.QLabel('Retired combined adaptation (historical checkpoint metadata; training blocked)')
+                    elif key=='target_sampler':
+                        control=QtWidgets.QLabel('Retired target-grid sampler (historical checkpoint metadata; training blocked)')
+                    elif key=='training_stage':
+                        control=QtWidgets.QLabel(f'Stage {value} (select stage in the main window)')
+                    elif isinstance(value,bool):
+                        control=QtWidgets.QCheckBox(); control.setChecked(value)
+                        form.addRow(label,control); self.fields.append((owner,key,control.isChecked))
+                    elif type(value) is int:
+                        # Signed task values (e.g. failure_return=-1) must round
+                        # trip unchanged. The configuration validator sets semantics.
+                        control=QtWidgets.QSpinBox(); control.setRange(-10000000,10000000); control.setValue(value)
+                        form.addRow(label,control); self.fields.append((owner,key,control.value))
+                    elif isinstance(value,float):
+                        control=QtWidgets.QDoubleSpinBox(); control.setDecimals(9); control.setRange(-1e9,1e9); control.setValue(value)
+                        form.addRow(label,control); self.fields.append((owner,key,control.value))
+                    elif key=='device':
+                        control=QtWidgets.QComboBox(); control.addItems(['cuda','cpu']); control.setCurrentText(value)
+                        form.addRow(label,control); self.fields.append((owner,key,control.currentText))
+                    else:
+                        control=QtWidgets.QLineEdit(str(value))
+                        if key in ('task','model','scene','speed_mode','action_interface','algorithm','termination','status'): control.setReadOnly(True)
+                        form.addRow(label,control); self.fields.append((owner,key,control.text))
+                    if key in ('training_stage','target_observation','stage3_actor_training','target_sampler'): form.addRow(label,control)
+                    control.setToolTip(help_text); self.controls[path]=control
+            add(values,form)
+        if read_only:
+            for control in self.controls.values():
+                for widget in (control if isinstance(control,list) else [control]):
+                    if hasattr(widget,'setReadOnly'): widget.setReadOnly(True)
+                    else: widget.setEnabled(False)
+        buttons=QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Close if read_only else
+            QtWidgets.QDialogButtonBox.StandardButton.Ok|QtWidgets.QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept); buttons.rejected.connect(self.reject); layout.addWidget(buttons)
 
-def duration(seconds):
-    if seconds is None:
-        return '—'
-    seconds = max(0, int(seconds))
-    return f'{seconds//3600:02d}:{seconds//60%60:02d}:{seconds%60:02d}'
+    def accept(self):
+        try:
+            for mapping,key,getter in self.fields: mapping[key]=getter()
+            settings,snapshot,_,scene=load(self.settings)
+            task_configuration(self.task,settings,snapshot['model'],scene)
+        except Exception as exc:
+            QtWidgets.QMessageBox.warning(self,'Invalid settings',str(exc)); return
+        super().accept()
 
 
 class TrainingWindow(QtWidgets.QMainWindow):
-    def __init__(self, root, configuration, configuration_loader, *, worker_module='tasks.whip.worker', runs_directory=None,
-                 resume_inspector=None, resume_checkpoint=None, total_updates=None, additional_runs_directories=()):
+    def __init__(self, settings_path=DEFAULT):
         super().__init__()
-        self.root, self.configuration_loader = Path(root), configuration_loader
-        self.worker_module = worker_module
-        self.resume_inspector = resume_inspector
-        self.resume_info = None
-        self.runs_directory = Path(runs_directory) if runs_directory is not None else self.root/'runs'
-        self.run_directories = (self.runs_directory, *(Path(p) for p in additional_runs_directories))
-        self.process = None
-        self.preview = None
-        self.preview_hash = None
-        self._budget_configuration = None
-        self._initial_budget_override = total_updates is not None
-        self.history = RunHistory()
-        self._started = None
-        self._elapsed = None
-        self._stop_requested = False
-        self._close_when_finished = False
-        self._terminal = None
-        self._stdout = b''
-        self._active_seed = None
-        self.setWindowTitle('Training')
-        self.resize(1180, 850)
-        self.setMinimumSize(960, 740)
-        central = QtWidgets.QWidget()
-        self.setCentralWidget(central)
-        layout = QtWidgets.QVBoxLayout(central)
-        layout.setContentsMargins(18, 16, 18, 16)
-        layout.setSpacing(12)
-        heading = QtWidgets.QHBoxLayout()
-        title = QtWidgets.QLabel('Training')
-        font = title.font(); font.setPointSize(20); font.setBold(True); title.setFont(font)
-        heading.addWidget(title)
-        self.status = QtWidgets.QLabel('Ready')
-        heading.addWidget(self.status, 1)
-        self.start_button = QtWidgets.QPushButton('Start')
-        self.start_button.setMinimumWidth(100)
-        self.start_button.setToolTip('Start the selected new or resumed experiment in a separate saved run.')
-        self.start_button.clicked.connect(self.start)
-        self.stop_button = QtWidgets.QPushButton('Stop')
-        self.stop_button.setMinimumWidth(100)
-        self.stop_button.setEnabled(False)
-        self.stop_button.setToolTip('Finish the current update and save a checkpoint before exiting.')
-        self.stop_button.clicked.connect(self.request_stop)
-        heading.addWidget(self.start_button); heading.addWidget(self.stop_button)
-        layout.addLayout(heading)
-
-        setup = QtWidgets.QGroupBox('Experiment setup')
-        form = QtWidgets.QVBoxLayout(setup)
-        row = QtWidgets.QHBoxLayout()
-        self.config_combo = QtWidgets.QComboBox()
-        self.config_combo.setMinimumWidth(300)
-        for path in sorted((self.root/'configs/experiments').glob('*.toml')):
-            self.add_path(self.config_combo, path)
-        self.config_combo.setCurrentIndex(self.add_path(self.config_combo, configuration))
-        self.config_combo.currentIndexChanged.connect(self.preview_configuration)
-        self.config_browse = QtWidgets.QPushButton('Browse…')
-        self.config_browse.clicked.connect(self.browse_configuration)
-        row.addWidget(self.config_combo, 1); row.addWidget(self.config_browse)
-        form.addLayout(row)
-        controls = QtWidgets.QHBoxLayout()
-        self.run_mode = QtWidgets.QComboBox()
-        self.run_mode.addItems(['New', 'Resume'])
-        self.run_mode.setCurrentIndex(1 if resume_checkpoint is not None else 0)
-        controls.addWidget(self.run_mode)
-        self.resume_path = QtWidgets.QLineEdit(str(resume_checkpoint) if resume_checkpoint is not None else '')
-        self.resume_path.setReadOnly(True)
-        self.resume_path.setPlaceholderText('Checkpoint')
-        controls.addWidget(self.resume_path, 1)
-        self.resume_browse = QtWidgets.QPushButton('Browse…')
-        self.resume_browse.clicked.connect(self.browse_checkpoint)
-        controls.addWidget(self.resume_browse)
-        controls.addWidget(QtWidgets.QLabel('Total updates'))
-        self.total_updates = QtWidgets.QSpinBox()
-        self.total_updates.setRange(1, 2**31-1)
-        if total_updates is None:
-            try:
-                total_updates = configuration_loader(configuration)[0]['experiment']['updates']
-            except (OSError, ValueError, TypeError, KeyError):
-                total_updates = 1
-        self.total_updates.setValue(total_updates)
-        self.total_updates.setToolTip('Final cumulative update number, including completed updates when resuming.')
-        controls.addWidget(self.total_updates)
-        form.addLayout(controls)
-        self.resume_details = QtWidgets.QLabel()
-        self.resume_details.setTextFormat(QtCore.Qt.TextFormat.PlainText)
-        form.addWidget(self.resume_details)
-        self.run_mode.currentIndexChanged.connect(self.preview_configuration)
-        self.total_updates.valueChanged.connect(self.preview_configuration)
-        self.config_details = QtWidgets.QLabel()
-        self.config_details.setWordWrap(True)
-        self.config_details.setTextFormat(QtCore.Qt.TextFormat.PlainText)
-        form.addWidget(self.config_details)
+        self.setWindowTitle('Training'); self.resize(1320,960)
+        self.settings,self.snapshot,_,_ = load(settings_path)
+        self.task = self.snapshot['task']
+        self.config_path=project_path(settings_path); self.current_run=None; self.process=None; self.resume_path=None
+        self.initialize_actor_path=None
+        self.replays=[]; self.close_pending=False; self.last_event_count=-1
+        central=QtWidgets.QWidget(objectName='trainingPage'); self.setCentralWidget(central)
+        self.setStyleSheet('''
+            QWidget#trainingPage { background: #edf2f6; }
+            QLabel, QGroupBox, QCheckBox { color: #213547; }
+            QGroupBox { border: 1px solid #dce5ec; border-radius: 8px; margin-top: 8px; padding-top: 16px; }
+            QPushButton, QToolButton, QComboBox, QSpinBox { background: white; color: #213547; border: 1px solid #ccd8e2; border-radius: 4px; padding: 6px; }
+            QPushButton:disabled { color: #96a3ad; }
+            QPushButton:hover, QToolButton:hover { background: #e1f2f0; }
+            QComboBox QAbstractItemView, QPlainTextEdit, QTableWidget { background: white; color: #213547; }
+            QTabBar::tab { background: #dce5ec; color: #213547; padding: 9px; }
+            QTabBar::tab:selected { background: white; color: #087d79; }
+            QTabWidget::pane { border: 1px solid #dce5ec; background: #edf2f6; }
+            QProgressBar { border: 1px solid #ccd8e2; border-radius: 4px; color: #213547; background: white; text-align: center; }
+            QProgressBar::chunk { background: #8bd5ca; }
+        ''')
+        layout=QtWidgets.QVBoxLayout(central); layout.setContentsMargins(20,16,20,16); layout.setSpacing(12)
+        top=QtWidgets.QHBoxLayout()
+        title=QtWidgets.QLabel('AeroWhip · Training'); title.setStyleSheet('font-size:24px;font-weight:600')
+        top.addWidget(title); top.addStretch()
+        self.status=QtWidgets.QLabel('Ready'); top.addWidget(self.status)
+        self.status.setStyleSheet('font-weight: 600; padding: 6px 12px; border: 1px solid palette(mid); border-radius: 6px;')
+        self.start_button=QtWidgets.QPushButton('Start'); self.start_button.clicked.connect(self.start)
+        self.stop_button=QtWidgets.QPushButton('Stop'); self.stop_button.clicked.connect(self.stop)
+        self.save_button=QtWidgets.QPushButton('Save'); self.save_button.clicked.connect(self.save_checkpoint)
+        self.review_button=QtWidgets.QPushButton('Approve motion'); self.review_button.clicked.connect(self.approve_motion)
+        self.review_button.setEnabled(False)
+        self.save_button.setToolTip('Request a complete checkpoint at the next training-iteration boundary.')
+        for b in (self.start_button,self.stop_button,self.save_button,self.review_button): b.setMinimumHeight(34); top.addWidget(b)
+        self.stop_button.setEnabled(False); self.save_button.setEnabled(False)
+        layout.addLayout(top)
+        self.setup_toggle=QtWidgets.QToolButton(); self.setup_toggle.setCheckable(True)
+        self.setup_toggle.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.setup_toggle.setArrowType(QtCore.Qt.ArrowType.RightArrow)
+        layout.addWidget(self.setup_toggle)
+        self.setup=setup=QtWidgets.QGroupBox(); grid=QtWidgets.QGridLayout(setup)
+        self.setup_toggle.toggled.connect(lambda expanded: (setup.setVisible(expanded),self.setup_toggle.setArrowType(QtCore.Qt.ArrowType.DownArrow if expanded else QtCore.Qt.ArrowType.RightArrow)))
+        setup.hide()
+        self.config_label=QtWidgets.QLabel(); self.config_label.setWordWrap(True); grid.addWidget(self.config_label,0,0,1,3)
+        details=QtWidgets.QPushButton('Experiment details…')
+        details.clicked.connect(lambda:self.show_text_details('Experiment definition',self.description_details))
+        grid.addWidget(details,0,3)
+        self.settings_button=QtWidgets.QPushButton('Configure experiment…'); self.settings_button.clicked.connect(self.edit_settings)
+        self.open_button=QtWidgets.QPushButton('Load configuration…'); self.open_button.clicked.connect(self.open_settings)
+        self.preset_button=QtWidgets.QPushButton('Export configuration…'); self.preset_button.clicked.connect(self.save_settings)
+        for i,b in enumerate((self.settings_button,self.open_button,self.preset_button)): grid.addWidget(b,1,i)
+        self.rounds=QtWidgets.QSpinBox(); self.rounds.setRange(1,10000000)
+        self.sync_budget_control(); grid.addWidget(self.rounds,1,3)
+        self.rounds.setToolTip('Total training budget, excluding evaluation. PPO updates use valid current-cohort transitions and may stop on KL; SAC allocates updates by episode count.')
+        self.mode=QtWidgets.QComboBox(); self.mode.addItems(['New training','Resume checkpoint','Fine-tune actor (fresh critic)']); self.mode.currentIndexChanged.connect(self.mode_changed)
+        self.checkpoint_label=QtWidgets.QLabel('New policy'); self.checkpoint_label.setWordWrap(True)
+        self.checkpoint_button=QtWidgets.QPushButton('Choose checkpoint'); self.checkpoint_button.clicked.connect(self.choose_checkpoint); self.checkpoint_button.setEnabled(False)
+        grid.addWidget(self.mode,2,0); grid.addWidget(self.checkpoint_label,2,1,1,2); grid.addWidget(self.checkpoint_button,2,3)
+        self.stage_presets = QtWidgets.QComboBox()
+        self.stage_presets.addItem('Select current training stage…', None)
+        for stage,label in ((1,'Stage 1 · cone25 whip'),(2,'Stage 2 · broad delivery'),(3,'Stage 3 · nominal precision ±5 cm'),(4,'Stage 4 · hybrid return/cable settling')):
+            self.stage_presets.addItem(label,stage)
+        self.stage_presets.setCurrentIndex(self.stage_presets.findData(training_stage(self.settings)))
+        self.stage_presets.currentIndexChanged.connect(self.select_stage_preset)
+        grid.addWidget(self.stage_presets,3,0,1,4)
         layout.addWidget(setup)
-
-        cards = QtWidgets.QHBoxLayout()
-        self.cards = {}
-        for label in ('Seed', 'Update', 'Episodes', 'Elapsed', 'Update time', 'Remaining (est.)'):
-            box = QtWidgets.QGroupBox(label)
-            box_layout = QtWidgets.QVBoxLayout(box)
-            value = QtWidgets.QLabel('—')
-            value_font = value.font(); value_font.setPointSize(13); value.setFont(value_font)
-            box_layout.addWidget(value)
-            cards.addWidget(box, 1)
-            self.cards[label] = value
-        self.cards['Remaining (est.)'].setToolTip('Estimated from completed update times; excludes extra policy evaluations and setup.')
-        self.cards['Episodes'].setToolTip('Sampled episodes; separate deterministic policy evaluations are not included.')
+        cards=QtWidgets.QHBoxLayout(); self.cards={}
+        for key,label in (('round','Collections'),('episodes','Episodes'),('steps','Environment steps'),('gradient_updates','Gradient updates'),('elapsed','Elapsed')):
+            box=QtWidgets.QGroupBox(label); inner=QtWidgets.QVBoxLayout(box)
+            value=QtWidgets.QLabel('—'); value.setStyleSheet('font-size:21px;font-weight:600'); inner.addWidget(value); cards.addWidget(box); self.cards[key]=value
         layout.addLayout(cards)
-        self.progress_bar = QtWidgets.QProgressBar()
-        self.progress_bar.setRange(0, 1); self.progress_bar.setValue(0)
-        self.progress_bar.setFormat('%v / %m updates')
-        layout.addWidget(self.progress_bar)
+        self.live_detail=QtWidgets.QLabel('No active worker. Start a new experiment or resume a checkpoint.')
+        self.live_detail.setWordWrap(True); layout.addWidget(self.live_detail)
+        self.budget_progress=QtWidgets.QProgressBar(); self.budget_progress.setRange(0,1000)
+        self.budget_progress.setMinimumHeight(22)
+        self.budget_progress.setFormat('No run selected'); layout.addWidget(self.budget_progress)
+        browser=QtWidgets.QHBoxLayout(); self.runs=QtWidgets.QComboBox(); self.runs.currentIndexChanged.connect(self.select_run)
+        self.runs.setMinimumWidth(360)
+        refresh=QtWidgets.QPushButton('Refresh runs'); refresh.clicked.connect(lambda:self.refresh_runs())
+        browser.addWidget(QtWidgets.QLabel('Dashboard / charts / saved results')); browser.addWidget(self.runs,1); browser.addWidget(refresh)
+        replay_browser=QtWidgets.QPushButton('Replay browser…'); replay_browser.clicked.connect(self.open_replay_browser)
+        browser.addWidget(replay_browser)
+        layout.addLayout(browser)
+        self.tabs=QtWidgets.QTabWidget(); layout.addWidget(self.tabs,1)
+        overview=QtWidgets.QWidget(); overview_layout=QtWidgets.QVBoxLayout(overview)
+        result_box=QtWidgets.QWidget(); result_layout=QtWidgets.QHBoxLayout(result_box)
+        result_layout.setContentsMargins(0,0,0,0)
+        self.latest_result=QtWidgets.QLabel('No saved evaluation yet.'); self.latest_result.setWordWrap(True)
+        self.latest_result.hide()  # Full diagnostics remain available through Details.
+        self.latest_summary=QtWidgets.QLabel('No saved evaluation yet.'); self.latest_summary.setWordWrap(True)
+        result_layout.addWidget(self.latest_summary,1)
+        result_details=QtWidgets.QPushButton('Evaluation details…')
+        result_details.clicked.connect(lambda:self.show_text_details('Latest saved evaluation',self.latest_result.text()))
+        result_layout.addWidget(result_details)
+        overview_layout.addWidget(result_box)
+        self.preview=EvaluationPreview(); overview_layout.addWidget(self.preview,1)
+        self.tabs.addTab(overview,'Overview · latest motion')
+        curves=QtWidgets.QWidget(); chartgrid=QtWidgets.QGridLayout(curves)
+        self.return_plot=MetricPlot('Episode return'); self.mechanics_plot=MetricPlot('Whipping event')
+        self.valid_plot=MetricPlot('Valid episodes',limits=(0,1)); self.loss_plot=MetricPlot('Learner losses')
+        for i,p in enumerate((self.return_plot,self.mechanics_plot,self.valid_plot,self.loss_plot)): chartgrid.addWidget(p,i//2,i%2)
+        self.tabs.addTab(curves,'Learning curves')
+        self.reward_plot=MetricPlot('Event reward components')
+        self.tabs.addTab(self.reward_plot,'Reward breakdown')
+        exploration=QtWidgets.QWidget(); exploration_layout=QtWidgets.QVBoxLayout(exploration)
+        self.entropy_plot=MetricPlot('Normalized-action entropy (nats)')
+        self.entropy_plot.setToolTip('Measured on an optimizer minibatch, not a success metric. Continuous-action entropy can be negative. A coefficient or scheduled target does not guarantee achieved entropy.')
+        self.temperature_plot=MetricPlot('Entropy weight')
+        exploration_layout.addWidget(self.entropy_plot); exploration_layout.addWidget(self.temperature_plot)
+        self.tabs.addTab(exploration,'Exploration')
+        results=QtWidgets.QWidget(); result_layout=QtWidgets.QVBoxLayout(results)
+        self.evaluations=QtWidgets.QTableWidget(0,7); self.evaluations.setHorizontalHeaderLabels(['Iteration','Return','Mechanics','Strike','Valid','Outside workspace (s)','Workspace cost'])
+        self.evaluations.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
+        self.evaluations.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.evaluations.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Stretch)
+        result_layout.addWidget(self.evaluations)
+        replayrow=QtWidgets.QHBoxLayout()
+        for label,slot in (('Replay selected',lambda:self.open_replay('selected')),('Replay latest',lambda:self.open_replay('latest')),('Replay best',lambda:self.open_replay('best'))):
+            button=QtWidgets.QPushButton(label); button.clicked.connect(slot); replayrow.addWidget(button)
+        result_layout.addLayout(replayrow); self.tabs.addTab(results,'Results')
+        self.log=QtWidgets.QPlainTextEdit(); self.log.setReadOnly(True); self.log.setMaximumBlockCount(6000); self.tabs.addTab(self.log,'Log')
+        self.timer=QtCore.QTimer(self); self.timer.timeout.connect(self.poll); self.timer.start(750)
+        self.update_description(); self.refresh_runs()
 
-        row = QtWidgets.QHBoxLayout()
-        row.addWidget(QtWidgets.QLabel('Run'))
-        self.run_combo = QtWidgets.QComboBox()
-        self.run_combo.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed)
-        self.run_combo.currentIndexChanged.connect(self.choose_run)
-        row.addWidget(self.run_combo, 1)
-        self.run_browse = QtWidgets.QPushButton('Browse…')
-        self.run_browse.clicked.connect(self.browse_run)
-        self.refresh_button = QtWidgets.QPushButton('Refresh')
-        self.refresh_button.clicked.connect(lambda: (self.refresh_runs(), self.choose_run()))
-        row.addWidget(self.run_browse); row.addWidget(self.refresh_button)
-        row.addWidget(QtWidgets.QLabel('Plot seed'))
-        self.seed_combo = QtWidgets.QComboBox()
-        self.seed_combo.setMinimumWidth(65)
-        self.seed_combo.currentIndexChanged.connect(self.refresh_plots)
-        row.addWidget(self.seed_combo)
-        layout.addLayout(row)
+    def error(self,exc): QtWidgets.QMessageBox.warning(self,'Training',str(exc))
 
-        self.tabs = QtWidgets.QTabWidget()
-        charts = QtWidgets.QWidget()
-        grid = QtWidgets.QGridLayout(charts)
-        grid.setContentsMargins(0, 8, 0, 0)
-        self.return_plot = MetricPlot('Episode return')
-        self.return_plot.setToolTip('Batch mean includes rejected episodes. Valid mean excludes them. Policy evaluation uses deterministic actions in a separate batch-one rollout.')
-        self.component_plot = MetricPlot('Event components', limits=(0., 1.))
-        self.component_plot.setToolTip('Component means over valid episodes with an eligible scored event. Not physical whip-success rates or additive return terms.')
-        self.validity_plot = MetricPlot('Episode validity', limits=(0., 1.))
-        self.validity_plot.setToolTip('Validity is command/numerical/envelope eligibility, not target success or a physical safety certificate.')
-        grid.addWidget(self.return_plot, 0, 0, 1, 2)
-        grid.addWidget(self.component_plot, 1, 0); grid.addWidget(self.validity_plot, 1, 1)
-        self.event_details = QtWidgets.QLabel()
-        self.event_details.setWordWrap(True)
-        self.event_details.hide()
-        grid.addWidget(self.event_details, 2, 0, 1, 2)
-        grid.setRowStretch(0, 1); grid.setRowStretch(1, 1)
-        self.tabs.addTab(charts, 'Learning curves')
+    def show_text_details(self,title,text):
+        dialog=QtWidgets.QDialog(self); dialog.setWindowTitle(title); dialog.resize(850,650)
+        layout=QtWidgets.QVBoxLayout(dialog)
+        contents=QtWidgets.QPlainTextEdit(); contents.setReadOnly(True); contents.setPlainText(text)
+        layout.addWidget(contents)
+        close=QtWidgets.QPushButton('Close'); close.clicked.connect(dialog.accept); layout.addWidget(close)
+        dialog.exec()
 
-        results = QtWidgets.QWidget()
-        results_layout = QtWidgets.QVBoxLayout(results)
-        self.run_details = QtWidgets.QLabel('No run selected')
-        self.run_details.setTextFormat(QtCore.Qt.TextFormat.PlainText)
-        self.run_details.setWordWrap(True)
-        self.run_details.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
-        results_layout.addWidget(self.run_details)
-        self.files = QtWidgets.QTreeWidget()
-        self.files.setHeaderLabels(['Seed', 'Update', 'Policy return', 'Checkpoint', 'Replay CSV'])
-        self.files.setRootIsDecorated(False)
-        self.files.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.SingleSelection)
-        self.files.header().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
-        self.files.header().setStretchLastSection(True)
-        self.files.itemSelectionChanged.connect(self.update_file_buttons)
-        results_layout.addWidget(self.files, 1)
-        buttons = QtWidgets.QHBoxLayout()
-        self.folder_button = QtWidgets.QPushButton('Open run folder')
-        self.folder_button.clicked.connect(self.open_folder)
-        self.checkpoint_button = QtWidgets.QPushButton('Copy checkpoint path')
-        self.checkpoint_button.clicked.connect(lambda: self.copy_path(3))
-        self.csv_button = QtWidgets.QPushButton('Copy CSV path')
-        self.csv_button.clicked.connect(lambda: self.copy_path(4))
-        for button in (self.folder_button, self.checkpoint_button, self.csv_button):
-            buttons.addWidget(button)
-        buttons.addStretch()
-        results_layout.addLayout(buttons)
-        self.tabs.addTab(results, 'Results')
-        self.log = QtWidgets.QPlainTextEdit()
-        self.log.setReadOnly(True); self.log.setMaximumBlockCount(1500)
-        self.tabs.addTab(self.log, 'Log')
-        layout.addWidget(self.tabs, 1)
-        self.message = QtWidgets.QLabel()
-        self.message.setTextFormat(QtCore.Qt.TextFormat.PlainText)
-        self.message.setWordWrap(True)
-        layout.addWidget(self.message)
-        self.timer = QtCore.QTimer(self)
-        self.timer.setInterval(250)
-        self.timer.timeout.connect(self.refresh_clock)
-        self.timer.start()
-        self.refresh_runs()
-        self.preview_configuration()
-        self.refresh_plots()
-        self.update_file_buttons()
+    def open_replay_browser(self):
+        from viewer.replay_browser import ReplayBrowser
+        window=ReplayBrowser(self.runs.currentData()); self.replays.append(window); window.show()
 
-    @property
-    def active(self):
-        return self.process is not None
+    def sync_budget_control(self, settings=None):
+        settings = self.settings if settings is None else settings
+        self.rounds.setPrefix('Training episodes  ')
+        self.rounds.setValue(settings['training_episodes'])
 
-    @staticmethod
-    def add_path(combo, path):
-        value = str(Path(path).resolve())
-        index = combo.findData(value)
-        if index < 0:
-            combo.addItem(run_display_name(value), value)
-            index = combo.count()-1
-            combo.setItemData(index, value, QtCore.Qt.ItemDataRole.ToolTipRole)
-        return index
+    def update_description(self):
+        t=self.task; wall=t['strike_surface']; ws=t['workspace']
+        method=algorithm(self.settings).upper(); stage=training_stage(self.settings)
+        self.setup.setTitle(f'Stage {stage} · '+method)
+        self.setup_toggle.setText(f'Training setup · Stage {stage} · {method} · {self.settings["device"].upper()} · {self.settings["parallel_environments"]} lanes')
+        self.setWindowTitle(f"Training — {method} — {self.config_path.stem} — reward ×{self.settings.get('reward_scale', 1):g}")
+        goal={1:'Learn a broad directed strike',2:'Improve accuracy with staged target narrowing',3:'Robustness — blocked until uncertainty is identified',4:'Stage4 learned recovery'}[stage]
+        quality_mode=t['matching'].get('reward_mode') == 'geometric_hit_quality_v1'
+        whip_mode=t['matching'].get('reward_mode') == 'directed_whip_v1'
+        delivery_mode=t['matching'].get('reward_mode') == 'directed_delivery_v1'
+        precision_mode=t['matching'].get('reward_mode') == 'directed_precision_v1'
+        if whip_mode: goal='Learn directed bend propagation and unfolding'
+        if delivery_mode: goal='Deliver the learned whip toward a fixed broad target; no narrowing'
+        if precision_mode: goal='Precision Stage 3: narrow actual whip crossings to +/-5 cm; no randomization'
+        if stage==4: goal='Stage4 learned recovery: precision whip, return and sustained hover; no randomization'
+        terminal=('first geometric hit or timeout' if quality_mode else
+            'first qualified hit or timeout' if t['episode'].get('termination')=='first_qualified_hit_v1' else 'full horizon')
+        impact=(f"speed/straightness rewarded; {t['request'][3]:g} m/s / {wall['maximum_entry_angle_deg']:g}° diagnostic only" if quality_mode else
+            f"forward speed ≥ {t['request'][3]:g} m/s · entry ≤ {wall['maximum_entry_angle_deg']:g}°")
+        if whip_mode: impact='target, 3 m/s and 30° are diagnostics; no hit reward or hit termination'
+        if delivery_mode: impact='same-event spatial guidance; 3 m/s / 30° diagnostic only; no hit termination'
+        if precision_mode: impact='actual forward crossing center accuracy; 3 m/s / 30° diagnostic only; no hit termination'
+        self.config_label.setText(f"{goal}\n"
+            f"Compute: {self.settings['device'].upper()} · {self.settings['parallel_environments']} collection lanes · {self.settings['policy_rate_hz']} Hz velocity actions · 1 fixed evaluation case\n"
+            f"Task: target {wall['width_m']:g} × {wall['height_m']:g} m at wall {wall['distance_m']:g} m / height {t['request'][2]:g} m · {impact} · stop at {terminal}\n"
+            f"Workspace: radius {ws['radius_m']:g} m / height {ws['height_lower_world_m']:g}–{ws['height_upper_world_m']:g} m · outside-only cost {self.settings['workspace_penalty']['weight']:g} · reward ×{self.settings.get('reward_scale',1):g}")
+        entropy=self.settings.get('ppo',{}).get('entropy',{})
+        if 'hold_fraction' in entropy:
+            self.config_label.setText(self.config_label.text()+
+                f"\nEntropy: {entropy['initial_weight']:g} → {entropy['final_weight']:g} · completed training episodes · hold first {100*entropy['hold_fraction']:g}% · decay ends at {100*entropy['anneal_end_fraction']:g}% · original budget preserved on resume")
+        if t['matching'].get('reward_mode') in ('directed_hit_v1', 'geometric_hit_quality_v1'):
+            self.config_label.setText(self.config_label.text()+
+                f"\nEXPERIMENT: fixed hit bonus {wall['strike_bonus_weight']:g} · spatial record credit ≤ {t['matching']['shaping_weight']:g} · full-horizon time cost {t['matching']['time_preference']:g} · mechanics diagnostic only")
+        if quality_mode:
+            m=t['matching']
+            self.config_label.setText(self.config_label.text()+
+                f"\nHit quality: speed bonus ≤ {m['hit_speed_weight']:g} (scale {m['hit_speed_scale_mps']:g} m/s) · straightness bonus ≤ {m['hit_straightness_weight']:g} · neither is a hit threshold")
+        if whip_mode:
+            self.config_label.setText(self.config_label.text()+
+                '\nStage1: best directed mechanics × unfolding event ≤ 1; outside-only cost. No acceleration, hit, accuracy or time cost/bonus.')
+        if delivery_mode:
+            self.config_label.setText(self.config_label.text()+
+                '\nStage2: best W × (1 + target proximity) ≤ 2; same-event mechanics preserved; no hit, hardness, centering or time bonus.')
+        if precision_mode and stage!=4:
+            self.config_label.setText(self.config_label.text()+
+                '\nStage3: best W × (1 + crossing center Gaussian) ≤ 2; 80% hits for 3 cohorts + fixed replay; workspace excess measured, not a progression gate.')
+        if stage==4:
+            r=t['recovery']
+            settling=r.get('quality_mode')=='return_and_cable_settle_v1'
+            gate='actual-hit gate' if settling else 'same-event W*C gate'
+            self.config_label.setText(self.config_label.text()+
+                f"\nStage4: first actual hit (miss timeout {r['whip_duration_s']:g}s), then {r['recovery_duration_s']:g}s recovery; weight {r['weight']:g}, {gate}; positive bound {2+r['weight']:g}. No controller switch. Return to episode-start drone position.\nHold diagnostic: position ≤{r['position_tolerance_m']:g}m, speed ≤{r['speed_tolerance_mps']:g}m/s for final {r['final_hold_s']:g}s; separate workspace charges, no RMS gate.")
+            if settling:
+                self.config_label.setText(self.config_label.text()+f"\nFrozen whip + internal PD return + learned recovery residual. Cable hold: relative RMS speed ≤{r['cable_speed_tolerance_mps']:g}m/s, horizontal RMS shape ≤{r['cable_horizontal_tolerance_m']:g}m. Faster settling improves window quality; fixed recovery duration.")
+        if t['matching'].get('alignment_mode')=='cone_plateau_v1':
+            self.config_label.setText(self.config_label.text()+f"\nCone reward version: alignment plateau inside {t['matching']['alignment_cone_deg']:g}°; continuous tail outside, no geometric-hit angle gate. Speed factors unchanged.")
+        if 'plateau_detection' in self.settings:
+            c=self.settings['plateau_detection']
+            guard='stable entropy floor required' if c['require_entropy_floor'] else 'entropy guard explicitly disabled'
+            self.config_label.setText(self.config_label.text()+f"\nPlateau mode {c['mode']}: NEVER before {c['minimum_collections']} completed collections; compare {c['window_collections']}+{c['window_collections']} same-target cohorts, patience {c['patience_checks']} checks. Final target required; {guard}; not proof of convergence. Hard budget remains a cap.")
+        self.description_details=self.config_label.text()
+        self.config_label.setToolTip(self.description_details)
+        self.config_label.setText(f"{goal}\n{self.settings['device'].upper()} · {self.settings['parallel_environments']} lanes · {self.settings['policy_rate_hz']} Hz actions · {self.settings['training_episodes']:,} training episodes")
 
-    def preview_configuration(self, *_):
-        if self.active:
+    def select_stage_preset(self, index):
+        stage = self.stage_presets.itemData(index)
+        if stage is None or stage not in FROZEN_PRESETS or self.process is not None or self.mode.currentIndex() == 1:
             return
-        self.preview = None
-        self.resume_info = None
-        self.start_button.setEnabled(False)
         try:
-            path = Path(self.config_combo.currentData())
-            digest = hashlib.sha256(path.read_bytes()).hexdigest()
-            raw, *_ = self.configuration_loader(path)
-            raw = deepcopy(raw)
-            if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
-                raise ValueError('Configuration changed while loading; select it again.')
-            exp, trajectory = raw['experiment'], raw['trajectory']
-            training = exp['mode'] == 'training'
-            budget_configuration = (str(path), exp.get('updates'))
-            if training and budget_configuration != self._budget_configuration:
-                if self._budget_configuration is not None or not self._initial_budget_override:
-                    with QtCore.QSignalBlocker(self.total_updates):
-                        self.total_updates.setValue(exp['updates'])
-                self._budget_configuration = budget_configuration
-            self.total_updates.setEnabled(training)
-            self.run_mode.setEnabled(training and self.resume_inspector is not None)
-            resuming = training and self.run_mode.currentText() == 'Resume'
-            self.resume_browse.setEnabled(resuming)
-            self.resume_path.setEnabled(resuming)
-            self.resume_details.clear()
-            if training:
-                exp['updates'] = self.total_updates.value()
-            if resuming:
-                if self.resume_inspector is None or not self.resume_path.text():
-                    raise ValueError('Select a checkpoint to resume')
-                self.resume_info = self.resume_inspector(Path(self.resume_path.text()), raw)
-                done = self.resume_info['update']
-                self.resume_details.setText(f"Resume update {done} → {exp['updates']} · {exp['updates']-done} additional updates")
-            exploration = raw.get('exploration')
-            exploration_text = (f"Smooth · Time: {exploration['smoothness_time_s']:g} s · Scale: {exploration['amplitude_scale']:g}"
-                                if exploration else 'Independent')
-            budget = (f"Seed: {exp['seeds'][0]}  ·  Samples: {exp['batch_size']}  ·  Optimizer updates: 0"
-                      if exp['mode'] == 'initialization' else
-                      f"Seeds: {', '.join(map(str, exp['seeds']))}  ·  Batch: {exp['batch_size']}  ·  Updates/seed: {exp['updates']}  ·  Evaluate every {exp['evaluation_interval']} updates")
-            stage1 = exp['name'] == 'whip_stage1'
-            if stage1:
-                request = raw['request']
-                speed_label = 'Minimum tip speed' if raw['matching'].get('speed_mode', 'match') == 'minimum' else 'Tip speed'
-                target_text = (f"Stage 1 · Release height: {request['release_height_world_m']:g} m · "
-                    f"{speed_label}: {request['tip_speed_mps']:g} m/s · Heading/elevation: "
-                    f"{request['heading_rad']:g}/{request['elevation_rad']:g} rad")
-                if 'strike_surface' in raw:
-                    wall = raw['strike_surface']
-                    target_text = (f"Directed Stage 1 · Wall: {wall['distance_m']:g} m forward · "
-                        f"Height: {request['release_height_world_m']:g} m · "
-                        f"Region: {wall['width_m']:g} × {wall['height_m']:g} m · "
-                        f"Entry ≤ {wall['maximum_entry_angle_deg']:g}° · Forward speed ≥ {request['tip_speed_mps']:g} m/s")
-                exploration_text = (f"CEM · Initial σ: {raw['cem']['initial_std']:g} · "
-                    f"Elites: {raw['cem']['elites']} · {exploration_text}")
-            else:
-                target_text = f"Target: {tuple(exp['target_position_world_m'])} m  ·  Width (σ): {raw['reward']['target_width_m']:g} m"
-            if 'reach' in raw:
-                reach = raw['reach']
-                target_text = (f"Reach window: {tuple(exp['target_position_world_m'])} m · "
-                    f"{reach['window_width_m']:g} × {reach['window_height_m']:g} m · "
-                    f"Quality bonus ≤ {reach['whip_bonus_weight']:.0%}")
-            self.config_details.setText(
-                f"Model: {Path(exp['model']).name}  ·  {exp['device'].upper()}  ·  {exp['mode'].capitalize()}\n"
-                f"{target_text}  ·  {trajectory['control_count']} spline controls\n"
-                f"Commands: {trajectory.get('command_rate_hz', 100):g} Hz · Feedback: 100 Hz\n"
-                f"{budget}\n"
-                f"Exploration: {exploration_text}")
-            if 'workspace' in raw:
-                workspace = raw['workspace']
-                self.config_details.setText(self.config_details.text()+
-                    f"\nWorkspace: cylinder · Radius {workspace['radius_m']:g} m · "
-                    f"Z {workspace['height_lower_world_m']:g}–{workspace['height_upper_world_m']:g} m")
-            if stage1:
-                mechanics = raw['mechanics']
-                self.config_details.setText(self.config_details.text()+
-                    f"\nMotion: {trajectory['duration_s']:g} s · Hold: {trajectory['post_hold_s']:g} s · "
-                    f"Event window: {mechanics['event_start_s']:g}–{mechanics['event_end_s']:g} s")
-            self.config_details.setToolTip(str(path))
-            self.preview, self.preview_hash = raw, digest
-            if self.history.path is None and not self.history.updates:
-                self.history.configuration = raw
-                self.refresh_plots()
-            self.start_button.setEnabled(True)
-            self.message.clear()
-        except (OSError, ValueError, TypeError, KeyError) as exc:
-            self.config_details.setText('Cannot load experiment')
-            self.message.setText(str(exc))
+            self.settings,self.snapshot,_,_ = load(FROZEN_PRESETS[stage])
+            self.task = self.snapshot['task']; self.config_path = FROZEN_PRESETS[stage]
+            self.initialize_actor_path = self.resume_path = None
+            self.mode.setCurrentIndex(0 if stage == 1 else 2)
+            self.checkpoint_label.setText('New policy' if stage == 1 else f'Choose Stage {stage-1} actor checkpoint')
+            self.sync_budget_control(); self.update_description()
+        except Exception as exc:
+            self.error(exc)
 
-    def browse_checkpoint(self):
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, 'Resume checkpoint',
-            str(self.runs_directory), 'Policy checkpoint (*.pt)')
-        if path:
-            self.resume_path.setText(path)
-            self.preview_configuration()
+    def edit_settings(self):
+        if self.process is not None or self.mode.currentIndex()==1:
+            SettingsDialog(self.settings,self.task,self,read_only=True).exec()
+            return
+        self.settings['training_episodes']=self.rounds.value()
+        dialog=SettingsDialog(self.settings,self.task,self)
+        if dialog.exec():
+            self.settings,self.task=dialog.settings,dialog.task
+            self.sync_budget_control(); self.update_description()
 
-    def browse_configuration(self):
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(self, 'Select experiment',
-            str(self.root/'configs/experiments'), 'Experiment files (*.toml)')
+    def open_settings(self):
+        filename,_=QtWidgets.QFileDialog.getOpenFileName(self,'Training settings',str(DEFAULT.parent),'JSON (*.json)')
+        if filename:
+            try:
+                settings,snapshot,_,_=load(filename)
+                self.settings,self.snapshot,self.task=settings,snapshot,snapshot['task']; self.config_path=Path(filename)
+                self.sync_budget_control(); self.update_description()
+            except Exception as exc: self.error(exc)
+
+    def save_settings(self):
+        filename,_=QtWidgets.QFileDialog.getSaveFileName(self,'Save training settings',str(self.config_path),'JSON (*.json)')
+        if not filename: return False
+        try:
+            path=Path(filename); task_path=path.with_name(path.stem+'_task.json')
+            if task_path==path: raise ValueError('Separate task filename required')
+            self.settings['training_episodes']=self.rounds.value()
+            self.settings['task']=str(task_path.relative_to(ROOT)).replace('\\','/') if task_path.is_relative_to(ROOT) else str(task_path)
+            save_json(task_path,self.task); save_json(path,self.settings); self.config_path=path
+            return True
+        except Exception as exc: self.error(exc); return False
+
+    def mode_changed(self,index):
+        self.checkpoint_button.setEnabled(index in (1,2))
+        self.settings_button.setEnabled(True)
+        self.settings_button.setText('Inspect configuration…' if index==1 else 'Configure experiment…')
+        for b in (self.open_button,self.preset_button): b.setEnabled(index in (0,2))
+        if index==0:
+            self.resume_path=None
+            self.initialize_actor_path=None
+            self.checkpoint_label.setText('New policy'); self.sync_budget_control(); self.update_description()
+        elif index==1:
+            self.initialize_actor_path=None
+        else:
+            self.resume_path=None
+            self.checkpoint_label.setText(str(self.initialize_actor_path or 'Choose Stage 1 actor checkpoint'))
+            clock=self.settings.get('ppo',{}).get('transfer_entropy_clock','inherit')
+            self.config_label.setText(f'Actor-only transfer; fresh value and optimizers. Entropy clock: {clock}. Not exact resume.')
+
+    def choose_checkpoint(self):
+        path,_=QtWidgets.QFileDialog.getOpenFileName(self,'Select learner checkpoint',str(ROOT/'runs'),'Checkpoint (*.pt)')
         if path:
-            self.config_combo.setCurrentIndex(self.add_path(self.config_combo, path))
-            self.preview_configuration()
+            try:
+                import torch
+                saved = torch.load(path,map_location='cpu',weights_only=True)
+                settings = saved['snapshot']['settings']
+                if self.mode.currentIndex()==2:
+                    self.initialize_actor_path=Path(path)
+                    self.checkpoint_label.setText('Actor only: '+str(path))
+                else:
+                    self.settings=deepcopy(settings);self.task=deepcopy(saved['snapshot']['task'])
+                    self.update_description()
+                    self.sync_budget_control(settings)
+                    self.resume_path=Path(path); self.checkpoint_label.setText(self.resume_path.parent.name+' / '+self.resume_path.name)
+                    self.config_label.setText('Resume uses the checkpoint’s saved task, model and learner settings. Only the total training budget changes.')
+            except Exception as exc: self.error(exc)
 
     def start(self):
-        if self.active or self.preview is None:
-            return
-        path = Path(self.config_combo.currentData())
-        options = {}
+        if self.process is not None: return
         try:
-            current, *_ = self.configuration_loader(path)
-            current = deepcopy(current)
-            if current['experiment']['mode'] == 'training':
-                current['experiment']['updates'] = self.total_updates.value()
-            if (hashlib.sha256(path.read_bytes()).hexdigest() != self.preview_hash
-                    or current != self.preview):
-                self.preview_configuration()
-                self.message.setText('Configuration changed. Review the updated settings, then press Start.')
-                return
-            if self.preview['experiment']['mode'] == 'training':
-                options['total_updates'] = self.preview['experiment']['updates']
-            if self.resume_info is not None:
-                current = self.resume_inspector(Path(self.resume_path.text()), self.preview)
-                if current != self.resume_info:
-                    self.preview_configuration()
-                    self.message.setText('Checkpoint records changed. Review the selection, then press Start.')
-                    return
-                options.update(resume_checkpoint=current['checkpoint'], expected_resume_sha256=current['sha256'])
-        except (OSError, ValueError, TypeError, KeyError) as exc:
-            self.message.setText(str(exc)); return
-        self.history = RunHistory(configuration=self.preview, status='Starting')
-        if self.resume_info is not None:
-            self.history.add_prefix(self.resume_info['history'])
-        self._started, self._elapsed = perf_counter(), None
-        self._stop_requested = self._close_when_finished = False
-        self._terminal, self._stdout, self._active_seed = None, b'', None
-        self.seed_combo.clear(); self.log.clear(); self.message.clear()
-        for seed in self.history.seeds:
-            self.ensure_seed(seed)
-        self.status.setText('Starting')
-        self.process = QtCore.QProcess(self)
-        self.process.setWorkingDirectory(str(self.root))
-        environment = QtCore.QProcessEnvironment.systemEnvironment()
-        environment.insert('PYTHONUTF8', '1')
-        self.process.setProcessEnvironment(environment)
-        self.process.readyReadStandardOutput.connect(self.read_stdout)
-        self.process.readyReadStandardError.connect(self.read_stderr)
-        self.process.started.connect(self.process_started)
-        self.process.finished.connect(self.process_finished)
-        self.process.errorOccurred.connect(self.process_error)
-        self.set_running_controls(True)
-        self.refresh_plots(); self.refresh_files(); self.refresh_progress()
-        self.process.start(sys.executable, ['-u', '-m', self.worker_module, str(path), self.preview_hash,
-                                            json.dumps(options, allow_nan=False)])
+            if self.mode.currentIndex()==1 and self.resume_path is None: raise ValueError('Choose a learner checkpoint first')
+            if self.mode.currentIndex()==2 and self.initialize_actor_path is None: raise ValueError('Choose the Stage 1 actor checkpoint first')
+            settings=deepcopy(self.settings)
+            settings['training_episodes']=self.rounds.value()
+            # Unsaved UI edits are frozen into this run, never written into defaults.
+            directory=create_run(settings,self.resume_path,task=self.task,initialize_actor=self.initialize_actor_path)
+            self.current_run=directory; self.last_event_count=-1
+            frozen=read_json(directory/'configuration.json')
+            self.settings,self.task=deepcopy(frozen['settings']),deepcopy(frozen['task'])
+            self.process=QtCore.QProcess(self); self.process.setWorkingDirectory(str(ROOT))
+            self.process.setProcessChannelMode(QtCore.QProcess.ProcessChannelMode.MergedChannels)
+            self.process.readyReadStandardOutput.connect(self.read_output)
+            self.process.finished.connect(self.finished)
+            self.process.errorOccurred.connect(self.process_error)
+            self.log.clear(); self.status.setText('Starting')
+            self.set_running(True)
+            self.process.start(sys.executable,['-u','-m','training.worker','--run',str(directory)])
+            self.refresh_runs(directory)
+        except Exception as exc: self.error(exc)
 
-    def set_running_controls(self, running):
-        for widget in (self.config_combo, self.config_browse, self.run_combo, self.run_browse, self.refresh_button,
-                       self.run_mode, self.resume_path, self.resume_browse, self.total_updates):
-            widget.setEnabled(not running)
-        self.start_button.setEnabled(not running and self.preview is not None)
-        self.stop_button.setEnabled(running and not self._stop_requested)
+    def set_running(self,running):
+        self.start_button.setEnabled(not running); self.stop_button.setEnabled(running); self.save_button.setEnabled(running)
+        for control in (self.mode,self.rounds,self.open_button,self.preset_button,self.checkpoint_button,self.stage_presets): control.setEnabled(not running)
+        self.settings_button.setEnabled(True)
+        self.settings_button.setText('Inspect active configuration…' if running else 'Configure experiment…')
+        if not running: self.mode_changed(self.mode.currentIndex())
 
-    def process_started(self):
-        if self._stop_requested:
-            self.process.write(b'stop\n')
+    def stop(self):
+        if self.current_run and self.process:
+            (self.current_run/'stop.request').touch(); self.status.setText('Stopping safely'); self.stop_button.setEnabled(False)
 
-    def request_stop(self):
-        if not self.active or self._stop_requested:
-            return
-        self._stop_requested = True
-        self.stop_button.setEnabled(False)
-        self.status.setText('Stopping')
-        self.message.setText('Finishing the current operation and saving the checkpoint…')
-        if self.process.state() == QtCore.QProcess.ProcessState.Running:
-            self.process.write(b'stop\n')
+    def save_checkpoint(self):
+        if self.current_run and self.process:
+            (self.current_run/'save.request').touch(); self.status.setText('Save requested · next iteration boundary')
 
-    def read_stdout(self):
-        if not self.active:
-            return
-        self._stdout += bytes(self.process.readAllStandardOutput())
-        while b'\n' in self._stdout:
-            line, self._stdout = self._stdout.split(b'\n', 1)
-            self.handle_line(line.decode('utf-8', errors='replace'))
-
-    def read_stderr(self):
-        if self.active:
-            text = bytes(self.process.readAllStandardError()).decode('utf-8', errors='replace').strip()
-            if text:
-                self.log.appendPlainText(text)
-
-    def handle_line(self, line):
+    def approve_motion(self):
+        if not self.current_run or not self.process: return
         try:
-            event = json.loads(line)
-        except ValueError:
-            if line.strip():
-                self.log.appendPlainText(line.strip())
-            return
-        if not isinstance(event, dict) or 'event' not in event:
-            self.log.appendPlainText(line)
-            return
-        kind = event['event']
-        if kind == 'run':
-            if event.get('resume') is not None:
-                self.history = load_history(event['path'])
-                for seed in self.history.seeds:
-                    self.ensure_seed(seed)
-            self.history.path = Path(event['path'])
-            self.history.configuration = event['configuration']
-            self.run_combo.blockSignals(True)
-            self.run_combo.setCurrentIndex(self.add_path(self.run_combo, self.history.path))
-            self.run_combo.blockSignals(False)
-            self.refresh_files()
-        elif kind == 'phase':
-            if not self._stop_requested:
-                self.status.setText(event['phase'])
-            if 'seed' in event:
-                seed = event['seed']
-                self.cards['Seed'].setText(str(seed))
-                exp = self.history.configuration['experiment']
-                self.cards['Update'].setText('0' if exp['mode'] == 'initialization' else f"{event['update']} / {exp['updates']}")
-                if self._active_seed != seed:
-                    self._active_seed = seed
-                    self.ensure_seed(seed, select=True)
-        elif kind == 'update':
-            record = event['record']
-            self.history.add_update(record)
-            self.ensure_seed(record['seed'])
-            self.log.appendPlainText(f"Seed {record['seed']} · Update {record['update']} · Return {record['samples']['return_mean']:.6g} · {record['elapsed_s']:.2f} s")
-            if record.get('learner', {}).get('distribution_updated') is False:
-                self.log.appendPlainText(f"CEM distribution unchanged: {record['learner']['valid_candidates']} valid candidates; not enough elites.")
-            self.refresh_plots(); self.refresh_progress()
-        elif kind == 'evaluation':
-            self.history.add_evaluation(event['seed'], event['update'], event['metrics'])
-            self.ensure_seed(event['seed'])
-            self.refresh_plots(); self.refresh_files()
-        elif kind == 'seed_finished':
-            self.refresh_files()
-        elif kind == 'initialization':
-            self.log.appendPlainText('Initialization samples saved; zero optimizer updates.')
-            self.history.initialization = event['metrics']
-            self.refresh_progress(); self.refresh_plots()
-        elif kind == 'finished':
-            self._terminal = event['summary']['status'].capitalize()
-        elif kind == 'error':
-            self._terminal = 'Failed'
-            self.message.setText(event['message'])
-            self.log.appendPlainText(event['message'])
+            progress=read_json(self.current_run/'progress.json')
+            if progress.get('phase') != 'curriculum_review': return
+            review=read_json(self.current_run/'curriculum_review.json')
+            answer=QtWidgets.QMessageBox.question(self,'Motion review',
+                'Have you reviewed the saved stochastic motions in Results and confirmed directed whipping mechanics, not just wall hits? Advance to curriculum stage 2?')
+            if answer != QtWidgets.QMessageBox.StandardButton.Yes: return
+            save_json(self.current_run/'curriculum_review_approved.json',
+                      dict(identity=review['identity'],round=review['round']))
+            self.review_button.setEnabled(False)
+        except Exception as exc: self.error(exc)
 
-    def process_error(self, error):
-        if not self.active:
-            return
-        self.message.setText(self.process.errorString())
-        self.log.appendPlainText(self.process.errorString())
-        if error == QtCore.QProcess.ProcessError.FailedToStart:
-            self.process_finished(-1, QtCore.QProcess.ExitStatus.CrashExit)
+    def read_output(self):
+        if self.process:
+            text=bytes(self.process.readAllStandardOutput()).decode('utf-8',errors='replace')
+            with (self.current_run/'worker.log').open('a',encoding='utf-8') as stream: stream.write(text)
+            self.log.appendPlainText(text.rstrip())
 
-    def process_finished(self, code, exit_status):
-        if not self.active:
-            return
-        self.read_stdout(); self.read_stderr()
-        if self._stdout.strip():
-            self.handle_line(self._stdout.decode('utf-8', errors='replace'))
-        self._elapsed = perf_counter()-self._started
-        self._started = None
-        final_status = self._terminal if code == 0 and self._terminal else 'Failed'
-        self.process.deleteLater(); self.process = None
-        self.history.status = final_status
-        if self.history.path:
+    def process_error(self,error):
+        if error==QtCore.QProcess.ProcessError.FailedToStart:
+            self.log.appendPlainText(self.process.errorString()); self.finished(-1,QtCore.QProcess.ExitStatus.CrashExit)
+
+    def finished(self,code,status):
+        if self.process is None: return
+        self.read_output(); self.process.deleteLater(); self.process=None; self.set_running(False)
+        self.last_event_count=-1; self.poll()
+        summary=self.current_run/'summary.json'
+        self.status.setText(read_json(summary)['phase'].capitalize() if summary.exists() else f'Worker exited ({code})')
+        if self.close_pending: self.close()
+
+    def refresh_runs(self,selected=None):
+        current=selected or self.runs.currentData()
+        self.runs.blockSignals(True); self.runs.clear()
+        paths=[p for root in (PPO_STAGE4_RUNS,PPO_STAGE3_RUNS,PPO_STAGE2_RUNS,PPO_RUNS,RUNS) if root.exists()
+               for p in root.iterdir() if p.is_dir() and (p/'configuration.json').exists()]
+        for path in sorted(paths,key=lambda p:p.name,reverse=True):
+            saved_settings=read_json(path/'configuration.json')['settings']
+            label=f'{algorithm(saved_settings).upper()} Stage {training_stage(saved_settings)}'
+            self.runs.addItem(label+' · '+path.name,path)
+        # Qt's QVariant lookup does not compare separately created Path objects
+        # by value. Keep Path data for replay callers, but select in Python.
+        index=next((i for i in range(self.runs.count()) if self.runs.itemData(i)==current),-1)
+        if index>=0: self.runs.setCurrentIndex(index)
+        self.runs.blockSignals(False); self.select_run()
+
+    def select_run(self,*_):
+        self.last_event_count=-1
+        self._event_signature=None
+        self.poll()
+
+    def poll(self):
+        self.review_button.setEnabled(False)
+        if self.current_run and self.process:
             try:
-                self.history = load_history(self.history.path)
-                self.history.status = final_status
-            except (OSError, ValueError, KeyError, TypeError) as exc:
-                self.log.appendPlainText(str(exc))
-        self.status.setText(final_status)
-        if final_status == 'Failed' and not self.message.text():
-            self.message.setText('Worker exited without completing the run. See Log and saved run files.')
-        elif final_status != 'Failed':
-            saved = any(row[3] is not None for row in self.history.policy_files())
-            self.message.setText(('Checkpoint and completed records saved.' if saved else 'Stopped before training started.')
-                                 if final_status == 'Stopped' else 'Run completed.')
-        self.set_running_controls(False)
-        terminal_message = self.message.text()
-        self.preview_configuration()
-        if terminal_message:
-            self.message.setText(terminal_message)
-        self.refresh_runs(); self.refresh_files(); self.refresh_plots(); self.refresh_progress(); self.refresh_clock()
-        if self._close_when_finished:
-            self.close()
-
-    def ensure_seed(self, seed, *, select=False):
-        index = self.seed_combo.findData(seed)
-        if index < 0:
-            self.seed_combo.addItem(str(seed), seed)
-            index = self.seed_combo.count()-1
-        if select:
-            self.seed_combo.setCurrentIndex(index)
-
-    def refresh_runs(self):
-        if self.active:
-            return
-        selected = str(self.history.path) if self.history.path else self.run_combo.currentData()
-        self.run_combo.blockSignals(True)
-        self.run_combo.clear(); self.run_combo.addItem('Select saved run', None)
-        paths = {path for folder in self.run_directories for path in folder.glob('*')}
-        for path in sorted(paths, key=lambda p: p.name, reverse=True):
-            if (path/'protocol.json').is_file():
-                self.add_path(self.run_combo, path)
-        if selected:
-            self.run_combo.setCurrentIndex(self.add_path(self.run_combo, selected))
-        self.run_combo.blockSignals(False)
-
-    def browse_run(self):
-        path = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select run', str(self.root/'runs'))
-        if path:
-            self.run_combo.setCurrentIndex(self.add_path(self.run_combo, path))
-            self.choose_run()
-
-    def choose_run(self, *_):
-        if self.active or not self.run_combo.currentData():
-            return
+                progress=read_json(self.current_run/'progress.json')
+                phase=progress.get('phase')
+                pending=phase=='curriculum_review'
+                self.review_button.setEnabled(pending)
+                if phase:
+                    label='Iteration completed' if phase=='round' else phase.replace('_',' ').capitalize()
+                    if 'stage' in progress: label+=f" · Stage {progress['stage']}"
+                    if (self.current_run/'stop.request').exists() and phase not in ('stopped','failed','completed','plateau_stopped'):
+                        label='Stopping safely'
+                    self.status.setText(label)
+                self.live_detail.setText(f"Active: {self.current_run.name} · {label if phase else 'Starting'} · iteration {progress.get('round','—')} / {progress.get('total_rounds','—')}"
+                    + (f" · simulation {progress['simulation_s']:.1f} s · {progress.get('active','—')} active lanes" if 'simulation_s' in progress else ''))
+            except (OSError,ValueError): pass
+        directory=self.runs.currentData()
+        if directory is None: return
         try:
-            history = load_history(self.run_combo.currentData())
-        except (OSError, ValueError, KeyError, TypeError) as exc:
-            self.message.setText(f'Cannot read run: {exc}')
+            stat=(directory/'events.jsonl').stat()
+            signature=(directory,stat.st_mtime_ns,stat.st_size,stat.st_ino)
+        except FileNotFoundError:
+            signature=(directory,None)  # A new run must still clear old charts.
+        except OSError: return
+        if signature==getattr(self,'_event_signature',None) and self.last_event_count>=0: return
+        try:
+            history=events(directory)
+        except OSError: return
+        self._event_signature=signature
+        if len(history)==self.last_event_count: return
+        self.last_event_count=len(history)
+        # Always use the selected run's immutable units, not today's UI preset.
+        selected_settings=read_json(directory/'configuration.json')['settings']
+        self.update_overview(directory,history,selected_settings)
+        method=algorithm(selected_settings)
+        scale=selected_settings.get('reward_scale',1.0)
+        self.loss_plot.title=method.upper()+' losses (last minibatch)'
+        self.return_plot.title=f'Episode return (reward ×{scale:g})'
+        self.reward_plot.title=f'Event reward components (×{scale:g})'
+        self.return_plot.setToolTip('Training reward units. Original task returns are retained in the log; compare runs using the same scale.')
+        self.evaluations.setHorizontalHeaderLabels(['Iteration',f'Return ×{scale:g}','Mechanics','Strike','Valid','Outside workspace (s)',f'Workspace cost ×{scale:g}'])
+        rounds=[e for e in history if e['phase']=='round']; evaluations=[e for e in history if e['phase']=='evaluation']
+        rows=[e for e in history if e['phase'] in ('evaluation','curriculum_sample')]
+        self.evaluation_rows=rows
+        if history:
+            latest=history[-1]
+            for key in ('round','episodes','steps','gradient_updates'):
+                item=next((e[key] for e in reversed(history) if key in e),None)
+                self.cards[key].setText(str(item) if item is not None else '—')
+            seconds=int(latest.get('elapsed_s',0)); self.cards['elapsed'].setText(f'{seconds//3600:02}:{seconds//60%60:02}:{seconds%60:02}')
+        curriculum=('target_curriculum' in selected_settings or any(e['phase']=='curriculum_stage' for e in history))
+        self.return_plot.set_series([('Training (stage reward)' if curriculum else 'Training',[(e['round'],scale*e['return_mean']) for e in rounds],False),
+            ('Strict evaluation' if curriculum else 'Evaluation',[(e['round'],scale*e['evaluation_return']) for e in evaluations],False),
+            ('Best',[(e['round'],scale*e['best_return']) for e in evaluations],True)])
+        quality_history=any('geometric_hit_success' in e.get('components',{}) for e in rounds+evaluations)
+        motion_terms=(('mechanical','Mechanics'),('matching','Matching'),('geometric_hit_success' if quality_history else 'strike_success','Geometric hit' if quality_history else 'Strike'))
+        if quality_history:motion_terms+=(('strict_strike_success','Strict 3 m/s / 30° diagnostic'),)
+        self.mechanics_plot.set_series([(label,[(e['round'],e['components'].get(key)) for e in rounds],False)
+            for key,label in motion_terms])
+        self.reward_plot.set_series([(label,[(e['round'],scale*e['components'][key] if key in e['components'] else None) for e in rounds],False)
+            for key,label in (('mechanics_credit','Mechanics credit'),('approach_reward','Approach'),('strike_bonus','Strike bonus'),('hit_speed_bonus','Hit speed bonus'),('hit_straightness_bonus','Hit straightness bonus'),('time_cost','Time cost'),('workspace_cost','Workspace cost'))])
+        self.valid_plot.set_series([('Fraction',[(e['round'],e['valid_fraction']) for e in rounds],False)])
+        self.loss_plot.set_series([(label,[(e['round'],e.get(key)) for e in rounds],False) for key,label in (('critic_loss','Critic'),('actor_loss','Actor'))])
+        exploration=[e for e in history if e['phase']=='exploration']
+        self.entropy_plot.set_series([(label,[(e['round'],e.get(key)) for e in exploration],dashed)
+            for key,label,dashed in ((('entropy','Measured',False),) if method=='ppo' else
+                                    (('entropy','Measured',False),('target_entropy','Target',True)))])
+        self.temperature_plot.title='PPO entropy bonus coefficient' if method=='ppo' else 'SAC entropy temperature'
+        self.temperature_plot.set_series([('Coefficient' if method=='ppo' else 'Temperature',
+            [(e['round'],e.get('entropy_weight' if method=='ppo' else 'temperature')) for e in exploration],False)])
+        self.evaluations.setRowCount(len(rows))
+        for i,e in enumerate(rows):
+            outside=e.get('workspace',{}).get('outside_duration_s')
+            iteration=f"{e['round']} · Lane {e['lane']}" if 'lane' in e else e['round']
+            charge=e['components'].get('workspace_cost')
+            values=(iteration,scale*e['evaluation_return'],e['components'].get('mechanical'),e['components'].get('strike_success'),e['valid'],
+                    outside,scale*charge if charge is not None else None)
+            for j,value in enumerate(values):
+                text='—' if value is None else (f'{value:.4g}' if isinstance(value,float) else str(value))
+                self.evaluations.setItem(i,j,QtWidgets.QTableWidgetItem(text))
+
+    def update_overview(self,directory,history,settings):
+        episodes=next((e['episodes'] for e in reversed(history) if 'episodes' in e),0)
+        budget=settings['training_episodes']
+        self.budget_progress.setValue(min(1000,round(1000*episodes/budget)))
+        self.budget_progress.setFormat(f'Stage {training_stage(settings)} · {episodes:,} / {budget:,} training episodes · {100*episodes/budget:.1f}%')
+        if self.process is None:
+            phase=history[-1]['phase'] if history else 'no events'
+            self.live_detail.setText(f'Viewing saved run: {directory.name} · {phase.replace("_"," ")} · no worker owned by this window')
+        latest=next((e for e in reversed(history) if e['phase']=='evaluation'),None)
+        # Do not show an old valid replay as if it were the newest failed result.
+        self.preview.set_result(directory,latest if latest and latest.get('replay') else None)
+        if latest is None:
+            self.latest_result.setText('No completed evaluation yet.\n\nCollection and optimization progress is shown above. Evaluation is separate from stochastic training episodes.')
+            self.latest_summary.setText('No saved evaluation yet · training progress is shown above')
             return
-        self.history = history
-        self._elapsed = history.elapsed_seconds
-        self.status.setText(history.status)
-        self.seed_combo.clear()
-        for seed in history.seeds:
-            self.ensure_seed(seed)
-        self.message.clear()
-        self.refresh_progress(); self.refresh_plots(); self.refresh_files(); self.refresh_clock()
+        def number(value): return '—' if value is None else f'{value:.5g}'
+        c=latest.get('components',{}); ws=latest.get('workspace',{})
+        raw=latest.get('evaluation_return'); scale=settings.get('reward_scale',1.)
+        hit_label='Geometric target hit' if 'geometric_hit_success' in c else 'Qualified strike'
+        text=(f"Stage {training_stage(settings)} · iteration {latest['round']}\n"
+              f"{'Valid numerical rollout' if latest.get('valid') else 'Numerical failure / invalid rollout'}\n\n"
+              f"Task return: {number(raw)}\nOptimizer return (×{scale:g}): {number(None if raw is None else scale*raw)}\n\n"
+              f"{hit_label}: {number(c.get('geometric_hit_success', c.get('strike_success')))}\nMechanics diagnostic: {number(c.get('mechanical'))}\nMatching: {number(c.get('matching'))}\n"
+              f"Outside workspace: {number(ws.get('outside_duration_s'))} s\nWorkspace cost (raw): {number(c.get('workspace_cost'))}")
+        if 'geometric_hit_success' in c and 'unfolding_fraction' not in c:
+            angle=c.get('direction_error_rad')
+            text+=f"\nStrict 3 m/s / 30° diagnostic: {number(c.get('strict_strike_success'))}"
+            text+=f"\nSelected event forward speed: {number(c.get('forward_mps'))} m/s"
+            text+=f"\nSelected event entry angle: {number(None if angle is None else angle*180/3.141592653589793)}°"
+            text+='\nSelected approach measurements are not hits unless Geometric target hit = 1.'
+        if 'unfolding_fraction' in c:
+            text+='\nSelected mechanics event is not necessarily a target crossing.'
+            text+=f"\nRecovered unfolding fraction: {number(c.get('unfolding_fraction'))}"
+            text+=f"\nForward alignment factor: {number(c.get('forward_alignment'))}"
+            text+=f"\nEvent credit (raw): {number(c.get('mechanics_credit'))}"
+        if 'target_proximity' in c:
+            text+=f"\nSame-event broad-target proximity: {number(c.get('target_proximity'))}"
+            text+=f"\nWeighted delivery credit: {number(c.get('approach_reward'))}"
+        target=next((e for e in reversed(history) if e['phase']=='target_curriculum_evaluation' and e['round']==latest['round']),None)
+        if target:
+            text+=f"\n\nCurrent target: {target['target_width_m']:g} × {target['target_height_m']:g} m\nCurrent-target qualified: {target.get('qualified','—')}\nAbove strike / return: strict final target."
+        if latest.get('inherited'): text+='\n\nInherited evaluation from the parent checkpoint, not a new trial.'
+        if not latest.get('replay'): text+='\n\nNo valid saved replay for this evaluation.'
+        self.latest_result.setText(text)
+        self.latest_summary.setText(f"Stage {training_stage(settings)} · collection {latest['round']} · task return {number(raw)} · "
+            + ('valid saved evaluation' if latest.get('valid') else 'INVALID evaluation / no successful result substituted')
+            + (' · inherited from parent' if latest.get('inherited') else ''))
 
-    def refresh_plots(self, *_):
-        seed = self.seed_combo.currentData()
-        stage1 = self.history.configuration.get('experiment', {}).get('name') == 'whip_stage1'
-        records = sorted(self.history.updates.get(seed, {}).items())
-        evaluations = sorted(self.history.evaluations.get(seed, {}).items())
-        initial = self.history.initialization
-        if initial.get('seed') == seed and 'return_mean' in initial:
-            records = [(0, {'samples': initial})]+records
-        samples = lambda key: [(step, row['samples'].get(key)) for step, row in records]
-        self.return_plot.set_series([
-            ('Batch mean', samples('return_mean'), False),
-            ('Valid mean', samples('valid_return_mean'), False),
-            ('Mean evaluation' if stage1 else 'Policy evaluation',
-             [(step, row.get('return_mean')) for step, row in evaluations], True)])
-        reach = 'reach' in self.history.configuration
-        self.component_plot.title = 'Stage 1 components' if stage1 else ('Reach components' if reach else 'Event components')
-        self.component_plot.setToolTip(
-            'Means over valid episodes at the selected reach sample. Quality is the existing B × V proxy; bonus is additive.'
-            if reach else 'Means over valid episodes with an eligible proxy event; not a physical whip-success rate.')
-        components = (('Progress', 'reach_progress_mean'), ('Quality', 'quality_mean'), ('Bonus', 'reach_bonus_mean')) if reach else (
-            ('Bend', 'bend_mean'), ('Speed', 'speed_score_mean'), ('Target', 'target_score_mean'))
-        if stage1:
-            components = (('Mechanics', 'mechanical_mean'), ('Matching', 'matching_mean'), ('Time', 'time_factor_mean'))
-            self.component_plot.setToolTip('Multiplicative factors at the same event; means over valid positive-score events, not whip-success rates.')
-            if self.history.configuration.get('strike_surface', {}).get('strike_bonus_weight', 0) > 0:
-                components = (('Mechanics', 'mechanical_mean'), ('Approach', 'approach_reward_mean'),
-                              ('Strike bonus', 'strike_bonus_mean'))
-                self.component_plot.setToolTip('Approach + Strike bonus is the score before motion cost. Both include the same-event mechanics and time factors; Mechanics is shown separately. Means over valid positive-score events, not whip-success rates.')
-        self.component_plot.set_series([(label, samples(key), False) for label, key in components])
-        self.event_details.setVisible(stage1)
-        latest = records[-1][1]['samples'] if records else {}
-        def number(key, unit):
-            value = latest.get(key)
-            return '—' if value is None else f'{value:.3f} {unit}'
-        self.event_details.setText('Batch event means · Height: '+number('release_height_world_m_mean', 'm')+
-            ' · Tip speed: '+number('tip_speed_mps_mean', 'm/s')+' · Time: '+number('release_time_s_mean', 's'))
-        directed = 'strike_surface' in self.history.configuration
-        if directed:
-            self.event_details.setText(self.event_details.text()+' · Wall distance: '+number('wall_distance_m_mean', 'm')+
-                ' · Forward speed: '+number('forward_mps_mean', 'm/s'))
-        valid = samples('valid_fraction')
-        series = [('Valid', valid, False),
-            ('Rejected', [(step, 1-value if value is not None else None) for step, value in valid], False)]
-        if directed:
-            series.append(('Wall strike', samples('strike_fraction'), False))
-        self.validity_plot.set_series(series)
-        self.validity_plot.setToolTip('Wall strike is the fraction of valid episodes with a qualified forward crossing anywhere in the episode, not a whip-success rate.'
-            if directed else 'Validity is command/numerical/envelope eligibility, not target success or a physical safety certificate.')
+    def open_replay(self,selection):
+        try:
+            rows=getattr(self,'evaluation_rows',[])
+            if not rows: raise ValueError('No completed evaluation is saved yet')
+            deterministic=[e for e in rows if e['phase']=='evaluation']
+            if selection=='best': event=max(deterministic,key=lambda e:e['evaluation_return'])
+            elif selection=='latest': event=deterministic[-1]
+            else:
+                index=self.evaluations.currentRow()
+                if index<0: raise ValueError('Select an evaluation row')
+                event=rows[index]
+            if not event.get('replay'): raise ValueError('This evaluation has no valid numerical replay prefix')
+            from training.ui.replay_window import ReplayWindow
+            window=ReplayWindow(self.runs.currentData(),event['replay'],event,self)
+            self.replays.append(window); window.show()
+        except Exception as exc: self.error(exc)
 
-    def refresh_progress(self):
-        exp = self.history.configuration.get('experiment', {})
-        total = exp.get('updates', 1)*len(exp.get('seeds', [0]))
-        if exp.get('mode') == 'initialization':
-            self.progress_bar.setRange(0, 0 if self.active else 1)
-            if not self.active:
-                self.progress_bar.setValue(1 if self.history.status == 'Completed' else 0)
-            self.progress_bar.setFormat('Initialization')
-        else:
-            self.progress_bar.setRange(0, total)
-            self.progress_bar.setValue(self.history.completed_updates)
-            self.progress_bar.setFormat('%v / %m updates')
-        self.cards['Episodes'].setText(f'{self.history.episodes:,}')
-        if not self.active:
-            seeds = self.history.seeds
-            seed = seeds[-1] if seeds else None
-            update = max(self.history.updates.get(seed, {}), default=0)
-            self.cards['Seed'].setText(str(seed) if seed is not None else '—')
-            self.cards['Update'].setText(f"{update} / {exp.get('updates', '—')}" if seeds else '—')
-            if exp.get('mode') == 'initialization':
-                self.cards['Update'].setText('0')
-        times = [row['elapsed_s'] for rows in self.history.updates.values() for row in rows.values()]
-        mean = sum(times[-10:])/len(times[-10:]) if times else None
-        self.cards['Update time'].setText(f'{mean:.2f} s' if mean is not None else '—')
-        remaining = (total-self.history.completed_updates)*mean if self.active and mean is not None else None
-        self.cards['Remaining (est.)'].setText(duration(remaining))
+    def closeEvent(self,event):
+        if self.process:
+            answer=QtWidgets.QMessageBox.question(self,'Training is running','Stop safely and close after saving?',
+                QtWidgets.QMessageBox.StandardButton.Yes|QtWidgets.QMessageBox.StandardButton.No)
+            if answer==QtWidgets.QMessageBox.StandardButton.Yes: self.close_pending=True; self.stop()
+            event.ignore(); return
+        self.timer.stop(); self.preview.dispose(); super().closeEvent(event)
 
-    def refresh_clock(self):
-        elapsed = perf_counter()-self._started if self._started is not None else self._elapsed
-        self.cards['Elapsed'].setText(duration(elapsed))
 
-    def refresh_files(self):
-        self.files.clear()
-        for seed, update, value, checkpoint, csv in self.history.policy_files():
-            item = QtWidgets.QTreeWidgetItem([str(seed), str(update), f'{value:.6g}' if value is not None else '—',
-                checkpoint.name if checkpoint else '—', csv.name if csv else '—'])
-            for col, path in ((3, checkpoint), (4, csv)):
-                item.setData(col, QtCore.Qt.ItemDataRole.UserRole, str(path) if path else None)
-                item.setToolTip(col, str(path) if path else 'Not saved')
-            self.files.addTopLevelItem(item)
-        if self.history.path:
-            exp = self.history.configuration.get('experiment', {})
-            task = (f"Stage 1 · Request: {self.history.configuration['request']}" if exp.get('name') == 'whip_stage1'
-                    else f"Target: {exp.get('target_position_world_m', '—')}")
-            self.run_details.setText(f"{self.history.path}\nModel: {exp.get('model', '—')} · {task}")
-        else:
-            self.run_details.setText('No run selected')
-        self.update_file_buttons()
+def configure_resume(window, checkpoint, saved, requested_settings=None):
+    """Restore saved configuration, accepting only an explicit budget override.
 
-    def update_file_buttons(self):
-        item = self.files.currentItem()
-        self.folder_button.setEnabled(self.history.path is not None)
-        for col, button in ((3, self.checkpoint_button), (4, self.csv_button)):
-            button.setEnabled(item is not None and bool(item.data(col, QtCore.Qt.ItemDataRole.UserRole)))
+    Execution/identity checks still occur in create_run before dispatch. No
+    checkpoint, optimizer, RNG or original entropy budget is changed here.
+    """
+    settings=deepcopy(saved['snapshot']['settings'])
+    if requested_settings is not None:
+        requested=deepcopy(requested_settings)
+        budget=requested.pop('training_episodes')
+        original=deepcopy(settings); original.pop('training_episodes')
+        if requested != original:
+            raise ValueError('Exact resume settings may change ONLY training_episodes; reward/source changes require actor-only transfer')
+        settings['training_episodes']=budget
+    window.settings=settings;window.task=deepcopy(saved['snapshot']['task'])
+    window.mode.setCurrentIndex(1)
+    window.resume_path=checkpoint
+    window.sync_budget_control(settings)
+    window.update_description()
+    window.checkpoint_label.setText(str(checkpoint))
 
-    def copy_path(self, col):
-        item = self.files.currentItem()
-        if item and item.data(col, QtCore.Qt.ItemDataRole.UserRole):
-            QtWidgets.QApplication.clipboard().setText(item.data(col, QtCore.Qt.ItemDataRole.UserRole))
 
-    def open_folder(self):
-        if self.history.path:
-            QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(str(self.history.path)))
-
-    def closeEvent(self, event):
-        if not self.active:
-            self.timer.stop()
-            event.accept()
-            return
-        event.ignore()
-        if self._close_when_finished:
-            return
-        answer = QtWidgets.QMessageBox.question(self, 'Stop training?',
-            'Stop after the current operation, save the checkpoint, and close?',
-            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
-            QtWidgets.QMessageBox.StandardButton.No)
-        if answer == QtWidgets.QMessageBox.StandardButton.Yes:
-            self._close_when_finished = True
-            self.request_stop()
+def main(*, auto_start=False, settings_path=None, resume_checkpoint=None, initialize_actor=None):
+    if resume_checkpoint and initialize_actor:
+        raise ValueError('Select exact resume OR actor-only initialization')
+    app=QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
+    requested_settings=load(settings_path)[0] if settings_path is not None else None
+    window=TrainingWindow(settings_path or FROZEN_PRESETS[1]); window.show()
+    if resume_checkpoint is not None:
+        import torch
+        checkpoint=Path(resume_checkpoint).resolve()
+        saved=torch.load(checkpoint,map_location='cpu',weights_only=True)
+        configure_resume(window,checkpoint,saved,requested_settings)
+    if initialize_actor is not None:
+        window.mode.setCurrentIndex(2)
+        window.initialize_actor_path=Path(initialize_actor).resolve()
+        window.checkpoint_label.setText('Actor only: '+str(window.initialize_actor_path))
+    if auto_start:
+        # Enter the GUI event loop first. Never launch a detached headless worker.
+        QtCore.QTimer.singleShot(0, lambda: window.start() if window.isVisible() else None)
+    return app.exec()

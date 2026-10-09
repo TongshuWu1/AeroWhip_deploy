@@ -7,24 +7,33 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, Q
     QPushButton, QTreeWidget, QTreeWidgetItem, QLabel, QDoubleSpinBox, QFormLayout,
     QGroupBox, QFileDialog, QMessageBox, QScrollArea, QComboBox)
 
-from take_processing.library import Library, verify_sources
+from take_processing.library import Library
 from take_processing.quality import QualityTimeline, summarize
 from take_processing.replay_window import ReplayWindow
 from take_processing.position_plots import PositionPlots
 from take_processing.baseline import discover_baselines, load_baseline
+from take_processing.take_data import read_json
+from project_paths import project_path
+from take_processing.paths import collection_root, remember_recording_root
 
 
 class Importer(QThread):
     imported = Signal(object)
     failed = Signal(str)
 
-    def __init__(self, library, folder, *, refresh_existing=True):
+    def __init__(self, library, folder, *, refresh_existing=True, select_root=False):
         super().__init__()
         self.library, self.folder = library, folder
         self.refresh_existing = refresh_existing
+        self.select_root = select_root
 
     def run(self):
         try:
+            if self.select_root:
+                root = collection_root(self.folder)
+                if root != self.library.root or self.library._verified_root != root:
+                    self.library.check_root(root)
+                self.library.root = remember_recording_root(root)
             self.imported.emit(self.library.import_folder(self.folder, refresh_existing=self.refresh_existing))
         except Exception as exc:
             self.failed.emit(str(exc))
@@ -35,8 +44,8 @@ class TakeManager(QMainWindow):
         super().__init__()
         self.setWindowTitle("Take Manager")
         self.resize(1280, 760)
-        self.folder = Path(folder).resolve()
-        self.library = Library(library_path)
+        self.folder = project_path(folder)
+        self.library = Library(library_path, root=collection_root(self.folder))
         self.importer = None
         self.current_key = None
         self.dirty = False
@@ -49,6 +58,9 @@ class TakeManager(QMainWindow):
         self.import_button = QPushButton("Import folder")
         self.import_button.clicked.connect(self.choose_folder)
         left_layout.addWidget(self.import_button)
+        self.cable_fit_button = QPushButton('Cable fit…')
+        self.cable_fit_button.clicked.connect(self.fit_cable)
+        left_layout.addWidget(self.cable_fit_button)
         self.tree = QTreeWidget()
         self.tree.setHeaderLabels(["Sessions / Takes"])
         self.tree.setMinimumWidth(200)
@@ -99,7 +111,7 @@ class TakeManager(QMainWindow):
         self.alignment_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         QVBoxLayout(alignment_box).addWidget(self.alignment_label)
         panel_layout.addWidget(alignment_box)
-        baseline_box=QGroupBox('Baseline')
+        baseline_box=QGroupBox('Comparison')
         baseline_layout=QVBoxLayout(baseline_box)
         self.baselines=QComboBox()
         self.baselines.addItem('None',None)
@@ -112,6 +124,10 @@ class TakeManager(QMainWindow):
         self.baseline_start.setEnabled(False)
         self.baseline_start.clicked.connect(self.seek_baseline)
         baseline_layout.addWidget(self.baseline_start)
+        self.compare_button=QPushButton('Compare…')
+        self.compare_button.setEnabled(False)
+        self.compare_button.clicked.connect(self.compare_recording)
+        baseline_layout.addWidget(self.compare_button)
         panel_layout.addWidget(baseline_box)
         self.interval_box = QGroupBox("Interval")
         interval = QVBoxLayout(self.interval_box)
@@ -199,18 +215,32 @@ class TakeManager(QMainWindow):
             return
         folder = QFileDialog.getExistingDirectory(self, "Import recordings", str(self.folder))
         if folder:
-            self.import_folder(folder)
+            self.import_folder(folder, select_root=True)
 
-    def import_folder(self, folder, *, refresh_existing=True):
+    def fit_cable(self):
+        if self.busy() or not self.confirm_pending():
+            return
+        from fitting.cable_fit_window import CableFitWindow
+        self.replay.pause()
+        dialog = CableFitWindow(self.library.root, self)
+        dialog.exec()
+        # Reload the selected take's comparison list without touching raw data.
+        if dialog.result_path is not None and self.replay.data is not None:
+            self.clear_baselines()
+            self.take_loaded(self.replay.data)
+        dialog.deleteLater()
+
+    def import_folder(self, folder, *, refresh_existing=True, select_root=False):
         if self.busy():
             return
-        self.folder = Path(folder).resolve()
+        self.folder = project_path(folder)
         self.replay.pause()
         self.tree.setEnabled(False)
         self.import_button.setEnabled(False)
         self.interval_box.setEnabled(False)
         self.statusBar().showMessage("Indexing source files…")
-        self.importer = Importer(self.library, self.folder, refresh_existing=refresh_existing)
+        self.importer = Importer(self.library, self.folder, refresh_existing=refresh_existing,
+                                 select_root=select_root)
         self.importer.imported.connect(self.imported)
         self.importer.failed.connect(self.import_failed)
         self.importer.finished.connect(self.import_finished)
@@ -280,7 +310,13 @@ class TakeManager(QMainWindow):
         self.quality_timeline.take = None
         self.quality_timeline.update()
         snapshot = deepcopy(entry)
-        self.replay.load_path(Path(entry["path"]), verify=lambda: verify_sources(snapshot))
+        try:
+            path = self.library.resolve_path(entry)
+        except (OSError, ValueError) as exc:
+            self.replay.load_path(None)
+            self.take_failed(str(exc))
+            return
+        self.replay.load_path(path, verify=lambda: self.library.verify(snapshot))
 
     @staticmethod
     def quality_text(q):
@@ -322,10 +358,16 @@ class TakeManager(QMainWindow):
                 self.first, self.last = first, last
         self.interval_box.setEnabled(True)
         self.update_interval()
-        root=Path(__file__).resolve().parents[1]/'runs/coupled_baseline'
+        root=Path(__file__).resolve().parents[1]/'runs'
         self.baselines.blockSignals(True)
-        for path in discover_baselines(take,root):
-            self.baselines.addItem(path.parent.name,path)
+        for folder in ('calibration', 'coupled_baseline'):
+            for path in discover_baselines(take,root/folder):
+                metadata = read_json(path)
+                label = f'{folder} · {path.parent.name}'
+                if metadata.get('cable_fit_variant'):
+                    label = (f"Cable fit {metadata['cable_fit_variant']} · "
+                             f"{metadata['cable_fit_phase']} · {path.parent.name}")
+                self.baselines.addItem(label,path)
         self.baselines.blockSignals(False)
         if self.baselines.count()>1:
             self.baselines.setCurrentIndex(1)
@@ -338,6 +380,7 @@ class TakeManager(QMainWindow):
         self.baselines.blockSignals(False)
         self.baseline_label.setText('No saved comparison')
         self.baseline_start.setEnabled(False)
+        self.compare_button.setEnabled(False)
 
     def select_baseline(self):
         self.replay.set_prediction(None)
@@ -350,11 +393,16 @@ class TakeManager(QMainWindow):
         try:
             baseline=load_baseline(path,self.replay.data)
             self.replay.set_prediction(baseline)
-            self.position_plots.set_prediction(baseline)
+            self.position_plots.set_prediction(
+                None if baseline.metadata.get('mode') == 'prescribed_cable' else baseline)
             metrics=baseline.metadata['metrics']
-            self.baseline_label.setText(f"{baseline.time[0]:.2f}–{baseline.time[-1]:.2f} s\n"
-                f"Position RMSE: {100*metrics['tracking_position_rmse_m']:.1f} cm\n"
-                f"Tip RMSE: {100*metrics['tip_rmse_m']:.1f} cm")
+            text=f"{baseline.time[0]:.2f}–{baseline.time[-1]:.2f} s\n"
+            if baseline.metadata.get('mode') == 'prescribed_cable':
+                text += ('Drone: prescribed measured motion\n'
+                         f"Cable RMSE: {100*metrics['cable_marker_rmse_m']:.1f} cm\n")
+            else:
+                text += f"Position RMSE: {100*metrics['tracking_position_rmse_m']:.1f} cm\n"
+            self.baseline_label.setText(text+f"Tip RMSE: {100*metrics['tip_rmse_m']:.1f} cm")
             self.baseline_label.setToolTip(f"Saved run: {path}\nErrors cover the full saved baseline, not the selected interval.\nModel: {baseline.metadata['model_sha256']}")
             self.baseline_start.setEnabled(True)
         except (ValueError,KeyError,OSError,IndexError) as exc:
@@ -366,6 +414,33 @@ class TakeManager(QMainWindow):
         if self.replay.prediction is not None:
             self.replay.pause()
             self.seek_time(self.replay.prediction.time[0])
+
+    def compare_recording(self):
+        if self.busy() or self.replay.data is None or self.first >= self.last:
+            return
+        from fitting.calibration_window import CalibrationWindow
+        take = self.replay.data
+        start = max(.1, float(take.time[self.first]))
+        duration = float(take.time[self.last])-start
+        if duration < .01-1e-8:
+            self.statusBar().showMessage('Select a longer interval after 0.10 s to provide causal history.')
+            return
+        try:
+            self.library.verify(self.library.entries[self.current_key])
+        except (OSError, ValueError) as exc:
+            self.statusBar().showMessage(str(exc))
+            return
+        self.replay.pause()
+        dialog = CalibrationWindow(take, start_s=start, duration_s=duration, parent=self)
+        dialog.exec()
+        if dialog.result_path is not None:
+            path = dialog.result_path
+            index = self.baselines.findData(path)
+            if index < 0:
+                self.baselines.addItem(f'calibration · {path.parent.name}', path)
+                index = self.baselines.count()-1
+            self.baselines.setCurrentIndex(index)
+        dialog.deleteLater()
 
     def take_failed(self, message):
         self.position_plots.clear()
@@ -395,6 +470,7 @@ class TakeManager(QMainWindow):
         self.dirty = (self.first, self.last) != baseline
         valid = self.first < self.last
         self.save_button.setEnabled(valid)
+        self.compare_button.setEnabled(valid)
         self.selection_quality.setText(self.quality_text(summarize(take, self.first, self.last))
                                        if valid else "Start must be before End")
         self.selection_status.setText("Unsaved" if self.dirty else ("Saved" if saved else "Not saved"))

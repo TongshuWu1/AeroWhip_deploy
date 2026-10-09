@@ -1,0 +1,37 @@
+{
+  "phase": "completed",
+  "round": 80,
+  "episodes": 10240,
+  "steps": 460787,
+  "training_stage": 2,
+  "evaluation_steps": 945,
+  "gradient_updates": 477,
+  "best_return": 1.254422664642334,
+  "reward_scale": 100,
+  "scaled_best_return": 125.4422664642334,
+  "best_replay": "round-00080.npz",
+  "latest_checkpoint": "latest.pt",
+  "elapsed_s": 9007.429690500023,
+  "value_gradient_updates": 9200,
+  "plateau_detection": {
+    "collection": 80,
+    "mode": "stop",
+    "minimum_collections": 40,
+    "flagged": false,
+    "stop": false,
+    "streak": 2,
+    "measurement": "stochastic complete ALL-lane cohort; not independent policy trials",
+    "reason": "no_meaningful_improvement",
+    "gains": {
+      "raw_return": 0.0038225169118959457,
+      "validity": 0.0,
+      "whip_quality": 0.001121934396566937,
+      "containment": 0.0017502804723024887,
+      "hit_rate": -0.0830078125,
+      "delivery_quality": 0.0008550800006386083
+    },
+    "improving_metrics": [],
+    "interpretation": "plateau or regression, NOT convergence or task success"
+  },
+  "termination_reason": "hard_episode_budget"
+}

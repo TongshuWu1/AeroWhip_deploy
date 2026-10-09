@@ -15,13 +15,18 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(ROOT))
 
 from fitting.prepare_window import prepare_window
-from take_processing.take_data import load_take, read_json, digest
+from take_processing.take_data import load_take, read_json
 from take_processing.library import verify_sources
-from simulation.dynamics.coupled import CoupledDynamics
-from simulation.dynamics.coupled_control import CoupledController
+from simulation.tensor_model import TensorModel
+from simulation.model_configuration import (DEFAULT_FIT_MODEL, load_model_configuration,
+    configuration_digest, verify_configuration_sources)
+from controllers.full_state_controller.tensor_controller import GeometricController
+from project_paths import project_path
+from take_processing.paths import resolve_recording_path
 
 
 def run(path, model, duration, start=None):
+    path = resolve_recording_path(path)
     if start is None:
         take = load_take(path)
         segment = read_json(path.with_name('experiment_'+path.stem+'.metadata.json')).get('segment',{})
@@ -36,7 +41,7 @@ def run(path, model, duration, start=None):
 
 def run_prepared(window, model, metadata):
     """Replay an already aligned/initialized window without re-reading its take."""
-    controller = CoupledController(model)
+    controller = GeometricController(model)
     state = window.initial
     positions, rotations, markers = [], [], []
     with torch.no_grad():
@@ -78,17 +83,21 @@ def main():
     parser.add_argument('--start',type=float,help='Elapsed tracking time; otherwise 0.1 s before saved onset')
     parser.add_argument('--output',type=Path,default=ROOT/'runs'/'coupled_baseline'/datetime.now().strftime('%Y%m%d-%H%M%S'))
     args=parser.parse_args()
+    args.output = project_path(args.output)
     torch.set_num_threads(1)
-    config_path=ROOT/'models/physical_model.json';config_hash=digest(config_path)
-    model=CoupledDynamics(config_path)
+    base,model_sources=load_model_configuration(DEFAULT_FIT_MODEL,with_sources=True)
+    config_hash=configuration_digest(base)
+    model=TensorModel(base)
     args.output.mkdir(parents=True,exist_ok=False)
     results=[]
     for i,path in enumerate(args.takes):
-        path=path.resolve()
+        path=resolve_recording_path(path)
         print('Running',path.stem,flush=True)
         try:
             metadata,arrays=run(path,model,args.duration,args.start)
             metadata['model_sha256']=config_hash
+            metadata['model_hash_kind']='resolved_configuration'
+            metadata['model_sources']=model_sources
             metadata['model_config']=model.config
             file=f'{i+1:02d}_{path.stem}'
             np.savez_compressed(args.output/(file+'.npz'),**arrays)
@@ -98,7 +107,7 @@ def main():
         except (ValueError,OSError,FloatingPointError,RuntimeError) as exc:
             results.append({'take':str(path),'error':str(exc)})
             print('Rejected:',str(exc),flush=True)
-    if digest(config_path)!=config_hash:raise RuntimeError('Model configuration changed during comparison')
+    verify_configuration_sources(model_sources)
     (args.output/'summary.json').write_text(json.dumps(results,indent=2,allow_nan=False),encoding='utf-8')
     print('Output:',args.output,flush=True)
 

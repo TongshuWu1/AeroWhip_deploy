@@ -6,8 +6,9 @@ ROOT = Path(__file__).resolve().parents[1]
 from fitting.coupled_fit import FitWindow
 from take_processing.take_data import load_take
 from take_processing.library import source_files, session_name, verify_sources
+from take_processing.paths import resolve_recording_path
 from simulation.state import quaternion_xyzw_to_rotation_matrix
-from simulation.dynamics.coupled import CoupledState
+from simulation.tensor_model import PlantState
 
 
 def rotation_vector(R):
@@ -16,6 +17,32 @@ def rotation_vector(R):
     if angle > np.pi-.01:
         raise ValueError("Initialization rotations span an ambiguous half turn")
     return vector*.5 if angle < 1e-7 else vector*angle/(2*np.sin(angle))
+
+
+def endpoint_velocity(time, values):
+    """Quadratic least-squares derivative at the newest supplied sample.
+
+    Uses only the provided history, including its endpoint. A linear history
+    fit estimates a midpoint velocity under constant acceleration, not this
+    endpoint velocity. Degree two removes that bias, but amplifies noise more
+    than a linear fit; it is not measured velocity or an adaptive filter.
+    """
+    time = np.asarray(time, dtype=np.float64)
+    values = np.asarray(values, dtype=np.float64)
+    if (time.ndim != 1 or len(time) < 3 or values.ndim < 1
+            or values.shape[0] != len(time) or not np.isfinite(time).all()
+            or not np.isfinite(values).all() or np.any(np.diff(time) <= 0)):
+        raise ValueError('Endpoint velocity requires at least three finite, increasing history samples')
+    span = time[-1]-time[0]
+    u = (time-time[-1])/span
+    design = np.column_stack((np.ones_like(u), u, u*u))
+    # Subtract the endpoint to avoid fitting a large world-position offset.
+    shape = values.shape[1:]
+    values = (values-values[-1]).reshape(len(time), -1)
+    coefficients, _, rank, _ = np.linalg.lstsq(design, values, rcond=None)
+    if rank != 3:
+        raise ValueError('History does not determine a quadratic endpoint derivative')
+    return (coefficients[1]/span).reshape(shape)
 
 
 def initialize(model, time, positions, rotations, markers):
@@ -39,9 +66,8 @@ def initialize(model, time, positions, rotations, markers):
         edges = np.repeat(directions, counts, axis=0)*rest[:, None]
         projected.append(np.vstack([root, root+np.cumsum(edges, axis=0)]))
     projected = np.asarray(projected)
-    centered = time-time.mean()
     def slope(values):
-        return np.tensordot(centered, values, axes=(0,0))/np.dot(centered, centered)
+        return endpoint_velocity(time, values)
     R = rotations[-1]
     omega = slope(np.stack([rotation_vector(R.T@previous) for previous in rotations]))
     tracking_v = slope(positions)
@@ -54,19 +80,23 @@ def initialize(model, time, positions, rotations, markers):
     for i, edge in enumerate(np.diff(q, axis=0)):
         tangent = edge/np.linalg.norm(edge)
         velocity[i+1] -= tangent*np.dot(tangent, velocity[i+1]-velocity[i])
-    state = CoupledState(*(model.tensor(v) for v in (
-        positions[-1]+R@com, R, com_v, omega, q[1:], velocity[1:])))
+    state = PlantState(*(model.tensor(v) for v in (
+        positions[-1]+R@com, R, com_v, omega, q[1:], velocity[1:], np.zeros(len(rest)))))
     adjustment = q[model.marker_indices[1:]]-markers[-1]
     return state, {
+        "material_angle_initialization": "zero relative twist; unobserved, not reconstructed",
         "initial_marker_projection_rms_m": float(np.sqrt(np.mean(np.sum(adjustment**2,axis=1)))),
         "initial_marker_projection_max_m": float(np.linalg.norm(adjustment,axis=1).max()),
         "initial_velocity_constraint_correction_max_mps": float(np.linalg.norm(velocity-correction_before,axis=1).max()),
         "history_samples": len(time), "history_duration_s": float(time[-1]-time[0]),
+        "velocity_estimator": "causal quadratic least-squares endpoint derivative",
+        "velocity_polynomial_degree": 2,
+        "velocity_evaluation_time_s": float(time[-1]),
     }
 
 
 def prepare_window(path, model, *, start_s, duration_s=2.5, history_s=.1):
-    path = Path(path).resolve()
+    path = resolve_recording_path(path)
     sources = source_files(path)
     entry = {"sources": sources}
     take = load_take(path)
@@ -78,7 +108,8 @@ def prepare_window(path, model, *, start_s, duration_s=2.5, history_s=.1):
     steps = round(duration_s/model.dt)
     history_steps = round(history_s/model.dt)
     if (steps < 1 or history_steps < 2 or start < history_steps or start+steps >= len(take.time)
-            or abs(steps*model.dt-duration_s)>1e-9):
+            or abs(steps*model.dt-duration_s)>1e-9
+            or abs(history_steps*model.dt-history_s)>1e-9):
         raise ValueError("Window/history lies outside take or duration is not an integer model step")
     first, last = start-history_steps, start+steps
     selected = slice(first,last+1)
@@ -124,5 +155,10 @@ def prepare_window(path, model, *, start_s, duration_s=2.5, history_s=.1):
         "start_source_s":float(take.source_time[start]),"start_frame":int(take.frame[start]),
         "end_frame":int(take.frame[last]),"alignment":take.alignment,
         "command_delay_s":delay,"command_sampling":"left-endpoint zero-order hold at 100 Hz; event quantization < one step",
-        "initialization":initialization,"purpose":"baseline diagnostic; no train/validation role assigned"}
+        "initialization":initialization,
+        "motor_initialization_n":model.config['actuator']['initial_thrust_n'],
+        "motor_initialization_source":"configured provisional values, not measured; reset for each window/segment",
+        "controller_period_s":model.config['controller']['controller_period_s'],
+        "controller_phase_s":0.,
+        "purpose":"baseline diagnostic; no train/validation role assigned"}
     return window, metadata

@@ -1,5 +1,0 @@
-{
-  "status": "aborted",
-  "type": "RuntimeError",
-  "message": "Input changed during experiment: configuration"
-}

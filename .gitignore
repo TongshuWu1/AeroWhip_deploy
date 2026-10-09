@@ -4,3 +4,11 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 /tmp/
+/configs/local_paths.json
+/configs/local_paths.json.tmp
+/build/
+/dist/
+*.pyd
+/simulation/_native*.so
+/simulation/_tensor_native*.so
+/runs/

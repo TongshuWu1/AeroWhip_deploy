@@ -1,0 +1,32 @@
+{
+  "task": "configs/tasks/whip_stage1_curriculum.json",
+  "model": "configs/simulation.json",
+  "scene": "configs/scenes/default.toml",
+  "device": "cuda",
+  "seed": 0,
+  "parallel_environments": 128,
+  "evaluation_environments": 64,
+  "training_episodes": 6400,
+  "evaluation_interval_episodes": 320,
+  "policy_rate_hz": 10,
+  "action_interface": "velocity_v1",
+  "velocity_limit_mps": [2.0, 2.0, 0.8],
+  "workspace_penalty": {"weight": 0.01, "distance_scale_m": 0.1},
+  "learning_rate": 0.0003,
+  "batch_size": 128,
+  "replay_episodes": 512,
+  "gradient_updates_per_round": 800,
+  "minimum_replay_transitions": 512,
+  "hidden_units": 128,
+  "initial_log_std": -0.3,
+  "reward_scale": 100.0,
+  "initial_temperature": 5.0,
+  "target_entropy": -3.0,
+  "exploration": {
+    "initial_target_entropy": 1.5,
+    "hold_transitions": 7200,
+    "anneal_end_transitions": 115200
+  },
+  "discount": 1.0,
+  "target_update_tau": 0.005
+}

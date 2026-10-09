@@ -25,21 +25,22 @@ def main():
     parser.add_argument('--config', type=Path, default=ROOT / 'configs/scenes/default.toml',
                         help='Scene configuration (TOML)')
     parser.add_argument('--model', type=Path, default=DEFAULT_MODEL,
-                        help='Dynamics model configuration (JSON)')
+                        help='Simulation setup or self-contained model snapshot (JSON)')
     parser.add_argument('--trajectory', type=Path,
                         help='Timestamped CSV (SI units): ' + ','.join(COLUMNS) +
                              '. Default: gentle 0.25 m X movement.')
-    parser.add_argument('--device', choices=('cpu', 'cuda'))
-    parser.add_argument('--no-compile', action='store_true')
     args = parser.parse_args()
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-    setup = SetupWindow(ROOT, args.config, args.trajectory)
+    try:
+        setup = SetupWindow(ROOT, args.config, args.trajectory, args.model)
+    except (OSError, ValueError, TypeError) as exc:
+        QtWidgets.QMessageBox.critical(None, 'Cannot load setup', str(exc))
+        return
     if setup.exec() != QtWidgets.QDialog.DialogCode.Accepted:
         return
-    config, trajectory, source = setup.selection
+    config, trajectory, source, model_config = setup.selection
     try:
-        simulation = Simulation(config, model_config=args.model, device=args.device,
-                                compile_physics=not args.no_compile,
+        simulation = Simulation(config, model_config=model_config,
                                 command_source=trajectory)
     except (OSError, ValueError, RuntimeError) as exc:
         QtWidgets.QMessageBox.critical(None, 'Cannot open simulation', str(exc))
@@ -47,8 +48,7 @@ def main():
     viewer = PyVistaViewer(config)
     window = SimulationWindow(viewer, simulation, ControlInput)
     panel = ControllerWindow(viewer, simulation, trajectory, source)
-    window.closed.connect(panel.close)
-    panel.closed.connect(window.close)
+    window.attach_controller(panel)
     if config.viewer.start_maximized:
         window.showMaximized()
     else:

@@ -6,10 +6,11 @@ import tomllib
 
 import numpy as np
 from numpy.typing import NDArray
+from project_paths import project_path
+from simulation.model_configuration import DEFAULT_MODEL
 
 
 FloatArray = NDArray[np.float64]
-DEFAULT_MODEL = Path(__file__).resolve().parents[1] / 'models/residual_20260921-000505.json'
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,8 @@ class InitialStateConfiguration:
     # Omitted positions hang vertically; omitted velocities equal root velocity.
     cable_node_positions_world_m: FloatArray | None = None
     cable_node_velocities_world_mps: FloatArray | None = None
+    # Relative to the root-transported frame; omitted means explicitly untwisted.
+    cable_material_angles_rad: FloatArray | None = None
 
 
 @dataclass(frozen=True)
@@ -56,6 +59,7 @@ class SimulationConfiguration:
     platform: PlatformConfiguration
     viewer: ViewerConfiguration
     timestep_s: float
+    physics_backend: str = 'native'
 
 
 def _vector(table: dict[str, object], key: str, length: int) -> FloatArray:
@@ -107,7 +111,7 @@ def _positive_float(table: dict[str, object], key: str) -> float:
 
 
 def load_configuration(path: str | Path) -> SimulationConfiguration:
-    config_path = Path(path)
+    config_path = project_path(path)
     with config_path.open("rb") as config_file:
         raw = tomllib.load(config_file)
 
@@ -120,7 +124,11 @@ def load_configuration(path: str | Path) -> SimulationConfiguration:
         raise ValueError(f"Missing configuration section: {exc.args[0]}") from exc
 
     if 'cable_spin_rates_radps' in initial:
-        raise ValueError('Cable spin is not supported by the reduced DDER model')
+        raise ValueError('Material angles evolve by overdamped balance; independent spin rates are not state variables')
+
+    backend = simulation.get('backend', 'native')
+    if backend != 'native':
+        raise ValueError('simulation.backend must be native; the old Python simulator was removed')
 
     window_size = _vector(viewer, "window_size_px", 2)
     if np.any(window_size <= 0.0) or np.any(window_size != np.floor(window_size)):
@@ -141,6 +149,7 @@ def load_configuration(path: str | Path) -> SimulationConfiguration:
 
     return SimulationConfiguration(
         timestep_s=_positive_float(simulation, "timestep_s"),
+        physics_backend=backend,
         initial_state=InitialStateConfiguration(
             position_world_m=_vector(initial, "position_world_m", 3),
             quaternion_body_to_world_xyzw=quaternion / quaternion_norm,
@@ -156,6 +165,8 @@ def load_configuration(path: str | Path) -> SimulationConfiguration:
             cable_node_velocities_world_mps=_optional_node_array(
                 initial, "cable_node_velocities_world_mps"
             ),
+            cable_material_angles_rad=(np.asarray(initial['cable_material_angles_rad'], dtype=np.float64)
+                                       if 'cable_material_angles_rad' in initial else None),
         ),
         platform=PlatformConfiguration(
             attachment_offset_body_m=_vector(

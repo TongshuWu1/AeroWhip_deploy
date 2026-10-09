@@ -1,51 +1,77 @@
-"""Explicit maneuver settings; no reward or task-success definition."""
+"""Task episode timing and safety/cost settings; no controller or optimizer."""
 
 from dataclasses import dataclass
 import math
-import operator
+
 
 
 @dataclass(frozen=True)
-class TrainingConfiguration:
+class EpisodeTiming:
     duration_s: float
     post_hold_s: float
-    offset_lower_m: tuple[float, float, float]
-    offset_upper_m: tuple[float, float, float]
-    max_speed_mps: float
-    max_acceleration_mps2: float | None = None
-    control_count: int = 32
-    command_rate_hz: float = 100.  # Legacy configurations retain their original timing.
-    control_mapping: str = 'box'
 
     def __post_init__(self):
-        if self.control_mapping not in ('box', 'cylinder_v1'):
-            raise ValueError('Control mapping must be box or cylinder_v1')
-        if operator.index(self.control_count) < 6:
-            raise ValueError('At least six total control points are required')
-        for name in ('duration_s', 'max_speed_mps', 'command_rate_hz'):
+        for name in ('duration_s', 'post_hold_s'):
             value = getattr(self, name)
-            if not math.isfinite(value) or value <= 0:
-                raise ValueError(f'{name} must be positive and finite')
-        if self.max_acceleration_mps2 is not None:
-            value = self.max_acceleration_mps2
             if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
-                raise ValueError('max_acceleration_mps2 must be positive and finite, or omitted')
-        if not math.isfinite(self.post_hold_s) or self.post_hold_s < 0:
-            raise ValueError('post_hold_s must be finite and nonnegative')
-        for name in ('offset_lower_m', 'offset_upper_m'):
-            values = tuple(getattr(self, name))
-            if len(values) != 3 or not all(math.isfinite(x) for x in values):
-                raise ValueError(f'{name} must contain three finite world-XYZ offsets')
-            object.__setattr__(self, name, values)
-        if not all(a < b for a, b in zip(self.offset_lower_m, self.offset_upper_m)):
-            raise ValueError('Each lower offset must be strictly below its upper offset')
-        for value in (self.duration_s, self.post_hold_s):
-            if not math.isclose(value/.01, round(value/.01), rel_tol=0, abs_tol=1e-8):
-                raise ValueError('Durations must be exact multiples of the 100 Hz timestep')
-        if not math.isclose(self.duration_s*self.command_rate_hz,
-                            round(self.duration_s*self.command_rate_hz), rel_tol=0, abs_tol=1e-8):
-            raise ValueError('Maneuver duration must contain a whole number of command periods')
+                raise ValueError(f'{name} must be positive and finite')
 
-    @property
-    def action_size(self):
-        return 3*(self.control_count-6)+3
+
+@dataclass(frozen=True)
+class LearnedRecoveryConfiguration:
+    """Explicit nominal Stage4 reward/timing, not a scripted controller."""
+    whip_duration_s: float
+    recovery_duration_s: float
+    weight: float
+    position_scale_m: float
+    velocity_scale_mps: float
+    final_hold_s: float
+    position_tolerance_m: float
+    speed_tolerance_mps: float
+    timing_mode: str = 'fixed_window_v1'
+    quality_mode: str = 'gaussian_v1'
+    return_position_scale_m: float = 1.0
+    return_velocity_scale_mps: float = 0.5
+    cable_velocity_scale_mps: float = 1.0
+    cable_horizontal_scale_m: float = 0.25
+    cable_speed_tolerance_mps: float = 0.2
+    cable_horizontal_tolerance_m: float = 0.1
+
+    def __post_init__(self):
+        for name, value in vars(self).items():
+            if name in ('timing_mode','quality_mode'):
+                continue
+            if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
+                raise ValueError('Recovery requires positive finite '+name)
+        if self.weight > 1 or self.final_hold_s > self.recovery_duration_s:
+            raise ValueError('Recovery weight <=1 and hold must fit recovery window')
+        for name in ('whip_duration_s', 'recovery_duration_s', 'final_hold_s'):
+            if abs(getattr(self,name)/.01-round(getattr(self,name)/.01)) > 1e-8:
+                raise ValueError('Recovery timing requires the 100Hz grid')
+        if self.timing_mode not in ('fixed_window_v1','after_first_geometric_hit_v1'):
+            raise ValueError('Unknown recovery timing')
+        if self.quality_mode not in ('gaussian_v1','reciprocal_return_gaussian_hold_v1','return_and_cable_settle_v1'):
+            raise ValueError('Unknown bounded recovery quality')
+        if self.quality_mode=='return_and_cable_settle_v1' and self.timing_mode!='after_first_geometric_hit_v1':
+            raise ValueError('Cable settling requires event-relative recovery')
+
+
+@dataclass(frozen=True)
+class WhipReturnConfiguration:
+    acceleration_cost_weight: float
+    failure_return: float
+    maximum_tilt_deg: float
+    minimum_cable_height_m: float
+    acceleration_cost_scale_mps2: float
+
+    def __post_init__(self):
+        for name in ('acceleration_cost_weight', 'failure_return', 'maximum_tilt_deg',
+                     'minimum_cable_height_m'):
+            if not math.isfinite(getattr(self, name)):
+                raise ValueError(f'{name} must be finite')
+        if (self.acceleration_cost_weight < 0 or not 0 < self.maximum_tilt_deg < 90
+                or self.failure_return >= -self.acceleration_cost_weight):
+            raise ValueError('Require a nonnegative cost, tilt in (0,90), and failure_return < -acceleration_cost_weight')
+        value = self.acceleration_cost_scale_mps2
+        if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
+            raise ValueError('acceleration_cost_scale_mps2 must be positive and finite')

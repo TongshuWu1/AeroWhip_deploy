@@ -1,13 +1,36 @@
 """Optional cylindrical task constraints; no wall forces or state correction."""
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 import math
 
 import torch
 
-from .environment import WhipEnvironment
-from .reward import WhipReward
+@dataclass(frozen=True)
+class WorkspacePenalty:
+    weight: float
+    distance_scale_m: float
 
+    def __post_init__(self):
+        if (isinstance(self.weight, bool) or not math.isfinite(self.weight) or self.weight < 0
+                or isinstance(self.distance_scale_m, bool) or not math.isfinite(self.distance_scale_m)
+                or self.distance_scale_m <= 0):
+            raise ValueError('Workspace penalty needs nonnegative weight and positive distance scale')
+
+    def distances(self, positions, initial_positions, workspace):
+        radial = ((positions[..., :2]-initial_positions[:, None, :2]).norm(dim=-1)-workspace.radius_m).clamp_min(0)
+        vertical = ((workspace.height_lower_world_m-positions[..., 2]).clamp_min(0)
+                    +(positions[..., 2]-workspace.height_upper_world_m).clamp_min(0))
+        return radial, vertical
+
+    def charges(self, positions, initial_positions, workspace, observed):
+        """Right-endpoint 100-Hz integration divided by the fixed full horizon.
+
+        Includes settling, excludes initial sample and unexecuted suffixes.
+        No position projection, command filtering or termination decision.
+        """
+        radial, vertical = self.distances(positions, initial_positions, workspace)
+        density = self.weight*((radial/self.distance_scale_m).square()+(vertical/self.distance_scale_m).square())
+        return torch.where(observed[:, 1:], density[:, 1:]/(positions.shape[1]-1), 0.)
 
 @dataclass(frozen=True)
 class CylinderWorkspace:
@@ -44,52 +67,3 @@ class CylinderWorkspace:
                     center_xy_world_m=[float(x) for x in initial_position[:2]],
                     height_lower_world_m=self.height_lower_world_m,
                     height_upper_world_m=self.height_upper_world_m)
-
-
-class WorkspaceWhipEnvironment(WhipEnvironment):
-    control_mappings = ('box', 'cylinder_v1')
-
-    def __init__(self, configuration, simulator, workspace):
-        super().__init__(configuration, simulator)
-        self.workspace = workspace
-        if configuration.control_mapping == 'cylinder_v1':
-            # Keep configuration bounds meaningful rather than silently ignoring
-            # them. XY is centered at each initial tracking position; Z is world.
-            if (configuration.offset_lower_m[:2] != (-workspace.radius_m,)*2
-                    or configuration.offset_upper_m[:2] != (workspace.radius_m,)*2):
-                raise ValueError('Cylinder mapping requires XY offsets equal to +/- workspace radius')
-            if not bool(((self.start_position[:, 2]+self.lower[2]-workspace.height_lower_world_m).abs() <= 1e-12).all()
-                        & ((self.start_position[:, 2]+self.upper[2]-workspace.height_upper_world_m).abs() <= 1e-12).all()):
-                raise ValueError('Cylinder mapping requires Z offsets to match workspace heights')
-
-    def _control_locations(self, actions):
-        if self.configuration.control_mapping == 'box':
-            return super()._control_locations(actions)
-        a = actions.reshape(len(actions), -1, 3)
-        # Smooth square-to-disk map: x^2+y^2-x^2*y^2 <= 1 for |x|,|y|<=1.
-        # Inward machine-roundoff margin keeps corner/edge actions inside the
-        # unchanged strict cylinder test; it is not a physical safety margin.
-        radius = self.workspace.radius_m*(1-8*torch.finfo(a.dtype).eps)
-        xy = radius*a[..., :2]*torch.sqrt(1-a[..., [1, 0]].square()/2)
-        z = (self.workspace.height_lower_world_m
-             +(a[..., 2:3]+1)*.5*(self.workspace.height_upper_world_m-self.workspace.height_lower_world_m))
-        return torch.cat((self.start_position[:, None, :2]+xy, z), dim=-1)
-
-    def decode(self, actions):
-        points, commands, action_valid, valid, speed, acceleration = super().decode(actions)
-        # A B-spline is inside its control-point convex hull; a cylinder is convex.
-        # Also retain this check for cylinder_v1: initial P/V/A controls are not
-        # learned locations. Box mapping retains its conservative rejection.
-        inside = self.workspace.contains(points, self.start_position).all(-1)
-        return points, commands, action_valid, valid & inside, speed, acceleration
-
-
-class WorkspaceWhipReward(WhipReward):
-    @torch.no_grad()
-    def __call__(self, episode):
-        result = super().__call__(episode)
-        inside = self.environment.workspace.contains(
-            episode.rollout.drone_positions, self.environment.start_position).all(-1)
-        valid = result.valid & inside
-        return replace(result, valid=valid, envelope_valid=result.envelope_valid & inside,
-                       returns=torch.where(valid, result.returns, self.configuration.failure_return))

@@ -8,6 +8,9 @@ import re
 
 import numpy as np
 
+from project_paths import project_path
+from take_processing.paths import rehearsal_archive, resolve_recording_path
+
 
 def read_json(path):
     return json.loads(path.read_text(encoding="utf-8-sig")) if path.is_file() else {}
@@ -48,7 +51,7 @@ class Take:
 
 
 def discover(folder):
-    folder = Path(folder).resolve()
+    folder = project_path(folder)
     search = folder / "data" if (folder / "data").is_dir() else folder
     candidates = []
     for path in search.rglob("*.csv"):
@@ -65,7 +68,7 @@ def discover(folder):
 
 
 def load_take(path):
-    path = Path(path)
+    path = resolve_recording_path(path)
     with path.open(encoding="utf-8-sig", newline="") as stream:
         rows = list(csv.reader(stream))
     metadata = dict(zip(rows[0][::2], rows[0][1::2]))
@@ -151,12 +154,8 @@ def load_take(path):
     protocol = read_json(batch / "protocol.json")
     segment = read_json(logger.with_suffix(".metadata.json")).get("segment", {})
     if protocol.get("rehearsal") and "onset_s" in segment:
-        rehearsal = Path(protocol["rehearsal"])
-        if not rehearsal.is_absolute():
-            root = next((p for p in batch.parents if (p / "data").is_dir()), batch)
-            rehearsal = root / rehearsal
-        archive = rehearsal / "rehearsal.npz"
         try:
+            archive = rehearsal_archive(protocol['rehearsal'], path)
             checked_hash(archive, protocol.get("forecast_sha256"))
             with np.load(archive, allow_pickle=False) as data:
                 if {"reference_time_s", "reference_origin_positions_m"}.issubset(data.files):

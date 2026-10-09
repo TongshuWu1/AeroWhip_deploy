@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=69", "pybind11==3.0.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -16,11 +16,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-analysis = ["matplotlib==3.11.2"]
+build = ["pybind11==3.0.1"]
+poster = ["matplotlib", "PyMuPDF"]
+
+[tool.setuptools]
+py-modules = ["project_paths"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["simulation*", "viewer*", "trajectories*", "controllers*", "take_processing*", "fitting*", "tasks*", "training*"]
+include = ["simulation*", "viewer*", "trajectories*", "controllers*", "take_processing*", "fitting*", "tasks*", "training*", "evaluation*"]
 
 [tool.setuptools.package-data]
 viewer = ["assets/drone/*.stl"]

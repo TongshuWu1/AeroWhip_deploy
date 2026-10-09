@@ -1,18 +1,12 @@
 """Forward-only, GPU-resident episodes using the existing coupled integrator."""
 
 from dataclasses import dataclass, fields
-import math
-import warnings
 
 import torch
 
-from .dynamics.coupled import CoupledState
-from .dynamics.coupled_control import CoupledController
-from .timing import CommandSchedule, TIME_EPS, integration_steps
-
-
-# Execution block only: all configured physical substeps still run unchanged.
-BLOCK_STEPS = 16
+from .tensor_model import ControlledState as PlantState
+from controllers.full_state_controller.tensor_controller import GeometricController
+from .timing import CommandSchedule, TIME_EPS
 
 
 @dataclass(frozen=True)
@@ -36,7 +30,7 @@ class BatchedRolloutResult:
     command_valid: torch.Tensor
     step_finite: torch.Tensor
     step_rotation_valid: torch.Tensor
-    final_state: CoupledState
+    final_state: PlantState
     cable_rest_lengths: torch.Tensor
     cable_marker_indices: torch.Tensor
 
@@ -57,385 +51,145 @@ class BatchedRolloutResult:
 
 
 class BatchedRollout:
-    """Resettable fixed-size batch with independent initial states and delay queues.
+    """Independent canonical controller/motor episodes, with timestamped packets.
 
-    Commands have shape (batch, intervals, 11), acting on left-endpoint intervals.
-    Histories contain intervals+1 samples. Each call resets to the initial states.
-    Invalid command sequences reject the entire lane. On numerical failure a
-    lane freezes at its last valid state, with all subsequent state_valid=False;
-    these masked samples must never be scored as real motion. Other lanes continue.
-    Solver exceptions still abort the call; masks handle returned invalid states.
-    This class does not implement reward, collision detection or a flight envelope.
-    CUDA graphs are forward-only and this object is not safe for concurrent calls.
+    Commands: (batch, packets, 11 or 13). Motor thrust and held wrench survive
+    event/output boundaries. Output validity freezes failed lanes and must be
+    used by consumers. CUDA graphs cache execution only, not another model.
     """
-
     @torch.no_grad()
-    def __init__(self, model, initial_states, *, graph=True, pack_rejected=True,
-                 compile_single=True, compile_batch=True):
+    def __init__(self, model, initial_states, *, graph=True):
         if not model.batched or not initial_states:
-            raise ValueError('Provide a batched coupled model and at least one initial state')
-        self.model, self.controller = model, CoupledController(model)
-        self.batch_size = len(initial_states)
-        self.pack_rejected = pack_rejected
-        self._packed = None
-        self.dt = model.dt
-        delay = float(model.config['controller']['command_delay_s'])
-        if not math.isfinite(delay) or delay < 0:
-            raise ValueError('Command delay must be finite and nonnegative')
-        self.delay_s = delay
-        self.delay_steps = (round(delay/self.dt) if
-            math.isclose(round(delay/self.dt)*self.dt, delay, abs_tol=TIME_EPS, rel_tol=0) else None)
+            raise ValueError('Provide a batched model and initial states')
+        self.model, self.controller = model, GeometricController(model)
+        self.batch_size, self.dt = len(initial_states), model.dt
+        self.delay_s = float(model.config['controller']['command_delay_s'])
         checked = []
-        for initial in initial_states:
-            state = CoupledState(*(model.tensor(getattr(initial, f.name)).detach().clone()
-                                   for f in fields(CoupledState)))
-            p, v = model.tracking_pose(state)
-            q, qv = model.cable_state(state)
-            checked.append(model.initial_state(p, rotation=state.rotation, tracking_velocity=v,
-                omega_body=state.omega_body, cable_positions=q, cable_velocities=qv))
-        self.initial = tuple(torch.stack([getattr(s, f.name) for s in checked])
-                             for f in fields(CoupledState))
-        self.hold = model.tensor([0.]*11).expand(self.batch_size, -1).clone()
-        self.hold[:, :3] = self.observe(self.initial)[0]
-        self.hold[:, 9] = torch.atan2(self.initial[1][:, 1, 0], self.initial[1][:, 0, 0])
-        self.marker_indices = torch.as_tensor(model.marker_indices, device=self.hold.device, dtype=torch.long)
-        self.graph = None
-        self._segment_graphs = {}
-        self._schedule_cache = None
-        self._single_step = None
-        self._single_warmed_steps = set()
-        self._batch_step = None
-        self._batch_warmed_steps = set()
-        if graph and self.hold.is_cuda:
-            torch.backends.cuda.preferred_linalg_library('cusolver')
-            # Enable lazy capture; graph objects live in the bounded block cache.
-            self.graph = True
-            if compile_single and self.batch_size == 1:
-                # Keep the shared model untouched: training may own it too.
-                self._single_step = torch.compile(model.controlled_substep,
-                    backend='inductor', fullgraph=True)
-            elif compile_batch and self.batch_size > 1 and model.n == 20:
-                # Qualified on the current 20-node mesh. Other meshes retain
-                # the uncompiled path; earlier 30-node comparisons diverged.
-                try:
-                    self._batch_step = torch.compile(self._one_substep,
-                        backend='inductor', fullgraph=True, dynamic=False,
-                        options={'triton.cudagraphs': False})
-                except Exception as exc:
-                    self._disable_batch_compilation(exc)
+        for s in initial_states:
+            p,v = model.tracking_pose(s)
+            q,qv = model.cable_state(s)
+            physical = model.initial_state(p,rotation=s.rotation,tracking_velocity=v,
+                omega_body=s.omega_body,cable_positions=q,cable_velocities=qv,
+                material_angles=s.material_angles)
+            checked.append(model.controller_state(physical))
+        self.initial = tuple(torch.stack([getattr(s,f.name) for s in checked])
+                             for f in fields(PlantState))
+        self.hold = model.tensor([0.]*13).expand(self.batch_size,-1).clone()
+        self.hold[:,:3] = self.observe(self.initial)[0]
+        self.hold[:,9] = torch.atan2(self.initial[1][:,1,0],self.initial[1][:,0,0])
+        self.marker_indices = torch.tensor(model.marker_indices,device=model.device,dtype=torch.long)
+        self.graph = bool(graph and self.hold.is_cuda)
+        self._graphs = {}
 
-    def observe(self, state):
+    def observe(self,state):
         def one(*values):
-            s = CoupledState(*values)
-            return (*self.model.tracking_pose(s), *self.model.cable_state(s))
+            s = PlantState(*values)
+            return (*self.model.tracking_pose(s),*self.model.cable_state(s))
         return torch.vmap(one)(*state)
 
-    def _advance(self, *args, duration_s=None):
-        count = len(fields(CoupledState))
-        previous, command, alive = args[:count], args[count], args[count+1]
-
+    def _advance(self,state,command,duration,start):
         def one(*values):
-            result = self.model.step_unchecked(CoupledState(*values[:-1]), values[-1], self.controller, duration_s)
-            return tuple(getattr(result, f.name) for f in fields(result))
+            result = self.model.step_unchecked(PlantState(*values[:-1]),values[-1],
+                self.controller,duration,start_s=start)
+            return tuple(getattr(result,f.name) for f in fields(result))
+        return torch.vmap(one)(*state,command)
 
-        proposed = torch.vmap(one)(*previous, command)
-        finite = torch.stack([torch.isfinite(x).flatten(1).all(-1) for x in proposed]).all(0)
-        rotation = proposed[1]
-        orthogonal = (rotation.transpose(-1, -2) @ rotation-self.model.eye3).abs().amax(dim=(-1, -2)) <= 1e-6
-        determinant = (torch.linalg.cross(rotation[:, :, 0], rotation[:, :, 1], dim=-1)*rotation[:, :, 2]).sum(-1)
-        rotation_valid = orthogonal & ((determinant-1.).abs() <= 1e-6)
-        alive = alive & finite & rotation_valid
-        state = tuple(torch.where(alive.reshape(-1, *([1]*(x.ndim-1))), x, old)
-                      for x, old in zip(proposed, previous))
-        return (*state, finite, rotation_valid, alive, *self.observe(state))
-
-    @torch.no_grad()
-    def run(self, commands, *, admissible=None, command_times_s=None, duration_s=None):
-        """No CPU transfers or host-side value checks inside the time loop."""
-        if (not isinstance(commands, torch.Tensor) or commands.ndim != 3
-                or commands.shape[0] != self.batch_size or commands.shape[1] < 1
-                or commands.shape[2] != 11 or commands.device != self.hold.device
-                or commands.dtype != self.hold.dtype):
-            raise ValueError('Commands must be (batch, intervals, 11), on the model device with float64 dtype')
-        batch, steps, _ = commands.shape
-        if admissible is None:
-            admissible = torch.ones(batch, dtype=torch.bool, device=commands.device)
-        if (not isinstance(admissible, torch.Tensor) or admissible.shape != (batch,) or admissible.dtype != torch.bool
-                or admissible.device != commands.device):
-            raise ValueError('Admissibility must be a boolean tensor of shape (batch,) on the model device')
-        requested = commands.detach().clone()
-        command_valid = torch.isfinite(requested).all(-1) & (requested[:, :, 10] == 0)
-        alive = admissible & command_valid.all(-1)
-        if command_times_s is not None or self.delay_steps is None:
-            if command_times_s is None:
-                import numpy as np
-                command_times_s = np.arange(steps)*self.dt
-                duration_s = steps*self.dt
-            if duration_s is None:
-                raise ValueError('Timestamped commands require an explicit rollout duration')
-            return self._run_scheduled(requested, command_valid, alive, command_times_s, duration_s)
-        if duration_s is not None:
-            raise ValueError('Explicit duration requires command_times_s')
-        if self.pack_rejected and self.graph is not None and batch > 1:
-            # One host count before integration, never inside the time loop.
-            # Compiled batches keep a fixed width, but still use the frozen
-            # shortcut if every lane is rejected. Eager batches retain packing.
-            admitted = int(alive.sum())
-            if admitted == 0 or (self._batch_step is None and admitted <= 7*batch//8):
-                return self._run_packed(requested, command_valid, alive)
-        return self._run_full(requested, command_valid, alive)
-
-    def _one_substep(self, *values):
-        state, command, h = values[:-2], values[-2], values[-1]
-        def one(*args):
-            result = self.model.controlled_substep(CoupledState(*args[:-1]),
-                                                   args[-1], self.controller, h)
-            return tuple(getattr(result, f.name) for f in fields(result))
-        return torch.vmap(one)(*state, command)
-
-    def _physical_block(self, state, command, count, h):
-        if self._batch_step is not None:
-            for _ in range(count):
-                state = self._batch_step(*state, command, h)
-            return state
-        if self._single_step is not None:
-            s = CoupledState(*(x[0] for x in state))
-            for _ in range(count):
-                s = self._single_step(s, command[0], self.controller, h)
-            return tuple(getattr(s, f.name).unsqueeze(0) for f in fields(s))
-        def one(*values):
-            s = CoupledState(*values[:-1])
-            for _ in range(count):
-                s = self.model.controlled_substep(s, values[-1], self.controller, h)
-            return tuple(getattr(s, f.name) for f in fields(s))
-        return torch.vmap(one)(*state, command)
-
-    def _block(self, state, command, count, h):
-        if self._batch_step is not None and h not in self._batch_warmed_steps:
-            try:
-                # Warm outside capture, including intermediate-state layouts.
-                self._physical_block(state, command, 2, h)
-                self._batch_warmed_steps.add(h)
-            except Exception as exc:
-                self._disable_batch_compilation(exc)
-        if self._batch_step is None or (count, h) in self._segment_graphs:
-            # Existing graph replay may update aliased state buffers: propagate
-            # runtime errors instead of retrying potentially advanced state.
-            return self._captured_block(state, command, count, h)
-        try:
-            return self._captured_block(state, command, count, h)
-        except Exception as exc:
-            # New capture owns cloned buffers, leaving the input unchanged.
-            # If the eager solver also fails, its exception still propagates.
-            self._disable_batch_compilation(exc)
-            return self._captured_block(state, command, count, h)
-
-    def _disable_batch_compilation(self, exc):
-        self._batch_step = None
-        self._batch_warmed_steps.clear()
-        self._segment_graphs.clear()
-        warnings.warn(f'Batched compilation failed; using the uncompiled rollout: {exc}',
-                      RuntimeWarning)
-
-    def _captured_block(self, state, command, count, h):
-        if self._single_step is not None and h not in self._single_warmed_steps:
-            # Compile outside CUDA capture, including the intermediate layout.
-            try:
-                self._physical_block(state, command, 2, h)
-                self._single_warmed_steps.add(h)
-            except Exception as exc:
-                self._single_step = None
-                self._segment_graphs.clear()
-                warnings.warn(f'Single-episode compilation failed; using the uncompiled rollout: {exc}',
-                              RuntimeWarning)
-        key = (count, h)
-        if key not in self._segment_graphs:
-            if len(self._segment_graphs) >= 8:
-                return self._physical_block(state, command, count, h)
-            buffers = tuple(x.clone() for x in (*state, command))
-
+    def _chunk(self,state,command,duration,start):
+        # Phase is the only absolute-time dependence. Round solely timestamp
+        # roundoff, not physical intervals or event locations.
+        phase = start % self.model.controller_period_s
+        if abs(phase-self.model.controller_period_s) <= TIME_EPS or phase <= TIME_EPS:
+            phase = 0.
+        if not self.graph:
+            return self._advance(state,command,duration,phase)
+        key = (round(duration,14),round(phase,14))
+        if key not in self._graphs:
+            if len(self._graphs) >= 16:
+                return self._advance(state,command,duration,phase)
+            buffers = tuple(x.clone() for x in (*state,command))
             def execute():
-                out = self._physical_block(buffers[:-1], buffers[-1], count, h)
-                for target, value in zip(buffers[:-1], out):
+                output = self._advance(buffers[:-1],buffers[-1],duration,phase)
+                for target,value in zip(buffers[:-1],output):
                     target.copy_(value)
-
             stream = torch.cuda.Stream(device=command.device)
             stream.wait_stream(torch.cuda.current_stream())
             with torch.cuda.stream(stream):
                 for _ in range(3):
                     execute()
             torch.cuda.current_stream().wait_stream(stream)
-            graph = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(graph, stream=stream):
+            captured = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(captured,stream=stream):
                 execute()
-            self._segment_graphs[key] = (buffers, graph)
-        buffers, graph = self._segment_graphs[key]
-        for target, value in zip(buffers, (*state, command)):
-            if target is not value:
-                target.copy_(value)
-        graph.replay()
-        return buffers[:-1]
+            self._graphs[key] = buffers,captured
+        buffers,captured = self._graphs[key]
+        for target,value in zip(buffers,(*state,command)):
+            target.copy_(value)
+        captured.replay()
+        # Own outputs: the next graph replay must not mutate last-valid state.
+        return tuple(x.clone() for x in buffers[:-1])
 
-    def _chunk(self, state, command, alive, duration):
-        if self.graph is None:
-            return self._advance(*state, command, alive, duration_s=duration)
-        count, h = integration_steps(duration, self.model.physics_dt)
-        previous = state
-        blocks, tail = divmod(count, BLOCK_STEPS)
-        for _ in range(blocks):
-            state = self._block(state, command, BLOCK_STEPS, h)
-        if tail:
-            state = self._block(state, command, tail, h)
-        # Preserve validity/freeze/observation at the original interval boundary,
-        # not at the internal execution-block boundaries.
-        finite = torch.stack([torch.isfinite(x).flatten(1).all(-1) for x in state]).all(0)
-        rotation = state[1]
-        orthogonal = (rotation.transpose(-1, -2) @ rotation-self.model.eye3).abs().amax(dim=(-1, -2)) <= 1e-6
-        determinant = (torch.linalg.cross(rotation[:, :, 0], rotation[:, :, 1], dim=-1)*rotation[:, :, 2]).sum(-1)
-        rotation_valid = orthogonal & ((determinant-1.).abs() <= 1e-6)
-        alive = alive & finite & rotation_valid
-        state = tuple(torch.where(alive.reshape(-1, *([1]*(x.ndim-1))), x, old)
-                      for x, old in zip(state, previous))
-        return (*state, finite, rotation_valid, alive, *self.observe(state))
-
-    def _run_scheduled(self, native, native_valid, alive, times, duration, *, all_rejected=False):
-        """Exact event splits; histories remain on the feedback clock.
-
-        Planning is CPU-only and cached before the integration loop. Commands,
-        masks, state and reusable CUDA graphs remain on the model device.
-        """
-        key = (tuple(times), float(duration))
-        if self._schedule_cache is None or self._schedule_cache[0] != key:
-            schedule = CommandSchedule.build(times, duration, self.dt, self.delay_s)
-            if len(times) != native.shape[1]:
-                raise ValueError('One timestamp is required per command row')
-            self._schedule_cache = key, schedule
-        schedule = self._schedule_cache[1]
-        if len(times) != native.shape[1]:
-            raise ValueError('One timestamp is required per command row')
-        steps, batch = len(schedule.parts), len(native)
-        indices = torch.as_tensor(schedule.requested_indices, device=native.device)
-        requested, command_valid = native[:, indices], native_valid[:, indices]
-        if self.pack_rejected and self.graph is not None and batch > 1 and not all_rejected:
-            admitted = int(alive.sum())
-            if admitted == 0 or (self._batch_step is None and admitted <= 7*batch//8):
-                return self._run_packed(requested, command_valid, alive,
-                    native=(native, native_valid, times, duration))
-        safe = torch.where(alive[:, None, None], native, self.hold[:, None])
+    @torch.no_grad()
+    def run(self,commands,*,admissible=None,command_times_s=None,duration_s=None):
+        import numpy as np
+        if (not isinstance(commands,torch.Tensor) or commands.ndim != 3
+                or commands.shape[0] != self.batch_size or commands.shape[1] < 1
+                or commands.shape[2] not in (11,13) or commands.device != self.hold.device
+                or commands.dtype != self.hold.dtype):
+            raise ValueError('Commands must be float64 (batch, packets, 11 or 13) on the model device')
+        native = commands.detach().clone()
+        native_valid = torch.isfinite(native).all(-1)
+        if native.shape[-1] == 11:
+            native_valid = native_valid & (native[:,:,10] == 0)
+            native = torch.cat((native[:,:,:10],torch.zeros_like(native[:,:,:3])),dim=-1)
+        if admissible is None:
+            admissible = torch.ones(self.batch_size,device=native.device,dtype=torch.bool)
+        if (admissible.shape != (self.batch_size,) or admissible.dtype != torch.bool
+                or admissible.device != native.device):
+            raise ValueError('Admissibility must be a batch-sized boolean tensor on the model device')
+        alive = admissible & native_valid.all(-1)
+        if command_times_s is None:
+            if duration_s is not None:
+                raise ValueError('Explicit duration requires timestamps')
+            command_times_s = np.arange(native.shape[1])*self.dt
+            duration_s = native.shape[1]*self.dt
+        if duration_s is None:
+            raise ValueError('Timestamped commands require duration')
+        schedule = CommandSchedule.build(command_times_s,duration_s,self.dt,self.delay_s)
+        if len(command_times_s) != native.shape[1]:
+            raise ValueError('Command timestamp count mismatch')
+        indices = torch.as_tensor(schedule.requested_indices,device=native.device)
+        requested,command_valid = native[:,indices],native_valid[:,indices]
+        safe = torch.where(alive[:,None,None],native,self.hold[:,None])
         state = tuple(x.clone() for x in self.initial)
-        p, v, q, qv = self.observe(state)
-        values = (p, v, state[1], state[3], q, qv)
-        histories = [x.new_empty((batch, steps+1, *x.shape[1:])) for x in values]
-        for history, value in zip(histories, values):
-            history[:, 0] = value
-        valid = torch.empty((batch, steps+1), dtype=torch.bool, device=native.device)
-        valid[:, 0] = alive
-        finite, rotations = (torch.empty_like(command_valid) for _ in range(2))
-        applied = torch.empty_like(requested)
-        count = len(fields(CoupledState))
-        frozen_chunks = {}
-        for k, parts in enumerate(schedule.parts):
-            left = int(schedule.applied_indices[k])
-            applied[:, k] = torch.where(alive[:, None], safe[:, left] if left >= 0 else self.hold, self.hold)
-            all_finite, all_rotations = torch.ones_like(alive), torch.ones_like(alive)
-            for interval, row in parts:
-                command = torch.where(alive[:, None], safe[:, row] if row >= 0 else self.hold, self.hold)
-                chunk_key = integration_steps(interval, self.model.physics_dt)
-                if all_rejected and chunk_key in frozen_chunks:
-                    output = frozen_chunks[chunk_key]
-                else:
-                    output = self._chunk(state, command, alive, interval)
-                    if all_rejected:
-                        # Graph outputs are reusable buffers; own these cached values.
-                        output = tuple(value.clone() for value in output)
-                        frozen_chunks[chunk_key] = output
-                state = output[:count]
-                all_finite = all_finite & output[count]
-                all_rotations = all_rotations & output[count+1]
-                alive = output[count+2]
-            finite[:, k], rotations[:, k], valid[:, k+1] = all_finite, all_rotations, alive
-            p, v, q, qv = output[count+3:]
-            for history, value in zip(histories, (p, v, state[1], state[3], q, qv)):
-                history[:, k+1] = value
-        return BatchedRolloutResult(torch.as_tensor(schedule.time_s, device=native.device, dtype=native.dtype),
-            requested, applied, *histories, valid, command_valid, finite, rotations,
-            CoupledState(*(x.clone() for x in state)), self.model.rest.clone(), self.marker_indices.clone())
-
-    def _run_full(self, requested, command_valid, alive):
-        batch, steps, _ = requested.shape
-        safe = torch.where(alive[:, None, None], requested, self.hold[:, None])
-        delayed = torch.cat((self.hold[:, None].expand(-1, self.delay_steps, -1), safe), dim=1)[:, :steps]
-        state = tuple(x.clone() for x in self.initial)
-        p, v, q, qv = self.observe(state)
-        values = (p, v, state[1], state[3], q, qv)
-        histories = [x.new_empty((batch, steps+1, *x.shape[1:])) for x in values]
-        for history, value in zip(histories, values):
-            history[:, 0] = value
-        valid = torch.empty((batch, steps+1), dtype=torch.bool, device=requested.device)
-        valid[:, 0] = alive
-        finite, rotations = (torch.empty_like(command_valid) for _ in range(2))
-        applied = torch.empty_like(requested)
-        count = len(fields(CoupledState))
-        for k in range(steps):
-            command = torch.where(alive[:, None], delayed[:, k], self.hold)
-            applied[:, k] = command
-            output = self._chunk(state, command, alive, self.dt)
-            state = output[:count]
-            finite[:, k], rotations[:, k], alive = output[count:count+3]
-            valid[:, k+1] = alive
-            p, v, q, qv = output[count+3:]
-            for history, value in zip(histories, (p, v, state[1], state[3], q, qv)):
-                history[:, k+1] = value
-        return BatchedRolloutResult(torch.arange(steps+1, device=requested.device, dtype=requested.dtype)*self.dt,
-            requested, applied, *histories, valid, command_valid, finite, rotations,
-            CoupledState(*(x.clone() for x in state)), self.model.rest.clone(), self.marker_indices.clone())
-
-    def _run_packed(self, requested, command_valid, alive, *, native=None):
-        """Skip known-rejected episodes without resampling or changing outputs."""
-        indices = alive.nonzero().flatten()
-        count, steps = len(indices), requested.shape[1]
-        # Rejected lanes stay at their initial state. Evaluate the proposed
-        # hold step once to preserve their finite/rotation diagnostics exactly.
-        frozen = (self._run_full(requested[:, :1], command_valid[:, :1], torch.zeros_like(alive))
-                  if native is None else self._run_scheduled(native[0], native[1], torch.zeros_like(alive),
-                                                           native[2], native[3], all_rejected=True))
-        result = {}
-        interval_fields = {'applied_commands', 'step_finite', 'step_rotation_valid'}
-        shared_fields = {'time_s', 'cable_rest_lengths', 'cable_marker_indices'}
-        for field in fields(frozen):
-            name, value = field.name, getattr(frozen, field.name)
-            if name == 'final_state':
-                result[name] = CoupledState(*(getattr(value, f.name).clone() for f in fields(value)))
-            elif name == 'time_s':
-                result[name] = torch.arange(steps+1, device=requested.device, dtype=requested.dtype)*self.dt
-            elif name == 'requested_commands':
-                result[name] = requested
-            elif name == 'command_valid':
-                result[name] = command_valid
-            elif name in shared_fields:
-                result[name] = value.clone()
-            else:
-                length = steps if name in interval_fields else steps+1
-                result[name] = (value[:, :1].expand(-1, length, *value.shape[2:]).clone()
-                                if native is None else value.clone())
-        if count:
-            if self._packed is None or self._packed.batch_size != count:
-                # Bound the cache to one width; an accepted-count change rebuilds it.
-                self._packed = None
-                initial = CoupledState(*(x[0] for x in self.initial))
-                self._packed = BatchedRollout(self.model, [initial]*count,
-                                             pack_rejected=False, compile_single=False,
-                                             compile_batch=False)
-            # Lane identities may change even when the accepted count does not.
-            for target, source in zip(self._packed.initial, self.initial):
-                target.copy_(source[indices])
-            self._packed.hold.copy_(self.hold[indices])
-            output = (self._packed.run(requested[indices].contiguous()) if native is None else
-                      self._packed.run(native[0][indices].contiguous(), command_times_s=native[2], duration_s=native[3]))
-            for name, value in result.items():
-                if name == 'final_state':
-                    for field in fields(value):
-                        getattr(value, field.name).index_copy_(0, indices, getattr(output.final_state, field.name))
-                elif name not in shared_fields:
-                    value.index_copy_(0, indices, getattr(output, name))
-        return BatchedRolloutResult(**result)
+        p,v,q,qv = self.observe(state)
+        history = [[x.clone()] for x in (p,v,state[1],state[3],q,qv)]
+        valid,finite_history,rotation_history,applied = [alive.clone()],[],[],[]
+        for k,parts in enumerate(schedule.parts):
+            row = int(schedule.applied_indices[k])
+            applied.append(torch.where(alive[:,None],safe[:,row] if row >= 0 else self.hold,self.hold))
+            cursor = float(schedule.time_s[k])
+            finite,rotation_ok = torch.ones_like(alive),torch.ones_like(alive)
+            for duration,row in parts:
+                command = torch.where(alive[:,None],safe[:,row] if row >= 0 else self.hold,self.hold)
+                proposed = self._chunk(state,command,duration,cursor)
+                good = torch.stack([torch.isfinite(x).flatten(1).all(-1) for x in proposed]).all(0)
+                R = proposed[1]
+                orthogonal = (R.transpose(-1,-2)@R-self.model.eye3).abs().amax(dim=(-1,-2)) <= 1e-6
+                det = (torch.linalg.cross(R[:,:,0],R[:,:,1],dim=-1)*R[:,:,2]).sum(-1)
+                rot = orthogonal & ((det-1).abs() <= 1e-6)
+                alive = alive & good & rot
+                finite,rotation_ok = finite & good,rotation_ok & rot
+                state = tuple(torch.where(alive.reshape(-1,*([1]*(x.ndim-1))),x,old)
+                              for x,old in zip(proposed,state))
+                cursor += duration
+            p,v,q,qv = self.observe(state)
+            for values,value in zip(history,(p,v,state[1],state[3],q,qv)):
+                values.append(value.clone())
+            valid.append(alive.clone())
+            finite_history.append(finite)
+            rotation_history.append(rotation_ok)
+        return BatchedRolloutResult(
+            torch.as_tensor(schedule.time_s,device=native.device,dtype=native.dtype),
+            requested,torch.stack(applied,1),*(torch.stack(x,1) for x in history),
+            torch.stack(valid,1),command_valid,torch.stack(finite_history,1),torch.stack(rotation_history,1),
+            PlantState(*(x.clone() for x in state)),self.model.rest.clone(),self.marker_indices.clone())

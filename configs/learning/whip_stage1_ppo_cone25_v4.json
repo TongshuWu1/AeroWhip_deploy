@@ -1,0 +1,63 @@
+{
+  "algorithm": "ppo",
+  "task": "configs/tasks/whip_stage1_cone25_v2.json",
+  "model": "configs/simulation.json",
+  "scene": "configs/scenes/default.toml",
+  "device": "cuda",
+  "seed": 0,
+  "parallel_environments": 128,
+  "evaluation_environments": 64,
+  "training_episodes": 10240,
+  "evaluation_interval_episodes": 512,
+  "policy_rate_hz": 10,
+  "action_interface": "velocity_v1",
+  "target_observation": "initial_relative_position_v1",
+  "velocity_limit_mps": [
+    2,
+    2,
+    0.8
+  ],
+  "workspace_penalty": {
+    "weight": 0.1,
+    "distance_scale_m": 0.1
+  },
+  "learning_rate": 0.0003,
+  "batch_size": 256,
+  "hidden_units": 128,
+  "initial_log_std": -0.3,
+  "reward_scale": 100,
+  "discount": 1,
+  "ppo": {
+    "epochs": 5,
+    "clip_ratio": 0.2,
+    "gae_lambda": 0.95,
+    "value_loss_weight": 0.5,
+    "max_grad_norm": 0.5,
+    "target_kl": 0.02,
+    "post_step_kl": {
+      "maximum_trials": 8
+    },
+    "transfer_entropy_clock": "inherit",
+    "entropy": {
+      "initial_weight": 0.02,
+      "final_weight": 0.001,
+      "hold_fraction": 0.1,
+      "anneal_end_fraction": 0.8
+    }
+  },
+  "training_stage": 1,
+  "plateau_detection": {
+    "mode": "stop",
+    "minimum_collections": 40,
+    "window_collections": 8,
+    "patience_checks": 3,
+    "check_interval_collections": 1,
+    "require_entropy_floor": true,
+    "minimum_gain": {
+      "return": 0.005,
+      "quality": 0.005,
+      "rate": 0.02,
+      "containment_m": 0.005
+    }
+  }
+}

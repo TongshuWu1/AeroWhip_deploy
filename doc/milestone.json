@@ -1,0 +1,80 @@
+{
+  "schema": "aerowhip_simulation_milestone_cleanup_v1",
+  "date": "2026-10-09",
+  "scope": "Stable current fixed-target simulation pipeline; simplified regressions and recoverable development-history archive. No new policy training, hardware integration or scientific criteria change.",
+  "archive_root": "C:/Users/wts28/Documents/ChatGPT/aerodynamic experiment report/AeroWhip-development-archive-20261009",
+  "archive_is_external_not_in_clone": true,
+  "archive": {
+    "retired_files": 24416,
+    "retired_bytes": 11070232542,
+    "retired_manifest": "retired-manifest.csv",
+    "retired_manifest_sha256": "ccf7aa7d4225ef44a5c049fec3b6127953aaf0d5d72e863be6a3b26ef34f0fdc",
+    "optional_study_files_including_caches": 8,
+    "study_manifest": "analysis-manifest.csv",
+    "study_manifest_sha256": "e84cd61e0a55d847d641f88d4908265980fedcb9d39d73e038532e54a3179fa8",
+    "old_test_files": 35,
+    "old_test_declared_methods": 370,
+    "old_test_location": "tests-original",
+    "original_docs": "documentation-originals",
+    "other_originals": [
+      "validate_stages.py",
+      "freeze_stages.py",
+      "handoff.md",
+      "training-window-before.py"
+    ],
+    "verification": "All moved run/config/development and study files SHA256 verified before/after move. Original tests/docs/helpers byte-identical copies verified before removal/rewrite.",
+    "restore": "Read manifests first; retired/ preserves repository-relative paths. Restore only needed historical artifacts and their original implementation; never overwrite the current checkout blindly.",
+    "prior_archive_pointer": "retired/doc/cleanup-20261002.json"
+  },
+  "current_models": "../models/milestone-20261009/manifest.json",
+  "retained_model_collections": [
+    80,
+    80,
+    120,
+    60
+  ],
+  "latest_stopped_campaign": {
+    "stage": 1,
+    "collections": 68,
+    "episodes": 8704,
+    "reason": "human stop; no replacement Stage2–4 runs",
+    "state": "retired/runs/stage1_stage4_complete/20261009-1222-fixed-target80/state.json"
+  },
+  "tests": {
+    "modules": 7,
+    "checks": 65,
+    "passed": 65,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "elapsed_s": 4.939,
+    "os_exit_code": 0,
+    "scope": "Self-contained current settings/handoffs, scoring, PPO math/rollback/restart (CPU and CUDA), records/UI, clocks, short native scalar/tensor step parity and failure handling.",
+    "log_in_archive": "validation-final.json",
+    "log_sha256": "cbdcdb268424c582f6ccc7933ba4f423345f4a904ac186ec1782dca36602b845",
+    "earlier_attempts_retained": true,
+    "hidden_historical_exclusions": false
+  },
+  "other_checks": {
+    "python_ast_files": 128,
+    "pip_check": "No broken requirements found; OS exit0",
+    "model_package": "CPU exact reload/finite synthetic inference and saved-replay integrity checked; final evidence in model manifest."
+  },
+  "narrow_production_fix": "SettingsDialog now uses a boolean checkbox instead of converting bools to text; all four current preset no-edit round trips pass. No settings/physics/rewards/success/curriculum changed.",
+  "preserved": [
+    "Physical source/configuration and current stage defaults",
+    "Four exact FINAL checkpoints with original interfaces and essential evidence",
+    "Measured m3 trajectory and take catalog; original external recordings untouched",
+    "Original Git history (no force push/history rewrite)",
+    "Idle user Training UI; no worker was stopped during cleanup"
+  ],
+  "compatibility_configs": "Four current v4 presets are the normal CLI pipeline. Four older presets and their task files remain only because existing low-level configuration APIs reference them; scientific defaults were not changed by deleting a referenced file.",
+  "training_monitor": "PAUSED; no new training/evaluation campaign dispatched",
+  "limitations": [
+    "Linux native build and runtime not verified on the future host",
+    "Crazyflie/flight interface and partial-state cable estimation not implemented/validated",
+    "Saved milestone policies predate current relative-goal inputs; no exact historical resume/current-source training claim",
+    "Saved nominal success is not workspace containment, robustness or flight evidence"
+  ],
+  "pre_commit_git_head": "6cb247cb2ebd476a342b16d0f263c532be4f73c3"
+}

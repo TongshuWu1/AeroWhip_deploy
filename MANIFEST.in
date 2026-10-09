@@ -1,0 +1,5 @@
+include native/*.hpp
+include native/*.cpp
+include native/*.inc
+include native/CMakeLists.txt
+include build_engine.py

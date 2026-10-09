@@ -15,7 +15,7 @@ class MetricPlot(QtWidgets.QWidget):
         self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
 
     def set_series(self, series):
-        # Each series contains (label, [(update, value)], dashed). None is a gap.
+        # Each series contains (label, [(iteration, value)], dashed). None is a gap.
         self.series = series
         self.update()
 
@@ -70,7 +70,7 @@ class MetricPlot(QtWidgets.QWidget):
             painter.drawText(QtCore.QRectF(x-22, rect.bottom()+8, 44, 18),
                              QtCore.Qt.AlignmentFlag.AlignCenter, str(tick))
         painter.drawText(QtCore.QRectF(rect.left(), self.height()-20, rect.width(), 18),
-                         QtCore.Qt.AlignmentFlag.AlignCenter, 'Update')
+                         QtCore.Qt.AlignmentFlag.AlignCenter, 'Training iteration')
         for i, (_, rows, dashed) in enumerate(self.series):
             path, active = QtGui.QPainterPath(), False
             color = QtGui.QColor(self.COLORS[i % len(self.COLORS)])

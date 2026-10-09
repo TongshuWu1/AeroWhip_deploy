@@ -1,29 +1,22 @@
-"""Open the Training window in PyCharm. Nothing runs until Start is pressed."""
-
-from pathlib import Path
-
-from PySide6 import QtWidgets
-
-from tasks.whip.experiment import load_experiment
-from tasks.whip.resume import inspect_resume
-from training.ui.window import TrainingWindow
-
-
-CONFIGURATION = Path(__file__).resolve().parent/'configs/experiments/whip_stage1_directed.toml'
-RESUME_CHECKPOINT = None
-TOTAL_UPDATES = None  # Use the selected preset's budget; editable in the Training UI.
-
-
-def main():
-    app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-    root = Path(__file__).resolve().parent
-    window = TrainingWindow(root, CONFIGURATION, load_experiment,
-                            runs_directory=root/'runs/whip_single_scenario', resume_inspector=inspect_resume,
-                            resume_checkpoint=RESUME_CHECKPOINT, total_updates=TOTAL_UPDATES,
-                            additional_runs_directories=(root/'runs/whip_stage1',))
-    window.show()
-    return app.exec()
-
+"""Open visible Training; optionally start fresh or resume a compatible checkpoint."""
+import argparse
+from training.ui.window import main
+from training.configuration import FROZEN_PRESETS
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--start', action='store_true',
+                        help='Open the Training UI and start new training with the current defaults')
+    parser.add_argument('--settings', help='Optional learning-settings JSON; the run remains UI-owned')
+    parser.add_argument('--stage', type=int, choices=(1,2,3,4), help='Select cone25-v4 stage (default: 1): whip, broad delivery, nominal precision, hybrid settling; 80-collection cap each, untrained reward version, plateau stopping never before40 collections')
+    source = parser.add_mutually_exclusive_group()
+    source.add_argument('--resume', help='Select a compatible exact-resume checkpoint in the visible Training UI')
+    source.add_argument('--initialize-actor', help='Fine-tune a saved PPO actor with new task/settings and a fresh critic, not resume')
+    args = parser.parse_args()
+    if args.stage and args.settings:
+        parser.error('Select --stage OR --settings, not both')
+    raise SystemExit(main(auto_start=args.start,resume_checkpoint=args.resume,
+                         initialize_actor=args.initialize_actor,
+                         **({'settings_path': FROZEN_PRESETS[args.stage]} if args.stage else
+                            {'settings_path': args.settings} if args.settings else
+                            {'settings_path': None if args.resume else FROZEN_PRESETS[1]})))

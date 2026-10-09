@@ -13,7 +13,6 @@ import sys
 from time import perf_counter
 
 import numpy as np
-import torch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,6 +23,9 @@ from trajectories.full_state import FullStateTrajectory
 from simulation.configuration import DEFAULT_MODEL, load_configuration
 from simulation.rollout import rollout
 from simulation.runtime import Simulation
+from simulation.model import native_module
+from simulation.model_configuration import load_model_configuration, verify_configuration_sources
+from project_paths import project_path
 
 
 def _digest(path):
@@ -39,33 +41,33 @@ def main():
                         help='Positive number of 0.01 s intervals; default: CSV duration. '
                              'Extra intervals hold the final command; short runs truncate the command sequence.')
     parser.add_argument('--output', type=Path, help='New run directory; existing directories are never overwritten')
-    parser.add_argument('--device', choices=('cpu', 'cuda'))
-    parser.add_argument('--no-compile', action='store_true')
     args = parser.parse_args()
     if args.steps is not None and args.steps < 1:
         parser.error('--steps must be positive')
 
     try:
-        paths = {name: getattr(args, name).resolve() for name in ('trajectory', 'config', 'model')}
+        paths = {name: project_path(getattr(args, name)) for name in ('trajectory', 'config', 'model')}
         sources = {name: {'path': str(path), 'sha256': _digest(path)} for name, path in paths.items()}
         config = load_configuration(paths['config'])
-        model = json.loads(paths['model'].read_text(encoding='utf-8'))
+        model, model_sources = load_model_configuration(paths['model'], with_sources=True)
+        sources.update({'model_'+key: value for key,value in model_sources.items()})
         trajectory = FullStateTrajectory.load(paths['trajectory'])
         trajectory.validate_initial(config)
+        trajectory.validate_controller()
         trajectory_steps = math.ceil(trajectory.duration_s/config.timestep_s-1e-10)
         steps = trajectory_steps if args.steps is None else args.steps
         for name, path in paths.items():
             if _digest(path) != sources[name]['sha256']:
                 raise RuntimeError(f'{name} changed while loading')
-        output = (args.output if args.output is not None else
-                  ROOT/'runs/simulation'/datetime.now().strftime('%Y%m%d-%H%M%S-%f')).resolve()
+        verify_configuration_sources(sources)
+        output = project_path(args.output if args.output is not None else
+                  ROOT/'runs/simulation'/datetime.now().strftime('%Y%m%d-%H%M%S-%f'))
         output.mkdir(parents=True, exist_ok=False)
 
         print('Initializing simulation...', flush=True)
         started_at = datetime.now(timezone.utc).isoformat()
         started = perf_counter()
-        simulation = Simulation(config, model_config=model, device=args.device,
-                                compile_physics=not args.no_compile, command_source=trajectory)
+        simulation = Simulation(config, model_config=model, command_source=trajectory)
         setup_s = perf_counter()-started
         print(f'Running {steps} steps on {simulation.dynamics.device}...', flush=True)
         started = perf_counter()
@@ -74,6 +76,7 @@ def main():
         for name, path in paths.items():
             if _digest(path) != sources[name]['sha256']:
                 raise RuntimeError(f'{name} changed during the run; output not saved')
+        verify_configuration_sources(sources)
 
         metadata = {
             'schema_version': 1, 'status': 'complete', 'started_at_utc': started_at,
@@ -85,10 +88,12 @@ def main():
             'command_timestep_s': trajectory.timestep_s,
             'physics_maximum_timestep_s': simulation.dynamics.model.physics_dt,
             'command_delay_s': simulation.dynamics.delay_s,
-            'command_delay_steps': simulation.dynamics.delay_steps,
+            'controller': 'geometric_motor',
+            'controller_period_s': simulation.dynamics.controller_period_s,
             'command_columns': arrays['command_columns'].tolist(),
             'command_convention': 'World P/V/A at tracking origin (m, m/s, m/s^2); '
-                                  'acceleration excludes gravity; yaw/yaw_rate in rad and rad/s.',
+                                  'acceleration excludes gravity; yaw in rad; omega in nominal desired body rad/s '
+                                  '(legacy zero-yaw-rate packets expand to three zero body rates).',
             'sample_convention': 'State row k is at time_s[k]. Requested/applied command rows are '
                                  'left-endpoint snapshots; exact event times/values are retained separately.',
             'acceleration_convention': 'World tracking-origin backward velocity difference; '
@@ -96,12 +101,13 @@ def main():
             'reset_convention': 'Configured initial physical state; command delay queue filled '
                                 'with initial position/yaw hold. Not a resumed checkpoint.',
             'device': simulation.dynamics.device, 'compiled': simulation.dynamics.compiled,
-            'cuda_graph': simulation.dynamics.graph is not None,
+            'physics_backend': simulation.backend,
+            'compilation_backend': simulation.dynamics.compilation_backend,
+            'cuda_graph': False,
             'setup_s': setup_s, 'execution_s': execution_s,
             'timing_convention': 'Execution includes reset, stepping and state readback; '
                                  'excludes setup/compilation and output-file writing.',
-            'software': {'python': platform.python_version(), 'numpy': np.__version__,
-                         'torch': str(torch.__version__), 'cuda': torch.version.cuda},
+            'software': {'python': platform.python_version(), 'numpy': np.__version__, 'native_api': native_module().api_version},
         }
         # Write metadata last: a trajectory without complete metadata is not a completed run.
         with (output/'trajectory.npz').open('xb') as file:

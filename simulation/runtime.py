@@ -4,12 +4,13 @@ import math
 from time import perf_counter
 
 from simulation.configuration import SimulationConfiguration
-from simulation.dynamics.coupled_runtime import CoupledRuntime
+from simulation.native_runtime import NativeRuntime
 
 
 class Simulation:
-    def __init__(self, configuration: SimulationConfiguration, *, model_config, device=None,
-                 compile_physics=True, command_source=None, command_reset=None) -> None:
+    def __init__(self, configuration: SimulationConfiguration, *, model_config,
+                 command_source=None, command_reset=None,
+                 command_delay_s=None, backend=None) -> None:
         """Create a simulation with an explicit model path or configuration dict.
 
         A timestamped source supplies events(start_s, end_s). Legacy callable
@@ -17,6 +18,11 @@ class Simulation:
         Stateful sources can supply command_reset(), called on initialization and
         reset. Without a source, step(command) supplies commands directly; omitted
         commands hold the last command (initially the configured position/yaw).
+        The model supplies the sampled geometric controller and four motors.
+        command_delay_s overrides
+        transport delay explicitly, e.g. zero for already-delayed recorded events.
+        Native C++ owns simulation state, clocks and physics. The separate tensor
+        binding supports differentiable fitting/batching, not a viewer backend.
         """
         self.configuration = configuration
         self.timestep_s = configuration.timestep_s
@@ -24,8 +30,14 @@ class Simulation:
         # Indexed by physics steps, never wall time or renderer callbacks.
         self.command_source = command_source
         self.command_reset = command_reset
-        self.dynamics = CoupledRuntime(configuration, model_config=model_config, device=device,
-                                       compile_physics=compile_physics)
+        self.force_telemetry_enabled = False
+        self.backend = configuration.physics_backend if backend is None else backend
+        if self.backend != 'native':
+            raise ValueError('Simulation uses the native engine; differentiable tensors are a separate fitting/batch interface.')
+        self.dynamics = NativeRuntime(configuration, model_config=model_config,
+                                       command_delay_s=command_delay_s)
+        if hasattr(command_source, 'validate_controller'):
+            command_source.validate_controller()
         self.reset()
 
     def reset(self) -> None:
@@ -33,9 +45,15 @@ class Simulation:
         self.dynamics.reset()
         if self.command_reset is not None:
             self.command_reset()
-        self.state = self.dynamics.snapshot(0.0)
+        self.state = self.dynamics.snapshot(0.0, include_forces=self.force_telemetry_enabled)
         self.step_count = 0
         self._remaining_s = 0.0
+
+    def set_force_telemetry(self, enabled: bool) -> None:
+        """Refresh optional diagnostics without advancing or modifying physics."""
+        self.force_telemetry_enabled = bool(enabled)
+        self.state = self.dynamics.snapshot(self.step_count*self.timestep_s,
+                                            include_forces=self.force_telemetry_enabled)
 
     def toggle_running(self) -> None:
         self.running = not self.running
@@ -70,7 +88,8 @@ class Simulation:
                 break
         if advanced:
             try:
-                self.state = self.dynamics.snapshot(self.step_count * self.timestep_s)
+                self.state = self.dynamics.snapshot(self.step_count * self.timestep_s,
+                                                    include_forces=self.force_telemetry_enabled)
             except Exception:
                 self.running = False
                 raise
@@ -81,8 +100,8 @@ class Simulation:
             for _ in range(steps):
                 next_command = command
                 if next_command is None and hasattr(self.command_source, 'events'):
-                    events = self.command_source.events(self.step_count*self.timestep_s,
-                                                        (self.step_count+1)*self.timestep_s)
+                    events = self.dynamics.reference_events(self.command_source,
+                        self.step_count*self.timestep_s, (self.step_count+1)*self.timestep_s)
                     self.dynamics.step(command_events=events)
                     self.step_count += 1
                     continue
@@ -91,7 +110,8 @@ class Simulation:
                 self.dynamics.step(next_command)
                 self.step_count += 1
             if snapshot:
-                self.state = self.dynamics.snapshot(self.step_count * self.timestep_s)
+                self.state = self.dynamics.snapshot(self.step_count * self.timestep_s,
+                                                    include_forces=self.force_telemetry_enabled)
         except Exception:
             self.running = False
             raise

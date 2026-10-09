@@ -11,6 +11,7 @@ from simulation.state import SimulationState
 from viewer.drone_model import add_drone_model
 from viewer.environment import add_environment, configure_lighting
 from viewer.window import configure_native_window, enable_native_resolution
+from viewer.overlays import SimulationOverlays
 
 
 class PyVistaViewer:
@@ -27,6 +28,9 @@ class PyVistaViewer:
         self._dynamics_error: str | None = None
         self._control_source = ControlInput
         self._window = None
+        self._overlays = None
+        self._reference_points = None
+        self._playback_speed = 1.
 
     def create_plotter(self, state: SimulationState, *, off_screen: bool = False, plotter=None):
         """Build the same scene for interactive viewing and off-screen inspection."""
@@ -54,6 +58,8 @@ class PyVistaViewer:
         self._world_axis_actors = self._add_world_axes(plotter, pv)
         self._add_drone(plotter, pv, state)
         self._add_cable(plotter, pv, state)
+        self._overlays = SimulationOverlays(plotter, pv, state)
+        self._overlays.set_reference(self._reference_points)
         self._update_geometry(state)
         self._set_visibility(self._body_axis_actors, self._body_axes_visible)
         self._set_visibility(self._world_axis_actors, self._world_axes_visible)
@@ -62,6 +68,16 @@ class PyVistaViewer:
             self._register_key_controls(plotter)
         center = 0.5 * (state.drone.position_world_m + state.cable_node_positions_world_m[-1])
         camera_offset = np.array((1.45, -2.0, 0.90))
+        if state.forces is not None:
+            # Frame initial force endpoints once; never move the user's camera
+            # automatically during simulation or when an arrow changes.
+            points = np.vstack((state.cable_node_positions_world_m, state.drone.position_world_m))
+            span = max(float(np.linalg.norm(np.ptp(points, axis=0))), .1)
+            points = np.vstack((points,
+                state.forces.center_of_mass_world_m + self._overlays.force_scale*state.forces.thrust_world_n,
+                state.attachment_position_world_m + self._overlays.force_scale*state.forces.cable_force_world_n))
+            center = .5*(points.min(axis=0)+points.max(axis=0))
+            camera_offset *= max(1., float(np.linalg.norm(np.ptp(points, axis=0)))/span)
         if viewer.target_position_world_m is not None:
             # Frame the target along with the drone/cable; leave ordinary scenes unchanged.
             target_distance = np.linalg.norm(viewer.target_position_world_m - center)
@@ -73,6 +89,11 @@ class PyVistaViewer:
         plotter.camera_position = self._initial_camera
         if not embedded:
             configure_native_window(plotter, start_maximized=viewer.start_maximized)
+        else:
+            # Deferred display-only controls for saved-state windows; keep
+            # playback-layout indices unchanged during their construction.
+            from viewer.replay_trajectories import schedule_saved_trajectories
+            schedule_saved_trajectories(plotter, self)
         return plotter
 
     def show(self, simulation: Simulation, *, control_source=ControlInput) -> None:
@@ -104,7 +125,7 @@ class PyVistaViewer:
                 if controls.toggle:
                     self._toggle_simulation()
                     elapsed = 0.0
-                changed = self._simulation.advance(elapsed)
+                changed = self._simulation.advance(elapsed*self._playback_speed)
             except Exception as exc:
                 self._simulation.running = False
                 self._dynamics_error = str(exc)
@@ -143,7 +164,40 @@ class PyVistaViewer:
             self._simulation.reset()
             self._dynamics_error = None
             self._last_tick = perf_counter()
+            if self._overlays is not None:
+                self._overlays.reset_trail()
             self._update_geometry(self._simulation.state)
+            self._update_status()
+
+    def set_trajectory(self, trajectory) -> None:
+        self._reference_points = None if trajectory is None else trajectory.preview('Position')
+        if self._overlays is not None:
+            self._overlays.set_reference(self._reference_points)
+        if self._plotter is not None:
+            self._plotter.render()
+
+    def set_playback_speed(self, speed) -> None:
+        if speed not in (.25, .5, 1.):
+            raise ValueError('Playback speed must be 0.25, 0.5 or 1.')
+        self._playback_speed = float(speed)
+        self._last_tick = perf_counter()
+
+    def set_overlay_visible(self, name, visible) -> None:
+        if self._overlays is None:
+            return
+        self._overlays.visible[name] = bool(visible)
+        sim = self._simulation
+        if name in ('thrust', 'cable') and hasattr(sim, 'set_force_telemetry'):
+            sim.set_force_telemetry(any(self._overlays.visible[key] for key in ('thrust', 'cable')))
+        if sim is not None:
+            self._overlays.update(sim.state)
+        self._update_status()
+
+    def set_force_scale(self, scale) -> None:
+        if self._overlays is not None:
+            self._overlays.force_scale = float(scale)
+            if self._simulation is not None:
+                self._overlays.update(self._simulation.state)
             self._update_status()
 
     def _add_world_axes(self, plotter: object, pv: object) -> list[object]:
@@ -339,6 +393,8 @@ class PyVistaViewer:
         for actor, current, initial in zip(self._marker_actors, markers, self._initial_marker_positions):
             actor.position = current - initial
         self._marker_label_points.points[:] = markers
+        if self._overlays is not None:
+            self._overlays.update(state)
 
     def _register_key_controls(self, plotter: object) -> None:
         # Handle both KeyPressEvent and VTK's separate CharEvent: otherwise W

@@ -1,1 +1,1 @@
-"""Whip task interfaces; no learning algorithm selected."""
+"""Reusable whip task settings, geometry and rewards; no optimizer or policy."""

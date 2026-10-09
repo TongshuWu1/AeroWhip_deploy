@@ -1,75 +1,10 @@
-"""Explicit settings for the isolated, fixed-request Stage-1 objective."""
+"""Task-only scene, episode, workspace and Stage-1 reward settings."""
 
-from copy import deepcopy
 from dataclasses import dataclass, fields
-import json
 import math
-from pathlib import Path
-import tomllib
 
-from .configuration import TrainingConfiguration
-from .reward import WhipReturnConfiguration
-from .skill import SKILL_PARAMETERS
+from .configuration import EpisodeTiming, WhipReturnConfiguration, LearnedRecoveryConfiguration
 from .workspace import CylinderWorkspace
-from simulation.configuration import load_configuration
-
-
-ROOT = Path(__file__).resolve().parents[2]
-
-
-def resolve_stage1_settings(raw, *, scene, model):
-    """Resolve omitted dependent fields; never rewrite explicit saved settings.
-
-    The returned mapping is complete and is retained in the run protocol.
-    Physical/reward choices (including the wall and post-hold) remain explicit.
-    """
-    resolved = deepcopy(raw)
-    trajectory, mechanics = resolved['trajectory'], resolved['mechanics']
-    workspace, returns = resolved['workspace'], resolved['return']
-    initial = scene.initial_state.position_world_m
-    delay = model['controller']['command_delay_s']
-    if isinstance(delay, bool) or not math.isfinite(delay) or delay < 0:
-        raise ValueError('Model command delay must be finite and nonnegative')
-
-    def pair(section, lower, upper, values):
-        present = (lower in section, upper in section)
-        if present[0] != present[1]:
-            raise ValueError(f'Provide both {lower} and {upper}, or omit both for automatic values')
-        if not present[0]:
-            section[lower], section[upper] = values
-
-    pair(mechanics, 'event_start_s', 'event_end_s',
-         (delay, delay+trajectory['duration_s']))
-    if (not math.isclose(mechanics['event_start_s'], delay, rel_tol=0, abs_tol=1e-12)
-            or not math.isclose(mechanics['event_end_s'], delay+trajectory['duration_s'], rel_tol=0, abs_tol=1e-12)):
-        raise ValueError('Event bounds must match model delay and maneuver duration; omit both event bounds to derive them')
-    radius = workspace['radius_m']
-    lower_z, upper_z = workspace['height_lower_world_m'], workspace['height_upper_world_m']
-    if trajectory.get('control_mapping', 'box') == 'cylinder_v1':
-        lower = [-radius, -radius, float(lower_z-initial[2])]
-        upper = [radius, radius, float(upper_z-initial[2])]
-        pair(trajectory, 'offset_lower_m', 'offset_upper_m', (lower, upper))
-        if any(not math.isclose(a, b, rel_tol=0, abs_tol=1e-12)
-               for name, expected in (('offset_lower_m', lower), ('offset_upper_m', upper))
-               for a, b in zip(trajectory[name], expected)):
-            raise ValueError('Cylinder offsets must match workspace and initial position; omit both offsets to derive them')
-    elif 'offset_lower_m' not in trajectory or 'offset_upper_m' not in trajectory:
-        raise ValueError('Box mapping requires explicit trajectory offsets')
-    pair(returns, 'drone_lower_world_m', 'drone_upper_world_m',
-         ([float(initial[0]-radius), float(initial[1]-radius), lower_z],
-          [float(initial[0]+radius), float(initial[1]+radius), upper_z]))
-    return resolved
-
-
-def load_stage1_settings(path, *, root=ROOT):
-    """Resolve a user preset using its selected scene/model, without simulation."""
-    with Path(path).open('rb') as stream:
-        raw = tomllib.load(stream)
-    root = Path(root)
-    scene = load_configuration(root/raw['experiment']['scene'])
-    model = json.loads((root/raw['experiment']['model']).read_text(encoding='utf-8'))
-    resolved = resolve_stage1_settings(raw, scene=scene, model=model)
-    return resolved, Stage1Configuration.from_mapping(resolved)
 
 
 def _positive(value, name):
@@ -119,14 +54,73 @@ class ReleaseMatchingConfiguration:
     direction_width_deg: float
     time_preference: float
     speed_mode: str = 'match'
+    mechanics_credit_weight: float = 0.0
+    # Bound supporting motion/approach credit independently of the strike bonus.
+    # Default preserves historical task snapshots.
+    shaping_weight: float = 1.0
+    center_weight: float = 0.0
+    center_sigma_m: float = 0.3
+    # None preserves the exact historical M-weighted strike arithmetic and
+    # maneuver-limited search. Current presets select a bounded hit-priority
+    # bonus M/(M+scale); this scale is not a physical whip qualification.
+    strike_mechanics_scale: float | None = None
+    # Versioned experiment; omitted in retained tasks means legacy arithmetic.
+    # directed_hit_v1 uses spatial record-progress, an unconditional qualified
+    # hit bonus, and time_preference as a full-horizon elapsed-time cost.
+    reward_mode: str = 'mechanics_event_v1'
+    # Explicit geometric-hit experiment only; historical reward modes stay unchanged.
+    hit_speed_weight: float = 0.0
+    hit_straightness_weight: float = 0.0
+    hit_speed_scale_mps: float = 3.0
+    # Omitted fields retain byte-exact historical squared-cosine arithmetic.
+    alignment_mode: str = 'squared_cosine_v1'
+    alignment_cone_deg: float = 25.0
 
     def __post_init__(self):
+        if self.alignment_mode not in ('squared_cosine_v1', 'cone_plateau_v1'):
+            raise ValueError('Unknown directed alignment mode')
+        _positive(self.alignment_cone_deg, 'alignment_cone_deg')
+        if self.alignment_cone_deg >= 90:
+            raise ValueError('Alignment cone must be strictly below 90 degrees')
+        if self.alignment_mode != 'squared_cosine_v1' and self.reward_mode not in (
+                'directed_whip_v1', 'directed_delivery_v1', 'directed_precision_v1'):
+            raise ValueError('Cone alignment requires a directed whip reward')
         for name in ('height_width_m', 'speed_width_mps', 'direction_width_deg'):
             _positive(getattr(self, name), name)
         if not math.isfinite(self.time_preference) or not 0 <= self.time_preference < 1:
             raise ValueError('Time preference must be in [0,1)')
         if self.speed_mode not in ('match', 'minimum'):
             raise ValueError('Speed mode must be match or minimum')
+        if (isinstance(self.mechanics_credit_weight, bool)
+                or not math.isfinite(self.mechanics_credit_weight)
+                or not 0 <= self.mechanics_credit_weight <= 1):
+            raise ValueError('Mechanics credit weight must be finite and in [0,1]')
+        if (isinstance(self.shaping_weight, bool) or not math.isfinite(self.shaping_weight)
+                or not 0 <= self.shaping_weight <= 1):
+            raise ValueError('Shaping weight must be finite and in [0,1]')
+        if isinstance(self.center_weight, bool) or not math.isfinite(self.center_weight) or not 0 <= self.center_weight <= 1:
+            raise ValueError('Center weight must be finite and in [0,1]')
+        _positive(self.center_sigma_m, 'center_sigma_m')
+        if self.strike_mechanics_scale is not None:
+            _positive(self.strike_mechanics_scale, 'strike_mechanics_scale')
+        _positive(self.hit_speed_scale_mps, 'hit_speed_scale_mps')
+        for name in ('hit_speed_weight', 'hit_straightness_weight'):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not math.isfinite(value) or not 0 <= value <= 1:
+                raise ValueError(name+' must be finite and in [0,1]')
+        if self.reward_mode != 'geometric_hit_quality_v1' and (self.hit_speed_weight or self.hit_straightness_weight):
+            raise ValueError('Hit-quality weights require the geometric-hit reward mode')
+        if self.reward_mode not in ('mechanics_event_v1', 'directed_hit_v1', 'geometric_hit_quality_v1', 'directed_whip_v1', 'directed_delivery_v1', 'directed_precision_v1'):
+            raise ValueError('Unknown reward mode')
+        if self.reward_mode in ('directed_whip_v1', 'directed_delivery_v1', 'directed_precision_v1') and (
+                self.mechanics_credit_weight != 1 or self.shaping_weight != 1
+                or self.time_preference != 0 or self.center_weight != 0
+                or self.strike_mechanics_scale is not None):
+            raise ValueError('Directed whip uses one unit mechanics event and no matching/time/center bonus')
+        if self.reward_mode in ('directed_hit_v1', 'geometric_hit_quality_v1') and (
+                self.mechanics_credit_weight != 0 or self.center_weight != 0
+                or self.strike_mechanics_scale is not None):
+            raise ValueError('Simple directed reward has no mechanics/centering multiplier')
 
 
 @dataclass(frozen=True)
@@ -139,11 +133,15 @@ class StrikeSurfaceConfiguration:
     maximum_entry_angle_deg: float
     approach_width_m: float
     strike_bonus_weight: float = 0.0
+    # None preserves the isotropic rectangle-distance matching in saved runs.
+    overflow_width_m: float | None = None
 
     def __post_init__(self):
         for field in fields(self):
-            if field.name != 'strike_bonus_weight':
+            if field.name not in ('strike_bonus_weight', 'overflow_width_m'):
                 _positive(getattr(self, field.name), field.name)
+        if self.overflow_width_m is not None:
+            _positive(self.overflow_width_m, 'overflow_width_m')
         if (isinstance(self.strike_bonus_weight, bool) or not math.isfinite(self.strike_bonus_weight)
                 or self.strike_bonus_weight < 0):
             raise ValueError('Strike bonus weight must be finite and nonnegative')
@@ -164,16 +162,36 @@ class StrikeSurfaceConfiguration:
 class Stage1Configuration:
     scene: str
     model: str
-    trajectory: TrainingConfiguration
+    episode: EpisodeTiming
     workspace: CylinderWorkspace
     returns: WhipReturnConfiguration
     request: tuple[float, float, float, float]
     mechanics: BendReleaseConfiguration
     matching: ReleaseMatchingConfiguration
     strike_surface: StrikeSurfaceConfiguration | None = None
+    termination: str = 'full_horizon_v1'
+    recovery: LearnedRecoveryConfiguration | None = None
 
     def __post_init__(self):
-        self.returns.acceleration_scale(self.trajectory)
+        if self.termination not in ('full_horizon_v1', 'first_qualified_hit_v1', 'first_geometric_hit_v1'):
+            raise ValueError('Unknown task termination rule')
+        if self.matching.reward_mode in ('directed_whip_v1', 'directed_delivery_v1', 'directed_precision_v1') and (
+                self.termination != 'full_horizon_v1' or self.returns.acceleration_cost_weight != 0
+                or (self.strike_surface is not None and self.strike_surface.strike_bonus_weight != 0)):
+            raise ValueError('Directed whip requires full horizon, zero acceleration cost and zero strike bonus')
+        if self.matching.reward_mode in ('directed_delivery_v1', 'directed_precision_v1') and (
+                self.strike_surface is None or self.strike_surface.overflow_width_m is not None):
+            raise ValueError('Directed delivery requires a fixed rectangle and isotropic distance guidance')
+        if self.termination in ('first_qualified_hit_v1', 'first_geometric_hit_v1') and self.strike_surface is None:
+            raise ValueError('First-hit termination requires a directed wall')
+        if self.matching.reward_mode == 'directed_hit_v1' and (
+                self.termination != 'first_qualified_hit_v1' or self.strike_surface is None):
+            raise ValueError('Simple directed reward requires a first-qualified-hit wall task')
+        if (self.matching.reward_mode == 'geometric_hit_quality_v1') != (self.termination == 'first_geometric_hit_v1'):
+            raise ValueError('Geometric-hit quality reward and first-geometric-hit termination must be selected together')
+        if self.matching.strike_mechanics_scale is not None and (
+                self.strike_surface is None or self.termination != 'first_qualified_hit_v1'):
+            raise ValueError('Hit-priority reward requires a directed first-hit task')
         if any(not isinstance(value, str) or not value for value in (self.scene, self.model)):
             raise ValueError('Provide scene/model paths relative to the repository')
         request = tuple(self.request)
@@ -188,38 +206,16 @@ class Stage1Configuration:
                 raise ValueError('Strike surface must be outside the initial-position drone cylinder')
             if elevation != 0 or self.matching.speed_mode != 'minimum':
                 raise ValueError('Directed Stage 1 requires a horizontal normal and minimum-speed mode')
-        horizon = self.trajectory.duration_s+self.trajectory.post_hold_s
+        horizon = self.episode.duration_s+self.episode.post_hold_s
+        if self.recovery is not None:
+            r = self.recovery
+            if (self.matching.reward_mode != 'directed_precision_v1'
+                    or self.termination != 'full_horizon_v1'
+                    or not math.isclose(horizon,r.whip_duration_s+r.recovery_duration_s,abs_tol=1e-12)
+                    or not math.isclose(self.mechanics.event_end_s+self.mechanics.tip_lag_s,r.whip_duration_s,abs_tol=1e-12)):
+                raise ValueError('Learned recovery requires precision, full horizon and explicit separate whip window')
         if self.mechanics.event_end_s+self.mechanics.tip_lag_s > horizon+1e-12:
             raise ValueError('post_hold_s must cover the model command delay plus mechanics.tip_lag_s')
         if any(window > self.mechanics.event_end_s-self.mechanics.event_start_s+1e-12
                for window in self.mechanics.windows_s):
             raise ValueError('Every configured bend duration must fit the event search interval')
-
-    @classmethod
-    def load(cls, path):
-        return load_stage1_settings(path)[1]
-
-    @classmethod
-    def from_mapping(cls, raw):
-        training = raw.get('experiment', {}).get('mode') == 'training'
-        sections = {'experiment', 'trajectory', 'workspace', 'return', 'request', 'mechanics', 'matching'}
-        if training:
-            sections |= {'exploration', 'cem'}
-        if 'strike_surface' in raw:
-            sections.add('strike_surface')
-        if set(raw) != sections:
-            raise ValueError('Unexpected Stage-1 objective configuration sections')
-        exp = raw['experiment']
-        keys = {'name', 'mode', 'scene', 'model'}
-        if training:
-            keys |= {'device', 'batch_size', 'updates', 'seeds', 'evaluation_interval'}
-        if (set(exp) != keys or exp['name'] != 'whip_stage1'
-                or exp['mode'] not in ('objective_evaluation', 'training')):
-            raise ValueError('Unexpected Stage-1 experiment fields or mode')
-        if set(raw['request']) != set(SKILL_PARAMETERS[:4]):
-            raise ValueError('Stage 1 requests direction, height and speed; exact release time is free')
-        return cls(exp['scene'], exp['model'], TrainingConfiguration(**raw['trajectory']),
-                   CylinderWorkspace(**raw['workspace']), WhipReturnConfiguration(**raw['return']),
-                   tuple(raw['request'][name] for name in SKILL_PARAMETERS[:4]),
-                   BendReleaseConfiguration(**raw['mechanics']), ReleaseMatchingConfiguration(**raw['matching']),
-                   StrikeSurfaceConfiguration(**raw['strike_surface']) if 'strike_surface' in raw else None)

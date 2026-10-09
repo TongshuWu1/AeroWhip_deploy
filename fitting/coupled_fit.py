@@ -9,20 +9,19 @@ are required for training and validation. Results are returned, not written.
 from copy import deepcopy
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, fields
-from pathlib import Path
 
 import numpy as np
 import torch
 from torch.utils.checkpoint import checkpoint
 
-from simulation.dynamics.coupled import CoupledDynamics, CoupledState
-from simulation.dynamics.coupled_control import CoupledController
+from simulation.tensor_model import TensorModel, PlantState, ControlledState
+from controllers.full_state_controller.tensor_controller import GeometricController
 
 
 @dataclass(frozen=True)
 class FitWindow:
     recording_group: str
-    initial: CoupledState
+    initial: PlantState
     applied_commands: np.ndarray
     tracking_positions: np.ndarray
     tracking_rotations: np.ndarray
@@ -32,7 +31,10 @@ class FitWindow:
 
     def validate(self, model):
         n = len(self.applied_commands)
-        expected = ((self.applied_commands,(n,11)),(self.tracking_positions,(n,3)),
+        width = np.shape(self.applied_commands)[-1]
+        if width not in (11,13):
+            raise ValueError('Expected legacy zero-yaw-rate or full three-body-rate commands')
+        expected = ((self.applied_commands,(n,width)),(self.tracking_positions,(n,3)),
                     (self.tracking_rotations,(n,3,3)),
                     (self.cable_markers,(n,len(model.marker_indices)-1,3)))
         if not self.recording_group or n<1 or abs(self.timestep_s-model.dt)>1e-12:
@@ -40,8 +42,8 @@ class FitWindow:
         for value,shape in expected:
             if np.shape(value)!=shape or not np.isfinite(value).all():
                 raise ValueError(f"Expected complete finite window array {shape}; split at data gaps")
-        if np.any(self.applied_commands[:,10]!=0):
-            raise ValueError("Yaw-rate feedforward is not supported by this first model")
+        if width == 11 and np.any(self.applied_commands[:,10]!=0):
+            raise ValueError('Legacy yaw-rate packets must be zero; use three desired body rates')
         R=self.tracking_rotations
         if not np.allclose(np.swapaxes(R,-1,-2)@R,np.eye(3),atol=1e-6,rtol=0) or not np.allclose(np.linalg.det(R),1,atol=1e-6,rtol=0):
             raise ValueError("Target orientations must be proper rotations")
@@ -54,26 +56,22 @@ class FitWindow:
             raise ValueError("Initial cable state must satisfy the configured lengths")
 
 
-NAMES=("position_gain", "velocity_gain", "attitude_frequency", "bending", "drag")
+NAMES=("position_gain", "velocity_gain", "attitude_frequency")
 # Common XYZ gain scales preserve axis ratios and limit the number of unknowns.
-# Geometry, measured masses, inertia, feedforward and delay are never fitted here.
-BOUNDS=((.5,2.),(.5,2.),(.5,3.),(.1,10.),(.25,4.))
+# Bending stiffness, geometry, masses, inertia, motors and clocks remain fixed.
+BOUNDS=((.5,2.),(.5,2.),(.5,3.))
 
 
 def _scaled_config(base, scales):
     if len(scales) != len(NAMES):
         raise ValueError(f'Expected {len(NAMES)} scales in order {NAMES}')
     config=deepcopy(base)
-    control=config['controller'];cable=config['cable']
+    control=config['controller']
     for key,scale in (("position_gain_s_inv2",scales[0]),("velocity_gain_s_inv",scales[1]),
                       ("attitude_frequency_rad_s",scales[2])):
         control[key]=[float(v*scale) for v in control[key]]
-    cable['EI_n_m2']*=float(scales[3])
-    cable['external_drag_s_inv']*=float(scales[4])
-    # New candidates must not advertise an inactive damping coefficient.
-    # The input artifact is deep-copied and remains untouched.
-    cable.pop('Cb_n_m2_s', None)
-    config['simulation'].pop('curvature_frame_regularization', None)
+    # All cable coefficients are owned by measured-root identification.
+    # Retain the coupled plant and its reactions; never retune cable drag here.
     return config
 
 
@@ -82,29 +80,26 @@ def window_loss(base, window, log_scales):
     if log_scales.shape != (len(NAMES),):
         raise ValueError(f'Expected {len(NAMES)} log-scales in order {NAMES}')
     scales=log_scales.exp()
-    model=CoupledDynamics(base);controller=CoupledController(model)
+    model=TensorModel(base);controller=GeometricController(model)
     controller.position_gain_s_inv2=controller.position_gain_s_inv2*scales[0]
     controller.velocity_gain_s_inv=controller.velocity_gain_s_inv*scales[1]
     controller.attitude_frequency_rad_s=controller.attitude_frequency_rad_s*scales[2]
-    model.ei=model.ei*scales[3];model.drag=model.drag*scales[4]
-    state=CoupledState(*(getattr(window.initial,f.name).detach().clone() for f in fields(window.initial)))
+    state=model.controller_state(PlantState(*(getattr(window.initial,f.name).detach().clone() for f in fields(window.initial))))
     commands=model.tensor(window.applied_commands)
     target_positions=model.tensor(window.tracking_positions)
-    target_markers=model.tensor(window.cable_markers)
     target_rotations=model.tensor(window.tracking_rotations)
     loss=model.tensor(0.)
     def advance(*args):
-        output=model.step(CoupledState(*args[:-1]),args[-1],controller)
+        output=model.step(ControlledState(*args[:-1]),args[-1],controller)
         return tuple(getattr(output,f.name) for f in fields(output))
     for k,command in enumerate(commands):
         if torch.is_grad_enabled():
             tensors=tuple(getattr(state,f.name) for f in fields(state))
-            state=CoupledState(*checkpoint(advance,*tensors,command,use_reentrant=False))
+            state=ControlledState(*checkpoint(advance,*tensors,command,use_reentrant=False))
         else:
             state=model.step(state,command,controller)
-        p,_=model.tracking_pose(state);q,_=model.cable_state(state)
+        p,_=model.tracking_pose(state)
         loss=loss+((p-target_positions[k])/.02).square().mean()
-        loss=loss+((q[model.marker_indices[1:]]-target_markers[k])/.03).square().mean()
         loss=loss+((state.rotation-target_rotations[k])/.05).square().sum()/2
     return loss/len(window.applied_commands)
 
@@ -138,23 +133,25 @@ def window_weights(windows):
 
 
 def fit_coupled(base_config, training, validation, *, iterations=30, learning_rate=.05, progress=None, workers=4, device='cpu', compile_physics=True):
+    if base_config.get('residual',{}).get('status') != 'unfitted':
+        raise ValueError('Calibrate physics before aerodynamic stages; do not compensate a learned drag law by refitting physics')
     if workers<1:raise ValueError("At least one worker is required")
-    if device not in ('cpu','cuda'):raise ValueError("Fitting device must be cpu or cuda")
+    if device not in ('native','cpu','cuda'):raise ValueError("Fitting execution must be native, cpu or cuda")
     if device == 'cuda':
         if not torch.cuda.is_available():raise RuntimeError("CUDA is not available")
         return _fit_coupled(base_config,training,validation,iterations,learning_rate,progress,None,device,compile_physics)
     # Processes evaluate independent windows, never different scientific models.
     if workers>1:
         with ProcessPoolExecutor(max_workers=workers) as executor:
-            return _fit_coupled(base_config,training,validation,iterations,learning_rate,progress,executor)
-    return _fit_coupled(base_config,training,validation,iterations,learning_rate,progress,None)
+            return _fit_coupled(base_config,training,validation,iterations,learning_rate,progress,executor,device)
+    return _fit_coupled(base_config,training,validation,iterations,learning_rate,progress,None,device)
 
 
 def _fit_coupled(base_config, training, validation, iterations, learning_rate, progress, executor, device='cpu', compile_physics=False):
     """Return a candidate and before/after held-out losses; never install it.
 
     Motion types have equal weight, then recording groups within each type.
-    Loss balances tracking position (2 cm), cable markers (3 cm), and rotation
+    Loss balances vehicle tracking position (2 cm) and rotation
     matrix error (0.05 rad small-angle scale). These are objective scales, not
     acceptance tolerances. No validation values enter optimization.
     """
@@ -163,7 +160,7 @@ def _fit_coupled(base_config, training, validation, iterations, learning_rate, p
     if {w.recording_group for w in training}&{w.recording_group for w in validation}:
         raise ValueError("Training and validation recording groups overlap")
     base=deepcopy(base_config)
-    model=CoupledDynamics(base)
+    model=TensorModel(base)
     for window in (*training,*validation):window.validate(model)
     log_scale=torch.zeros(len(NAMES),dtype=torch.float64,requires_grad=True)
     lower=torch.log(torch.tensor([v[0] for v in BOUNDS],dtype=torch.float64))
@@ -174,9 +171,12 @@ def _fit_coupled(base_config, training, validation, iterations, learning_rate, p
         from fitting.batched_objective import BatchedObjective
         torch.backends.cuda.preferred_linalg_library('cusolver')
         for windows in (training, validation):
+            if progress:progress({'phase':'preparing_gpu',
+                                  'role':'fitting' if windows is training else 'comparison',
+                                  'windows':len(windows)})
             batches[id(windows)] = BatchedObjective(base, windows, window_weights(windows), device,
                 graph=True, compile_physics=compile_physics and windows is training,
-                training=windows is training)
+                training=windows is training, loss_scope='vehicle')
 
     def objective(windows,values,*,backward=False):
         if batches:
@@ -188,7 +188,11 @@ def _fit_coupled(base_config, training, validation, iterations, learning_rate, p
             return total
         total=0.
         jobs=[(base,w,values.detach().tolist(),backward) for w in windows]
-        outputs=executor.map(_evaluate_window,jobs) if executor else map(_evaluate_window,jobs)
+        if device == 'native':
+            from fitting.native_objective import evaluate_window as evaluate
+        else:
+            evaluate = _evaluate_window
+        outputs=executor.map(evaluate,jobs) if executor else map(evaluate,jobs)
         for index,(window,weight,(loss,gradient)) in enumerate(zip(windows,window_weights(windows),outputs)):
             total+=weight*loss
             if backward:
@@ -198,8 +202,26 @@ def _fit_coupled(base_config, training, validation, iterations, learning_rate, p
                                   "windows":len(windows),"recording_group":window.recording_group})
         return total
 
+    derivative_checks = {}
+    def check_derivatives(values, stage):
+        if device != 'native':
+            return
+        from fitting.native_objective import check_window
+        jobs = [(base,w,values.detach().tolist()) for w in training]
+        outputs = executor.map(check_window,jobs) if executor else map(check_window,jobs)
+        rows = []
+        for row in outputs:
+            rows.append(row)
+            if progress:progress(dict(phase='physical_gradient_check',stage=stage,**row))
+            if not row['passed']:
+                raise RuntimeError('Native finite-difference step-size check failed; candidate not accepted')
+        derivative_checks[stage] = rows
+
+    check_derivatives(log_scale, 'initial')
+    if progress:progress({'phase':'baseline','windows':len(training)})
     with torch.no_grad():
         before_train=objective(training,log_scale)
+    if progress:progress({'phase':'baseline_complete','training_loss':before_train})
     best=log_scale.detach().clone();best_loss=before_train;history=[]
     for iteration in range(iterations):
         optimizer.zero_grad();current=objective(training,log_scale,backward=True)
@@ -211,10 +233,12 @@ def _fit_coupled(base_config, training, validation, iterations, learning_rate, p
         with torch.no_grad():log_scale.clamp_(lower,upper)
         if progress:progress({"phase":"iteration","iteration":iteration+1,"iterations":iterations,
                               "training_loss":current,"best_training_loss":best_loss,
+                              "best_scales":dict(zip(NAMES,best.exp().tolist())),
                               "best_config":_scaled_config(base,best.exp().tolist())})
     with torch.no_grad():
         last=objective(training,log_scale)
         if last<best_loss:best_loss=last;best=log_scale.detach().clone()
+        check_derivatives(best, 'selected')
         # Comparison data are evaluated only after training has selected its candidate.
         before_validation=objective(validation,log_scale.new_zeros(len(NAMES)))
         after_validation=objective(validation,best)
@@ -223,4 +247,7 @@ def _fit_coupled(base_config, training, validation, iterations, learning_rate, p
             "validation_loss_before":before_validation,"validation_loss_after":after_validation,
             "scales":dict(zip(NAMES,best.exp().tolist())),"training_history":history,
             "last_training_loss":last,"iterations":iterations,"converged":False,
-            "promoted":False,"device":device,"compiled":device=='cuda' and compile_physics}
+            "promoted":False,"device":device,"compiled":device=='cuda' and compile_physics,
+            "loss_scope":"vehicle position and attitude; full coupled dynamics; cable fixed",
+            "derivatives":"central finite differences in three log scales" if device=='native' else "automatic differentiation",
+            "derivative_checks":derivative_checks}

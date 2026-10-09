@@ -4,7 +4,9 @@ from pathlib import Path
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from trajectories.full_state import FullStateTrajectory, COLUMNS
+from project_paths import project_path
 from controllers.full_state_controller.bspline_window import BSplineWindow
+from controllers.full_state_controller.preset_window import PresetWindow
 
 
 class TrajectoryPlot(QtWidgets.QWidget):
@@ -81,15 +83,21 @@ class TrajectoryPlot(QtWidgets.QWidget):
 class ControllerWindow(QtWidgets.QWidget):
     closed = QtCore.Signal()
 
-    def __init__(self, viewer, simulation, trajectory, source=None):
+    def __init__(self, viewer, simulation, trajectory, source=None, *,
+                 previous_controller=None, trajectory_name=None):
         super().__init__()
         self.viewer, self.simulation, self.trajectory = viewer, simulation, trajectory
         self._closing = False
         self.spline_window = None
+        self.preset_window = None
+        self.previous_controller = previous_controller
         self.setWindowTitle('Full-State Controller')
         self.resize(550, 530)
         layout = QtWidgets.QVBoxLayout(self)
         row = QtWidgets.QHBoxLayout()
+        self.preset_button = QtWidgets.QPushButton('Presets…')
+        self.preset_button.clicked.connect(self.choose_preset)
+        row.addWidget(self.preset_button)
         self.load_button = QtWidgets.QPushButton('Load CSV')
         self.load_button.clicked.connect(self.choose_file)
         self.filename = QtWidgets.QLabel()
@@ -111,7 +119,7 @@ class ControllerWindow(QtWidgets.QWidget):
         layout.addWidget(self.component)
         self.plot = TrajectoryPlot()
         layout.addWidget(self.plot, 1)
-        units = QtWidgets.QLabel('World P/V/A: m, m/s, m/s² · Yaw: rad · Body rates: rad/s (zero)')
+        units = QtWidgets.QLabel('World P/V/A: m, m/s, m/s² · Yaw: rad · Desired body rates: rad/s')
         units.setWordWrap(True)
         units.setToolTip('CSV header: '+','.join(COLUMNS)+'\nOriginal timestamps, starting at zero. Position uses the tracking origin. Acceleration excludes gravity.')
         layout.addWidget(units)
@@ -125,25 +133,40 @@ class ControllerWindow(QtWidgets.QWidget):
         self.progress.setRange(0, trajectory.sample_count-1)
         layout.addWidget(self.progress)
         buttons = QtWidgets.QHBoxLayout()
+        self.apply_button = QtWidgets.QPushButton('Apply')
+        self.apply_button.setToolTip('Apply this reference and reset the simulation to its initial state.')
+        self.apply_button.clicked.connect(self.apply_preview)
         self.run_button = QtWidgets.QPushButton('Run')
         self.reset_button = QtWidgets.QPushButton('Reset')
         self.run_button.clicked.connect(self.toggle)
         self.reset_button.clicked.connect(self.reset)
+        buttons.addWidget(self.apply_button)
         buttons.addWidget(self.run_button)
         buttons.addWidget(self.reset_button)
+        self.manual_button = QtWidgets.QPushButton('Manual')
+        self.manual_button.setToolTip('Return to the previous manual controller and reset the simulation.')
+        self.manual_button.setVisible(previous_controller is not None)
+        self.manual_button.clicked.connect(self.use_previous_controller)
+        buttons.addWidget(self.manual_button)
         layout.addLayout(buttons)
-        self.describe(source)
+        self.describe(source, name=trajectory_name)
+        if simulation.command_source is trajectory:
+            self.viewer.set_trajectory(trajectory)
         self.update_preview()
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(self.refresh)
         self.timer.start(50)
         self.refresh()
 
-    def describe(self, source, generated=False):
-        self.filename.setText('B-spline' if generated else Path(source).name if source else 'Gentle move')
-        self.filename.setToolTip('Generated command trajectory' if generated else
-                                 str(Path(source).resolve()) if source else 'Built-in 0.25 m X movement')
+    def describe(self, source, generated=False, name=None):
+        self.source, self.generated, self.trajectory_name = source, generated, name
+        self.filename.setText(name or ('B-spline' if generated else Path(source).name if source else 'Gentle move'))
+        self.filename.setToolTip('Generated command trajectory' if generated or name else
+                                 str(project_path(source)) if source else 'Built-in 0.25 m X movement')
         self.details.setText(f'{self.trajectory.duration_s:g} s · {self.trajectory.sample_count} samples · {self.trajectory.rate_label}')
+        self.details.setToolTip('Analytic preset rate feedforward' if self.trajectory.jerk_world is not None
+            else 'Supplied CSV body-rate feedforward' if self.trajectory.has_body_rates
+            else 'PVA reference; no body-rate feedforward')
 
     def update_preview(self, *_):
         self.plot.set_trajectory(self.trajectory, self.component.currentText())
@@ -160,21 +183,51 @@ class ControllerWindow(QtWidgets.QWidget):
         try:
             candidate = FullStateTrajectory.load(path)
             candidate.validate_initial(self.simulation.configuration)
+            candidate.validate_controller()
         except (OSError, ValueError, TypeError) as exc:
             self.error.setText(str(exc))
             return False
         self.use_trajectory(candidate, path)
         return True
 
-    def use_trajectory(self, candidate, source=None, generated=False):
+    def use_trajectory(self, candidate, source=None, generated=False, name=None):
         # No playback state changes until all input checks succeed.
-        self.viewer._reset_simulation()
+        if self.simulation.running:
+            raise ValueError('Pause before applying a trajectory.')
+        candidate.validate_initial(self.simulation.configuration)
+        candidate.validate_controller()
         self.trajectory = candidate
         self.simulation.command_source = candidate
+        self.simulation.command_reset = None
+        self.viewer._reset_simulation()
+        self.viewer.set_trajectory(candidate)
         self.progress.setRange(0, candidate.sample_count-1)
-        self.describe(source, generated)
+        self.describe(source, generated, name)
         self.error.clear()
         self.update_preview()
+        self.refresh()
+
+    def apply_preview(self):
+        self.use_trajectory(self.trajectory, self.source, self.generated, self.trajectory_name)
+
+    def choose_preset(self):
+        if self.simulation.running:
+            self.error.setText('Pause before changing a trajectory.')
+            return
+        if self.preset_window is None:
+            self.preset_window = PresetWindow(self.simulation.configuration, self)
+        if self.preset_window.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            if self.simulation.running:
+                self.error.setText('Pause before changing a trajectory.')
+                return
+            self.use_trajectory(self.preset_window.trajectory, name=self.preset_window.motion.currentText())
+
+    def use_previous_controller(self):
+        if self.previous_controller is None or self.simulation.running:
+            return
+        self.simulation.command_source, self.simulation.command_reset = self.previous_controller
+        self.viewer._reset_simulation()
+        self.viewer.set_trajectory(None)
         self.refresh()
 
     def edit_spline(self):
@@ -199,13 +252,17 @@ class ControllerWindow(QtWidgets.QWidget):
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             path = dialog.selectedFiles()[0]
             try:
-                self.trajectory.save(path)
+                dynamics = self.simulation.dynamics
+                transform = dynamics.controller.prepare_reference
+                self.trajectory.save(path, transform=transform)
             except (OSError, ValueError) as exc:
                 self.error.setText(str(exc))
                 return
             self.error.clear()
 
     def toggle(self):
+        if self.simulation.command_source is not self.trajectory:
+            return
         self.viewer._toggle_simulation()
         self.refresh()
 
@@ -217,16 +274,22 @@ class ControllerWindow(QtWidgets.QWidget):
         sim = self.simulation
         elapsed = sim.step_count*sim.timestep_s
         fault = self.viewer._dynamics_error
+        active = sim.command_source is self.trajectory
         state = ('Error' if fault else 'Holding' if sim.running and elapsed >= self.trajectory.duration_s
                  else 'Running' if sim.running else 'Ready' if sim.step_count == 0 else 'Paused')
         self.status.setText(f'{state} · Simulation {elapsed:.2f} s · Trajectory {min(elapsed, self.trajectory.duration_s):.2f} / {self.trajectory.duration_s:g} s')
+        if not active:
+            self.status.setText('Preview · Apply to reset and use this trajectory')
         self.status.setToolTip(fault or '')
         self.run_button.setText('Pause' if sim.running else 'Run')
-        self.run_button.setEnabled(fault is None)
+        self.run_button.setEnabled(fault is None and active)
+        self.apply_button.setEnabled(not sim.running and not active)
+        self.preset_button.setEnabled(not sim.running)
+        self.manual_button.setEnabled(not sim.running and active)
         self.load_button.setEnabled(not sim.running)
         self.spline_button.setEnabled(not sim.running)
-        self.progress.setValue(self.trajectory.index_at(elapsed))
-        self.plot.cursor = elapsed
+        self.progress.setValue(self.trajectory.index_at(elapsed if active else 0.))
+        self.plot.cursor = elapsed if active else 0.
         self.plot.update()
 
     def closeEvent(self, event):
