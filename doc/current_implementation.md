@@ -463,10 +463,29 @@ and source hashes are saved in launch metadata.
 The optional relay subscribes to `/pointCloud` (`sensor_msgs/PointCloud2`), verifies
 its sole publisher is the configured capture node and also checks the currently
 verified pose endpoint. XYZ FLOAT32 decoding respects offsets, endian convention,
-organized rows and padding. Current pinned `libmotioncapture` appends both NatNet
-OtherMarkers and LabeledMarkers into this cloud, discarding marker IDs, asset and
-visibility flags. This is therefore a **mixed candidate cloud**, not an
-unlabeled-only or visibility-certified cable measurement. Point indices identify
+organized rows and padding. The pinned open OptiTrack backend, with Crazyswarm's
+`docker/motion_capture_tracking-marker-metadata.patch`, retains OtherMarkers and
+LabeledMarkers in the **mixed raw cloud** and adds aligned `natnet_id` UINT32
+at byte12, `natnet_flags` UINT16 at16 and `natnet_source` UINT8 at18, in20-byte
+rows. XYZ offsets0/4/8 and coordinates are unchanged; other backends keep their
+original XYZ layout. Source codes are0=deprecated OtherMarkers without membership,
+1=labeled ID without flags,2=labeled pre-v3 flags,3=labeled v3+ flags. The Dockerfile
+applies this patch after the interface/unicast patch. The current development
+container's node was rebuilt; recreating a container requires the rebuilt image.
+
+[deployment/ros_real_bridge.py](../deployment/ros_real_bridge.py) preserves this
+metadata with row alignment, endian and layout validation. For v3+, candidates
+require the unlabeled flag0x10 and none of occluded0x01, model-solved0x04,
+asset-associated0x08 or active0x20. Pre-v3 flagged rows require a legacy ID with
+high word zero and no occluded/model-solved flags. Deprecated OtherMarkers and
+ID-only rows remain recorded but are ineligible: they can duplicate body markers
+without reliable membership/visibility. Modern unassociated PointCloud IDs may
+use all32 bits; their high word is not interpreted as an asset ID. IDs do not
+establish material cable identity. Missing metadata clears the reconstruction
+display with an explicit unavailable/rebuild diagnostic; there is no mixed-XYZ
+fallback, including for an unsupported closed-source backend. Older recordings
+remain playable but cannot recover discarded fields for an equivalent rerun of
+this filter. Point indices identify
 only a row in one retained cloud; they are never persistent physical IDs. The
 raw capture-frame XYZ array and separately transformed display-frame array are
 recorded, with nonfinite coordinates represented by JSON null. Backend/frame
@@ -501,8 +520,12 @@ nodes and one-to-one candidate assignments, with geometric upper bounds between
 the attachment and markers and between all assigned marker pairs. Chord distance
 may be shorter than arc spacing; no straight-segment equality is imposed. The
 root-distance bound filters distant clutter, and1-mm spatial deduplication handles
-duplicate list entries while preserving raw arrays. Rigid-body candidates are
-not semantically excluded: their IDs/flags are unavailable upstream. Candidate-pair
+duplicate list entries while preserving raw arrays. Before association,
+[deployment/real_flight.py](../deployment/real_flight.py) masks ineligible rows
+only in a working copy, retaining raw display/evidence rows and original indices.
+Reconstruction events record `excluded_point_indices` and the candidate rule.
+Body-marker observations cannot enter association history when the upstream
+membership is correct. Candidate-pair
 distances are computed once per cloud over the retained candidate union and reused
 across beam hypotheses; the matrix is not allocated over the full raw cloud.
 
@@ -536,10 +559,17 @@ persistent gray candidate points and blue estimated marker identities/straight
 links, alongside the existing green simulated cable. Links are only between
 adjacent observed material markers (including the measured root); no gap filling
 or smooth centerline inference is displayed. Labels remain Estimated because
-identity is inferred and upstream visibility flags are unavailable. The inspector
+identity is inferred rather than physically validated. The inspector
 shows count, age, status and minimum heuristic confidence. Separate visibility
 controls select the estimate and raw candidates; overlays older than0.25 s are
-hidden. Numerical integration, physical parameters and training stay unchanged.
+hidden. Capture-only starts with the measured drone and accepted blue estimates
+visible; raw candidates, the simulated cable (including its markers) and simulated
+tip trail start hidden. Existing Displays controls can show each hidden layer.
+These defaults are applied by [run_custom_real.py](../run_custom_real.py) before
+creating viewer actors, including actors arriving after capture starts. Normal
+real-flight, attach and replay defaults are unchanged. Visibility does not filter
+recorded observations or stop the simulated cable. Numerical integration,
+physical parameters and training stay unchanged.
 
 #### Hand-test recording and offline playback
 
@@ -2832,3 +2862,36 @@ are excluded. Both READMEs describe the checkout layout and data restoration.
 This is packaging/documentation work; no simulations, fitting, training or
 hardware experiments were rerun. Upload verification is retained locally under
 `tmp/github-upload-20261016/` after publication.
+
+2026-10-16 Capture-only display defaults: the measured drone and accepted blue
+cable estimates remain visible; raw candidates, simulated cable/markers and the
+simulated tip trail start hidden and can be enabled in Displays. Tracking,
+physics, recording contents and other launch/replay defaults are unchanged.
+The existing cable-tracking and recording suites passed (19 tests). An offscreen
+render check exercised the launcher's visibility block with late-arriving robot
+data, accepted/missing markers and an extra raw candidate; checked visibility,
+no links across missing markers, restoring hidden layers and unchanged source
+frames. Evidence is retained in
+`tmp/capture-only-display-20261016/verification.json` and `accepted-only.png`.
+These are synthetic display/reconstruction/recording checks; no live OptiTrack
+capture, physical identity accuracy, model fitting, training or flight was tested.
+
+2026-10-16 Rigid-body marker exclusion: the open OptiTrack capture patch preserves
+NatNet membership/visibility metadata alongside all raw XYZ rows. Cable
+association excludes asset/body markers, occluded/model-solved observations,
+active markers in the modern stream and unclassified deprecated duplicates before
+updating history. Missing metadata yields an explicit unavailable diagnostic.
+The newest saved clip's bad assignment at elapsed38.19 s selects raw rows2,0,1,3
+near the drone body plane. That recording lacks membership metadata, so it cannot
+establish corrected tracking accuracy. Its diagnostic packet/result is retained
+in `tmp/rigid-marker-filter-20261016/recorded-failure.json` without editing sources.
+The node rebuilt successfully in the existing development container; both Docker
+patches were checked against pinned upstream sources. The existing/extended cable
+tracking and recording suites passed22 tests. Synthetic loopback NatNet3.1 and4.1
+frames traversed the rebuilt node, ROS PointCloud2 decoder and association:10
+synthetic cable markers accepted,11 ineligible rows excluded and all21 raw rows
+retained. Logs and results are in `tmp/rigid-marker-filter-20261016/`. These are
+transport/reconstruction checks, not live Motive accuracy or real-flight evidence.
+Work stopped at the user's request before live validation. Partial initialization
+and changes to the simulated-cable failure behavior remain pending; the current
+complete hanging initialization and numerical freeze behavior are unchanged.

@@ -189,7 +189,7 @@ def main():
         metadata = dict(session=session, mode='capture-only' if args.capture_only else 'attached-viewer' if args.attach else 'real-stack-and-viewer',
             cable_tracking=None if tracking_settings is None else dict(settings=asdict(tracking_settings),
                 topic=args.point_cloud_topic, initialization='Complete approximately vertical hanging cable',
-                source='Mixed candidate XYZ; upstream NatNet IDs and visibility flags unavailable',
+                source='Mixed raw XYZ with aligned NatNet IDs/flags/source; observed unassociated passive candidates only',
                 status='Experimental association overlay; heuristic confidence; no simulation correction'),
             shutdown_target=attached_stack,
             cable_simulation=dict(model=str(model_path), configuration=cable_model.config,
@@ -245,12 +245,18 @@ def main():
         if args.capture_only:
             print('Capture-only hand test: no Crazyflie flight server was started. '
                   'Use Record / Stop & save; closing the viewer also stops this capture node.', flush=True)
+            print('Capture-only display: measured drone and accepted blue cable estimates. '
+                  'Raw candidates, simulated cable and simulated tip trail start hidden; enable them in Displays. '
+                  'Hidden layers are still recorded.', flush=True)
         print('Cable simulation follows measured attachment motion; initial cable is assumed hanging/untwisted. '
               'The displayed floor has no contact response. Tracking gaps over 0.25 s freeze the cable.', flush=True)
         if tracking_settings is not None:
             print('Cable tracking: hold the cable fully visible and approximately vertical to initialize. '
                   'Gray = raw candidates; blue = estimated cable identities/observed links; green = simulation. '
                   'Missing/ambiguous nodes are not filled. Cloud and assignment records are in connection.jsonl.', flush=True)
+            print('Candidate filter: rigid-body/asset markers, occluded/model-solved markers and '
+                  'unclassified legacy duplicates are excluded; raw observations remain recorded. '
+                  'Requires the patched OptiTrack node with marker metadata.', flush=True)
             print('Marker arc distances from attachment (m): '+', '.join(
                 f'{value:g}' for value in tracking_settings.marker_distances_m), flush=True)
         if args.headless:
@@ -264,6 +270,11 @@ def main():
             from viewer.pyvista_viewer import PyVistaViewer
             viewer = PyVistaViewer(configuration,
                 world=replace(WorldDisplay.from_configuration(configuration.viewer), frame_id=frame))
+            if args.capture_only:
+                for robot in robots:
+                    viewer.set_display_visible('raw_cloud', False, robot=robot['name'])
+                    viewer.set_display_visible('cable', False, robot=robot['name'])
+                viewer.set_overlay_visible('tip_trail', False)
             viewer.stop_requested = stop
             viewer.show_source(feed)
             feed.close()
