@@ -2817,14 +2817,18 @@ firmware equivalence, contact validation or real-flight evidence. Only owned
 isolated test sessions were closed; the user's existing simulator was untouched.
 
 
-2026-10-16 GitHub publication preparation: preserved the two-project directory
-layout and existing AeroWhip branch history. Added ignore rules for generated
-session output and local environment/credential files, plus exact-byte Git
-attributes for the Crazyswarm source snapshot. The Crazyswarm `.env` contains
-only public upstream commit pins and remains part of its reproducible source.
-Source, configuration, trajectory CSVs and packaged model artifacts are included;
-recordings, training runs, temporary evidence and installed/build environments
-remain local. Existing local evidence links are retained and are not claims that
-those files are available in a clone. This is packaging/documentation work;
-no simulations, fitting, training or hardware experiments were rerun. GitHub
-publication is pending authentication at the time of this preparation note.
+2026-10-16 GitHub source and data snapshot: preserved the two-project layout
+and existing AeroWhip branch history. Source, configuration, trajectory CSVs and
+packaged model artifacts are tracked in the two private repositories. At the
+user's explicit request, recordings, training runs and retained test evidence
+are also included as release archives under `backup-2026-10-16`; they remain
+ignored by normal Git commits and require a separate download/restore. Archive
+manifests identify individual files and SHA-256 hashes, and source stability and
+full decompression checks verify the snapshot before upload. Successful, failed
+and exploratory runs are retained without model promotion. Crazyswarm's `.env`
+contains only public upstream commit pins and remains part of its source.
+Virtual environments, build/cache files, publication tooling and credentials
+are excluded. Both READMEs describe the checkout layout and data restoration.
+This is packaging/documentation work; no simulations, fitting, training or
+hardware experiments were rerun. Upload verification is retained locally under
+`tmp/github-upload-20261016/` after publication.

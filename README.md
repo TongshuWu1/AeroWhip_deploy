@@ -28,11 +28,12 @@ The two source projects use this checkout layout for automatic discovery:
 
 Keep these directory names when cloning. `AEROWHIP_ROOT` can override the
 AeroWhip path for the Docker launchers. The repositories include source,
-configuration, trajectory CSVs and packaged model artifacts. Generated sessions,
-training runs, temporary evidence, virtual environments and build caches remain
-local; some historical evidence links in the implementation record therefore
-require the original local workspace. Recreate dependencies using the setup
-instructions rather than copying a virtual environment.
+configuration, trajectory CSVs and packaged model artifacts. Recordings, training
+runs and retained test evidence are stored in the private GitHub release
+`backup-2026-10-16`, with archives, per-file manifests and SHA-256 checksums.
+They are not downloaded by `git clone`; restore them separately below to use
+historical local evidence links. Virtual environments and build caches remain
+local. Recreate dependencies using the setup instructions.
 
 Run setup commands from the AeroWhip checkout. Create a new virtual environment
 on each computer; rebuild native extensions for its OS and Python ABI. The
@@ -62,6 +63,29 @@ python validate_stages.py
 CUDA training also requires a compatible Torch/CUDA/Triton installation. The
 interactive viewer needs a working desktop/OpenGL session. Setup and numerical
 checks do not establish policy performance or real-flight readiness.
+
+## Recordings and training backup
+
+[Download the data release](https://github.com/TongshuWu1/AeroWhip_deploy/releases/tag/backup-2026-10-16).
+It contains three archives: `aerowhip-training-runs.tar.gz` (`runs/`),
+`aerowhip-recordings-and-output.tar.gz` (`output/` and `data/recordings/`), and
+`aerowhip-retained-evidence.tar.gz` (`tmp/`, excluding build/cache files and
+publication tooling). Each has a JSON file manifest; `SHA256SUMS` verifies the
+release downloads. These retain successful, failed and exploratory work without
+promoting any trained model or changing recorded scientific results.
+
+Restore into a fresh checkout to avoid overwriting newer local recordings:
+
+```bash
+gh release download backup-2026-10-16 --repo TongshuWu1/AeroWhip_deploy --dir ../aerowhip-data-backup
+(cd ../aerowhip-data-backup && sha256sum -c SHA256SUMS)
+tar -xzf ../aerowhip-data-backup/aerowhip-training-runs.tar.gz
+tar -xzf ../aerowhip-data-backup/aerowhip-recordings-and-output.tar.gz
+tar -xzf ../aerowhip-data-backup/aerowhip-retained-evidence.tar.gz
+```
+
+The companion Crazyswarm release contains its flight logs. Both repositories
+and their releases require access to the owner's private GitHub repositories.
 
 ## Simulation flight
 
