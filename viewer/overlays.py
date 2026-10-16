@@ -9,25 +9,26 @@ COLORS = {'reference': '#008c82', 'trail': '#9653b5', 'tip_trail': '#dd517b',
 
 
 class SimulationOverlays:
-    def __init__(self, plotter, pv, state):
+    def __init__(self, plotter, pv, state, *, prefix=''):
         self.visible = dict.fromkeys(COLORS, True)
         self.force_scale = .25  # displayed metres per newton; no clipping/normalization
         self.trail = deque(maxlen=2000)
         self.tip_trail = deque(maxlen=2000)
         self.last_time = None
+        self.trajectory_epoch = state.trajectory_epoch
         self.reference_count = 0
         self.lines, self.actors = {}, {}
         for key in ('reference', 'trail', 'tip_trail'):
             line = pv.lines_from_points(np.tile(state.drone.position_world_m, (2, 1)))
             self.lines[key] = line
-            self.actors[key] = plotter.add_mesh(line, name=f'motion_{key}',
+            self.actors[key] = plotter.add_mesh(line, name=f'{prefix}motion_{key}',
                 color=COLORS[key], line_width=2 if key == 'reference' else 3,
                 lighting=False, pickable=False, reset_camera=False)
         for key in ('thrust', 'cable'):
             self.actors[key] = plotter.add_mesh(
                 pv.Arrow(start=(0, 0, 0), direction=(1, 0, 0), scale=1.,
                          tip_length=.22, tip_radius=.055, shaft_radius=.018),
-                name=f'force_{key}', color=COLORS[key], lighting=False,
+                name=f'{prefix}force_{key}', color=COLORS[key], lighting=False,
                 pickable=False, reset_camera=False)
         for actor in self.actors.values():
             actor.SetVisibility(False)
@@ -79,14 +80,20 @@ class SimulationOverlays:
         actor.user_matrix = transform
 
     def update(self, state):
+        if state.trajectory_epoch != self.trajectory_epoch:
+            self.reset_trail()
+            self.set_reference(None)
+            self.trajectory_epoch = state.trajectory_epoch
         if self.last_time is not None and state.time_s < self.last_time:
             self.reset_trail()
         if self.last_time is None or state.time_s > self.last_time:
             self.trail.append(state.drone.position_world_m.copy())
-            self.tip_trail.append(state.cable_node_positions_world_m[-1].copy())
+            if state.cable_node_positions_world_m is not None:
+                self.tip_trail.append(state.cable_node_positions_world_m[-1].copy())
             self.last_time = state.time_s
             if len(self.trail) > 1:
                 self._set_line('trail', np.asarray(self.trail))
+            if len(self.tip_trail) > 1:
                 self._set_line('tip_trail', np.asarray(self.tip_trail))
         self.actors['trail'].SetVisibility(self.visible['trail'] and len(self.trail) > 1)
         self.actors['tip_trail'].SetVisibility(self.visible['tip_trail'] and len(self.tip_trail) > 1)

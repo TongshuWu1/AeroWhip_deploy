@@ -65,6 +65,35 @@ class Stage1Scorer:
     matching, strike or time credit enters that mode; wall crossings remain
     diagnostics. This experimental event proxy is not a physical whip classifier.
 
+    directed_compact_whip_v1 selects max_e W(e)*(1+alpha*r(e))*exp(-beta*l(e)/L),
+    with W=M*U*D, r=clip(dot(tip-attachment,direction)/L,0,1), and l the
+    accumulated 100-Hz tracked-drone path from episode start through that same
+    observed release. L is the rest cable length. Required drone_positions are
+    task measurements, not cable-root positions or an energy estimate. No new
+    whip/success threshold, target bonus, cycle accumulation or early termination.
+
+    directed_level_outreach_whip_v1 selects max_e W(e)*(b+(1-b)*r(e)*H(e))
+    *exp(-beta*l(e)/L), H=exp(-.5*((tip_z-drone_z)/(sigma_fraction*L))**2).
+    Height uses the tracked drone at that same observed release, not the
+    attachment or fixed target height. Base fraction b preserves partial whip
+    support while joint reach/height quality shapes the remaining credit.
+    mechanics_credit remains W for diagnostics; base_mechanics_credit and
+    level_outreach_bonus are the additive contributions before preparation cost.
+
+    directed_outreach_speed_whip_v1 selects max_e MU/(MU+k)*D*r*H*S**p
+    *exp(-beta*l/L), S=max(v_forward,0)/(max(v_forward,0)+speed_scale).
+    No base allowance or standalone acceleration bonus enters this mode.
+    Raw W is diagnostic; outreach_credit minus preparation_cost is event credit.
+
+    directed_outreach_height_whip_v1 uses the same mechanics/alignment/speed/path
+    factors with a*r+b*h+c*r*h, h=clip(1-|tip_z-drone_z|/L,0,1). The explicit
+    weights bound credit by a+b+c. Contributions share the selected release.
+
+    directed_outreach_speed_delivery_v1 preserves that complete event credit
+    and multiplies it by (1+P) at the SAME actual observed release. It uses the
+    existing fixed-rectangle distance Gaussian; approach_reward is the added
+    path-discounted outreach credit times P. No crossing or curriculum gate.
+
     Explicit directed_delivery_v1 retains W=M*U*D at the same actual event and
     selects max_e W(e)*(1+P(e)), P=exp(-.5*(rectangle_distance/approach_width)^2).
     P is uniform on the whole rectangle, independent of speed/angle thresholds.
@@ -112,6 +141,19 @@ class Stage1Scorer:
 
     Construction validates values and can synchronize CUDA. Calls are batched,
     forward-only and device-resident; no rollout, target or learner is required.
+    directed_outreach_speed_precision_v1 preserves speed/level outreach B and
+    selects B*(1+P+C) at one observed release. P measures current rectangle
+    distance; C measures world XYZ center distance with curriculum sigma.
+    Neither proxy changes geometric/strict crossing diagnostics.
+
+    crossing_priority_delivery_v1 adds two independent causal records:
+    weighted normalized linear Stage1 credit, plus the best complete actual
+    forward crossing's center guidance and geometric/strict bonuses. Crossing
+    credit does not require an eligible bend window; it is target-task credit,
+    not a physical whip classification. Base event indices and release metrics
+    still describe the whip record. crossing_reward_* describes the separately
+    selected crossing. Repeated crossings do not accumulate credit.
+
     The inherited GPU pseudoinverse is not graph-capturable on the checked
     backend; ordinary CUDA evaluation works. No graph/synchronization guarantee.
     """
@@ -137,6 +179,10 @@ class Stage1Scorer:
         self.length = self.rest.sum()
         if not bool(torch.isfinite(self.length)):
             raise ValueError('Cable length must be finite')
+        if configuration.matching.reward_mode in ('directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1'):
+            self.outreach_height_width = configuration.matching.outreach_height_width_fraction*self.length
+            if not bool(torch.isfinite(self.outreach_height_width) & (self.outreach_height_width > 0)):
+                raise ValueError('Level outreach height width must be finite and positive on the mesh dtype')
         self.s = self.rest.cumsum(0)[:-1]
         self.dual = (self.rest[:-1]+self.rest[1:])/2
         self.ds = self.s.diff()
@@ -166,7 +212,7 @@ class Stage1Scorer:
             h = round(seconds/.01)
             begins = torch.arange(start, stop-h+1, round(cfg.window_stride_s/.01), device=self.rest.device)
             if (configuration.matching.strike_mechanics_scale is not None
-                    or configuration.matching.reward_mode in ('directed_whip_v1', 'directed_delivery_v1', 'directed_precision_v1')) and int(begins[-1]) != stop-h:
+                    or configuration.matching.reward_mode in ('directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1')) and int(begins[-1]) != stop-h:
                 # The 50-ms stride need not land on the final search endpoint.
                 # Include it explicitly so the last accepted crossing interval
                 # has an eligible SAME-event bend window and tip lag.
@@ -279,7 +325,7 @@ class Stage1Scorer:
                            components, causal)
 
     @torch.no_grad()
-    def __call__(self, positions, velocities, state_valid, *, terminal_samples=None):
+    def __call__(self, positions, velocities, state_valid, *, terminal_samples=None, drone_positions=None):
         if self.configuration.termination in ('first_qualified_hit_v1', 'first_geometric_hit_v1') and terminal_samples is None:
             raise ValueError('First-hit tasks require explicit executed terminal_samples; padded suffixes are not episodes')
         if (not isinstance(positions, torch.Tensor) or positions.ndim != 4 or positions.shape[0] < 1
@@ -296,6 +342,22 @@ class Stage1Scorer:
         sample_valid = (state_valid & torch.isfinite(positions).flatten(2).all(-1)
                         & torch.isfinite(velocities).flatten(2).all(-1)
                         & (torch.isfinite(lengths) & (lengths > 0)).all(-1))
+        compact_mode = self.configuration.matching.reward_mode == 'directed_compact_whip_v1'
+        level_mode = self.configuration.matching.reward_mode == 'directed_level_outreach_whip_v1'
+        linear_height_mode = self.configuration.matching.reward_mode in ('directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1')
+        speed_outreach_mode = self.configuration.matching.reward_mode in ('directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1')
+        path_mode = compact_mode or level_mode or speed_outreach_mode
+        preparation_path = None
+        if path_mode:
+            if (not isinstance(drone_positions, torch.Tensor)
+                    or drone_positions.shape != (*positions.shape[:2], 3)
+                    or drone_positions.dtype != positions.dtype or drone_positions.device != positions.device):
+                raise ValueError('Compact/level Stage1 requires tracked drone_positions (batch, times, 3) on the mesh dtype/device')
+            drone_finite = torch.isfinite(drone_positions).all(-1)
+            safe_drone = torch.where(drone_finite[..., None], drone_positions, 0.)
+            steps = torch.linalg.vector_norm(safe_drone.diff(dim=1), dim=-1)
+            preparation_path = torch.cat((torch.zeros_like(steps[:, :1]), steps.cumsum(1)), 1)
+            sample_valid &= drone_finite & torch.isfinite(preparation_path)
         prefix_valid = sample_valid.to(torch.int64).cumprod(1).bool()
         if terminal_samples is not None:
             if (terminal_samples.shape != (len(positions),) or terminal_samples.device != positions.device
@@ -310,6 +372,8 @@ class Stage1Scorer:
         # observed prefix for causal credit. The full episode is still invalid.
         p = torch.where(prefix_valid[..., None, None], positions, self.fallback)
         v = torch.where(prefix_valid[..., None, None], velocities, 0)
+        if path_mode:
+            preparation_path = torch.where(prefix_valid, preparation_path, 0.)
         if self.configuration.matching.reward_mode in ('directed_hit_v1', 'geometric_hit_quality_v1'):
             from .strike import surface_events
             surface = surface_events(p, v, self.time, self.center, self.direction, self.surface, self.speed)
@@ -335,9 +399,10 @@ class Stage1Scorer:
         prefix = torch.cat((torch.zeros_like(abc[:, :1]), abc.cumsum(1)), 1)
         event_p, event_v = p, v
         event_time = self.elapsed[None].expand(len(p), -1)
-        delivery_mode = self.configuration.matching.reward_mode == 'directed_delivery_v1'
+        delivery_mode = self.configuration.matching.reward_mode in ('directed_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1')
         precision_mode = self.configuration.matching.reward_mode == 'directed_precision_v1'
-        whip_mode = self.configuration.matching.reward_mode in ('directed_whip_v1', 'directed_delivery_v1', 'directed_precision_v1')
+        outreach_precision_mode = self.configuration.matching.reward_mode == 'directed_outreach_speed_precision_v1'
+        whip_mode = self.configuration.matching.reward_mode in ('directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1')
         interpolated_mode = precision_mode or not whip_mode
         surface = None
         if self.surface is not None:
@@ -370,6 +435,19 @@ class Stage1Scorer:
             (unit_velocity*self.direction).sum(-1))
         release_angle = angle
         cfg, match = self.configuration.mechanics, self.configuration.matching
+        if path_mode:
+            forward_reach = ((event_p[:, :, -1]-event_p[:, :, 0])*self.direction).sum(-1)
+            reach_fraction = (forward_reach/self.length).clamp(0, 1)
+            preparation_factor = torch.exp(-match.preparation_path_weight*preparation_path/self.length)
+        if level_mode or speed_outreach_mode:
+            tip_drone_height_error = event_p[:, :, -1, 2]-torch.where(prefix_valid, drone_positions[:, :, 2], 0.)
+            level_height_factor = ((1-tip_drone_height_error.abs()/self.length).clamp(0,1)
+                if linear_height_mode else torch.exp(-.5*(tip_drone_height_error/self.outreach_height_width).square()))
+            level_outreach_quality = reach_fraction*level_height_factor
+            outreach_quality = (self.configuration.matching.outreach_reach_weight*reach_fraction
+                +self.configuration.matching.outreach_height_weight*level_height_factor
+                +self.configuration.matching.outreach_joint_weight*level_outreach_quality
+                if linear_height_mode else level_outreach_quality)
         precision_quality = None
         if precision_mode:
             forward_cross = surface['crossing'] & (surface['forward'] > 0)
@@ -386,6 +464,17 @@ class Stage1Scorer:
                 ((delta*side).sum(-1).abs()-self.surface.width_m/2).clamp_min(0),
                 (delta[:, :, 2].abs()-self.surface.height_m/2).clamp_min(0)), -1).norm(dim=-1)
             target_proximity = torch.exp(-.5*(target_distance/self.surface.approach_width_m).square())
+        center_proximity = center_distance = crossing_quality = None
+        if outreach_precision_mode:
+            # Dense center guidance uses the SAME observed release in world XYZ.
+            # It is a reward proxy, not a forward crossing or success criterion.
+            center_distance = (event_p[:, :, -1]-self.center).norm(dim=-1)
+            center_proximity = torch.exp(-.5*(center_distance/match.center_sigma_m).square())
+            cross = surface['crossing'] & (surface['forward'] > 0)
+            quality = torch.exp(-.5*(surface['lateral'].square()+surface['vertical'].square())/match.center_sigma_m**2)
+            # An interpolated interval becomes observed at its ending sample.
+            crossing_quality = torch.cat((quality.new_zeros((len(p),1)),
+                quality[:, :-1].masked_fill(~cross[:, :-1],0)),1)
         height_error, speed_error = event_p[:, :, -1, 2]-self.height, tip_speed-self.speed
         # Preserve signed speed error in diagnostics; minimum mode penalizes
         # only shortfall, and still chooses ALL terms at the same event.
@@ -457,8 +546,19 @@ class Stage1Scorer:
                 # One bounded event, without wall matching, hit, time or speed
                 # surplus bonuses. Smooth direction preference has no angle gate.
                 objective = mechanical*unfolding*direction
+                if compact_mode:
+                    objective = objective*(1+match.reach_weight*reach_fraction[:, tips])*preparation_factor[:, tips]
+                if level_mode:
+                    objective = objective*(match.outreach_base_fraction
+                        +(1-match.outreach_base_fraction)*level_outreach_quality[:, tips])*preparation_factor[:, tips]
+                if speed_outreach_mode:
+                    mechanics_gate = _sat(mechanical*unfolding, match.outreach_mechanics_scale)
+                    speed_factor = _sat(forward[:, tips], match.outreach_speed_scale_mps).pow(match.outreach_speed_power)
+                    objective = (mechanics_gate*direction*outreach_quality[:, tips]
+                        *speed_factor*preparation_factor[:, tips])
                 if delivery_mode:
-                    objective = objective*(1+target_proximity[:, tips])
+                    objective = objective*(1+target_proximity[:, tips]
+                        +(center_proximity[:, tips] if outreach_precision_mode else 0.))
                 if precision_mode:
                     objective = objective*(1+precision_quality[:, tips])
             priority_components=None
@@ -519,11 +619,50 @@ class Stage1Scorer:
                     strike_bonus=torch.zeros_like(best), unfolding_fraction=take(unfolding),
                     folded_chord_arc_ratio=folded, release_chord_arc_ratio=event_chord_ratio.gather(1, chosen),
                     forward_alignment=take(direction))
+                if path_mode:
+                    factor = preparation_factor.gather(1, chosen)
+                    fields[-1].update(forward_reach_m=forward_reach.gather(1, chosen),
+                        forward_reach_fraction=reach_fraction.gather(1, chosen),
+                        preparation_path_m=preparation_path.gather(1, chosen),
+                        preparation_factor=factor)
+                if compact_mode:
+                    reach_bonus = selected_whip*match.reach_weight*reach_fraction.gather(1, chosen)
+                    fields[-1].update(reach_bonus=reach_bonus,
+                        preparation_cost=(selected_whip+reach_bonus)*(1-factor))
+                if level_mode:
+                    base_credit = selected_whip*match.outreach_base_fraction
+                    outreach_bonus = selected_whip*(1-match.outreach_base_fraction)*level_outreach_quality.gather(1, chosen)
+                    fields[-1].update(base_mechanics_credit=base_credit, level_outreach_bonus=outreach_bonus,
+                        tip_drone_height_error_m=tip_drone_height_error.gather(1, chosen),
+                        level_height_factor=level_height_factor.gather(1, chosen),
+                        level_outreach_quality=level_outreach_quality.gather(1, chosen),
+                        preparation_cost=(base_credit+outreach_bonus)*(1-factor))
+                if speed_outreach_mode:
+                    gate = take(mechanics_gate*direction*speed_factor)
+                    outreach_credit = gate*outreach_quality.gather(1, chosen)
+                    fields[-1].update(outreach_mechanics_gate=take(mechanics_gate),
+                        outreach_speed_factor=take(speed_factor), outreach_credit=outreach_credit,
+                        tip_drone_height_error_m=tip_drone_height_error.gather(1, chosen),
+                        level_height_factor=level_height_factor.gather(1, chosen),
+                        level_outreach_quality=level_outreach_quality.gather(1, chosen),
+                        preparation_cost=outreach_credit*(1-factor))
+                    if linear_height_mode:
+                        fields[-1].update(
+                            outreach_reach_credit=gate*match.outreach_reach_weight*reach_fraction.gather(1,chosen),
+                            outreach_height_credit=gate*match.outreach_height_weight*level_height_factor.gather(1,chosen),
+                            outreach_joint_credit=gate*match.outreach_joint_weight*level_outreach_quality.gather(1,chosen))
                 if delivery_mode:
                     proximity=target_proximity.gather(1,chosen)
-                    fields[-1].update(approach_reward=selected_whip*proximity,
+                    delivery_credit = outreach_credit*factor if speed_outreach_mode else selected_whip
+                    fields[-1].update(approach_reward=delivery_credit*proximity,
                         matching=proximity,target_proximity=proximity,
                         wall_distance_m=target_distance.gather(1,chosen))
+                if outreach_precision_mode:
+                    fields[-1].update(center_reward=delivery_credit*center_proximity.gather(1,chosen),
+                        center_proximity=center_proximity.gather(1,chosen),
+                        center_distance_m=center_distance.gather(1,chosen),
+                        crossing_center_quality=crossing_quality.gather(1,chosen),
+                        precision_sigma_m=torch.full_like(best,match.center_sigma_m))
                 if precision_mode:
                     quality=precision_quality.gather(1,chosen)
                     fields[-1].update(approach_reward=selected_whip*quality, matching=quality,
@@ -554,8 +693,70 @@ class Stage1Scorer:
                     strict_strike_success=success.to(p.dtype).masked_fill(~valid, float('nan')),
                     first_geometric_hit_time_s=surface['elapsed'].masked_fill(~surface['geometric_hit'], float('inf'))
                         .amin(-1).masked_fill(~valid | ~geometric, float('nan')))
-            if precision_mode:
+            if precision_mode or outreach_precision_mode:
                 from .strike import crossing_precision_diagnostics
                 components.update(crossing_precision_diagnostics(surface,valid))
-        return Stage1Score(score, valid, has_event, indices.masked_fill(~has_event[:, None], -1),
-                           components, event_scores.cummax(1).values)
+        result = Stage1Score(score, valid, has_event, indices.masked_fill(~has_event[:, None], -1),
+                             components, event_scores.cummax(1).values)
+        if match.reward_mode == 'crossing_priority_delivery_v1':
+            return self._crossing_priority_score(result, surface, prefix_valid)
+        return result
+
+    def _crossing_priority_score(self, whip, surface, prefix_valid):
+        """Add one observed crossing record to normalized Stage1 support.
+
+        The support and crossing may occur at different times, as explicitly
+        defined by this reward. All crossing terms must come from ONE crossing.
+        Availability is its interval endpoint, never the interpolated timestamp.
+        Invalid terminal returns are still replaced by the environment's failure
+        return; an invalid future suffix cannot erase earlier causal credit.
+        """
+        from .strike import crossing_precision_diagnostics
+        match = self.configuration.matching
+        normalizer = (match.outreach_reach_weight+match.outreach_height_weight
+                      +match.outreach_joint_weight)
+        support_scale = match.crossing_whip_weight/normalizer
+        ready = (torch.arange(len(self.time), device=self.time.device)+1).clamp_max(len(self.time)-1)
+        crossing = surface['crossing'] & (surface['forward'] > 0) & prefix_valid[:, ready]
+        geometric = surface['geometric_hit'] & crossing
+        strict = surface['qualified'] & crossing
+        center = 1/(1+(surface['lateral']/match.crossing_side_scale_m).square()
+                    +(surface['vertical']/match.crossing_height_scale_m).square())
+        event = torch.where(crossing, center+match.crossing_geometric_weight*geometric
+                            +match.crossing_strict_weight*strict, 0.)
+        observed = torch.zeros_like(event)
+        observed.scatter_reduce_(1, ready[None].expand_as(event), event, reduce='amax', include_self=True)
+        causal = support_scale*whip.causal_best+observed.cummax(1).values
+        credit, selected = event.max(1)
+        exists = crossing.any(1)
+        valid = whip.valid & torch.isfinite(event).all(1)
+        clean = lambda value: value.masked_fill(~valid, float('nan'))
+        take = lambda value: value.gather(1, selected[:, None])[:, 0]
+        crossing_value = lambda value: clean(torch.where(exists, take(value), 0.))
+        diagnostic = lambda value: take(value).masked_fill(~valid | ~exists, float('nan'))
+        support = support_scale*whip.score
+        score = clean(support+credit)
+        components = dict(whip.components)
+        components.update(
+            whip_support_reward=clean(support),
+            crossing_reward=clean(credit),
+            crossing_center_reward=crossing_value(center),
+            crossing_geometric_bonus=crossing_value(match.crossing_geometric_weight*geometric),
+            crossing_strict_bonus=crossing_value(match.crossing_strict_weight*strict),
+            crossing_reward_time_s=diagnostic(surface['elapsed']),
+            crossing_reward_lateral_error_m=diagnostic(surface['lateral']),
+            crossing_reward_vertical_error_m=diagnostic(surface['vertical']),
+            crossing_reward_forward_mps=diagnostic(surface['forward']),
+            crossing_reward_angle_rad=diagnostic(surface['angle']),
+            target_proximity=crossing_value(center),
+            geometric_hit_success=clean(geometric.any(1).to(score.dtype)),
+            strict_strike_success=clean(strict.any(1).to(score.dtype)),
+            strike_success=clean(strict.any(1).to(score.dtype)),
+            strike_count=clean(strict.sum(1).to(score.dtype)),
+            first_strike_time_s=surface['elapsed'].masked_fill(~strict, float('inf')).amin(1)
+                .masked_fill(~valid | ~strict.any(1), float('nan')),
+            first_geometric_hit_time_s=surface['elapsed'].masked_fill(~geometric, float('inf')).amin(1)
+                .masked_fill(~valid | ~geometric.any(1), float('nan')))
+        masked_surface = dict(surface, crossing=crossing, geometric_hit=geometric, qualified=strict)
+        components.update(crossing_precision_diagnostics(masked_surface, valid))
+        return Stage1Score(score, valid, valid & (score > 0), whip.event_indices, components, causal)

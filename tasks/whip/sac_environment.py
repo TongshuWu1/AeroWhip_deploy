@@ -1,6 +1,6 @@
 """Feedback task adapter over the unchanged C++ motor-driven plant.
 
-Policy: configured rate (current curriculum 10 Hz); observations/reward: 100 Hz;
+Policy: configured velocity/acceleration rate; observations/reward: 100 Hz;
 servo: model clock.
 Episodes finish independently. Failed lanes are frozen only for batching and
 never become valid replay continuation. Physics stays float64, networks float32.
@@ -8,6 +8,7 @@ never become valid replay continuation. Physics stays float64, networks float32.
 import math
 import os
 import struct
+import sys
 from contextlib import nullcontext
 import numpy as np
 import torch
@@ -18,13 +19,16 @@ from simulation.state import quaternion_xyzw_to_rotation_matrix
 from .learned_recovery import make_scorer
 from .workspace import WorkspacePenalty
 from .iteration_graph import IterationGraphs, PhysicsReplay
+from training.configuration import action_limit_key
 
 
 def _conditional_solver_enabled(conditional=None):
-    """Windows64 CUDA-task default; explicit choice wins over the environment."""
+    """Supported64-bit CUDA-task default; explicit choice wins over the environment."""
     if conditional is not None:
         return conditional
-    default = '1' if os.name == 'nt' and struct.calcsize('P') == 8 else '0'
+    cuda_version = tuple(int(v) for v in (torch.version.cuda or '0.0').split('.')[:2])
+    supported = os.name == 'nt' or (sys.platform == 'linux' and cuda_version >= (12,8))
+    default = '1' if supported and struct.calcsize('P') == 8 else '0'
     flag = os.environ.get('AEROWHIP_CONDITIONAL_SOLVER', default)
     if flag not in ('0', '1'):
         raise ValueError('AEROWHIP_CONDITIONAL_SOLVER must be 0 or 1')
@@ -41,7 +45,10 @@ class Stage1Environment:
         if m.dt != .01 or scene.timestep_s != .01:
             raise ValueError('Stage 1 requires a 100 Hz observation clock')
         geometric = GeometricController(m)
-        self.controller = geometric.velocity
+        self.action_interface = settings['action_interface']
+        limit_key = action_limit_key(settings)
+        self.controller = (geometric.acceleration if self.action_interface == 'acceleration_direct_v1'
+                           else geometric.velocity)
         if 'workspace_filter' in settings:
             raise ValueError('Workspace command filtering is retired; use explicit workspace_penalty')
         self.workspace_penalty = WorkspacePenalty(**settings['workspace_penalty'])
@@ -63,7 +70,9 @@ class Stage1Environment:
         self.time = torch.arange(self.samples,device=self.device,dtype=torch.float64)*.01
         self.maximum_thrust = float(sum(m.config['actuator']['maximum_thrust_n']))
         self.action_size = 3
-        self.velocity_limit = m.tensor(settings['velocity_limit_mps'])
+        self.action_limit = m.tensor(settings[limit_key])
+        if self.action_interface == 'velocity_v1':
+            self.velocity_limit = self.action_limit  # Retained velocity-only search/recovery tools.
         rotation = quaternion_xyzw_to_rotation_matrix(initial.quaternion_body_to_world_xyzw)
         yaw = float(np.arctan2(rotation[1,0],rotation[0,0]))
         self.hold = m.tensor([0.,0.,0.,yaw])
@@ -96,7 +105,7 @@ class Stage1Environment:
         self.physical_origin[:3] = self.origin
         self.physical_origin[18:18+3*(m.n-1)] = self.origin.repeat(m.n-1)
         self.wrench_scale = m.tensor([self.maximum_thrust,.1,.1,.02])
-        self.queue_scale = torch.cat((self.velocity_limit,m.tensor([math.pi])))
+        self.queue_scale = torch.cat((self.action_limit,m.tensor([math.pi])))
         # Current/previous physical state, previous dt, motors/wrench, delay
         # queue, previous action, time. Angles stay unwrapped (winding retained).
         self.critic_state_size = 2*len(self.physical_scale)+1+8+4*self.delay+self.action_size+1
@@ -279,11 +288,11 @@ class Stage1Environment:
         if self.decision >= self.decisions or not bool(self.active.any()):
             raise RuntimeError('Episode cohort has finished; reset before stepping')
         if action.shape != (self.batch,self.action_size) or not bool(torch.isfinite(action).all()) or bool((action.abs()>1.000001).any()):
-            raise ValueError('Expected three finite normalized velocity requests in [-1,1]')
+            raise ValueError('Expected three finite normalized '+self.action_interface+' requests in [-1,1]')
         action = action.detach().clamp(-1,1)
         self.actions[:,self.decision] = torch.where(self.active[:,None], action, 0.)
         self.previous_action = torch.where(self.active[:,None], action, self.previous_action)
-        command = torch.cat((action.double()*self.velocity_limit,self.hold[3].expand(self.batch,1)),1)
+        command = torch.cat((action.double()*self.action_limit,self.hold[3].expand(self.batch,1)),1)
         active_at_start = self.active.clone()
         for _ in range(self.stride):
             was_active = self.active.clone()
@@ -357,6 +366,8 @@ class Stage1Environment:
         terminal_samples = observed.long().sum(1) if first_hit_mode else None
         score = self.scorer(h['cable_positions'],h['cable_velocities'],observed,
             **({'terminal_samples': terminal_samples} if first_hit_mode else {}),
+            **({'drone_positions':h['drone_positions']}
+                if c.recovery is None and c.matching.reward_mode in ('directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1') else {}),
             **({'drone_positions':h['drone_positions'],'drone_velocities':h['drone_velocities']}
                 if c.recovery is not None else {}),
             **({'recovery_start_samples':torch.where(self.recovery_start>=0,self.recovery_start,
@@ -476,4 +487,9 @@ class Stage1Environment:
         arrays = {key:value[lane,:count].cpu().numpy() for key,value in self.history.items()}
         arrays.update(time_s=self.time[:count].cpu().numpy(),state_valid=valid[:count],
                       cable_marker_indices=self.model.marker_indices)
+        if self.action_interface == 'acceleration_direct_v1':
+            arrays.update(action_interface=np.array(self.action_interface),
+                          command_units=np.array('world acceleration m/s^2; yaw rad'),
+                          acceleration_limit_mps2=self.action_limit.cpu().numpy(),
+                          policy_rate_hz=np.array(self.settings['policy_rate_hz']))
         return arrays

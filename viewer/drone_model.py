@@ -71,7 +71,7 @@ def _propeller_blade(pv, radius: float, handedness: float):
     return pv.PolyData(np.asarray(points), faces).triangulate()
 
 
-def add_drone_model(plotter, pv, state: SimulationState, viewer: ViewerConfiguration):
+def add_drone_model(plotter, pv, state: SimulationState, viewer: ViewerConfiguration, *, name='drone'):
     rotation = state.drone.rotation_body_to_world
     attachment = rotation.T @ (
         state.attachment_position_world_m - state.drone.position_world_m
@@ -81,10 +81,11 @@ def add_drone_model(plotter, pv, state: SimulationState, viewer: ViewerConfigura
     transform[:3, 3] = state.drone.position_world_m
     actors = []
     rotors = []
+    prefix = f'robot/{name}'
 
     def add(mesh, name, color, metallic=0.0, roughness=0.5, opacity=1.0):
         actor = plotter.add_mesh(
-            mesh.transform(transform, inplace=False), name=f"drone/{name}",
+            mesh.transform(transform, inplace=False), name=f"{prefix}/{name}",
             color=color, smooth_shading=True, split_sharp_edges=True,
             pbr=True, metallic=metallic, roughness=roughness,
             opacity=opacity, specular=0.5, specular_power=35,
@@ -130,8 +131,10 @@ def add_drone_model(plotter, pv, state: SimulationState, viewer: ViewerConfigura
                 f"socket-{index}-{side}", "#dddccf")
     label_z = guard_bottom - 0.001
     add(cylinder((0, 0, label_z), 0.010, 0.0006), "id-disc", "#f4f0df")
-    add(pv.Text3D("6", depth=0.0001, height=0.011,
-                  center=(0, 0, label_z + 0.0004)), "id-number", "#25272a")
+    identity = pv.Text3D(name, depth=0.0001, height=0.006)
+    identity.scale(min(1., .017 / max(identity.bounds.x_max-identity.bounds.x_min, 1e-9)), inplace=True)
+    identity.translate(np.array((0, 0, label_z + 0.0004))-identity.center, inplace=True)
+    add(identity, "id-number", "#25272a")
 
     # CAD motor centers are at (+/-50, +/-50) mm in the plate plane.
     for index, (x, y) in enumerate(((0.05, 0.05), (-0.05, 0.05),

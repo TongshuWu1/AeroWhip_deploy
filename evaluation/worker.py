@@ -150,7 +150,11 @@ def run(directory):
                     observation=envelope_observation(arrays, snapshot) if arrays is not None else 'No valid numerical replay prefix'))
                 summary.update(source_mode=contract['source_mode'],
                     exact_source_reproduction=contract['exact_source_reproduction'], task_stage=task_stage(snapshot),
-                    scoring=('nominal_precision_and_learned_recovery' if cfg.recovery is not None
+                    scoring=('nominal_outreach_precision_and_learned_recovery' if cfg.recovery is not None and cfg.matching.reward_mode == 'directed_outreach_speed_precision_v1'
+                        else 'nominal_same_event_outreach_precision' if cfg.matching.reward_mode == 'directed_outreach_speed_precision_v1'
+                        else 'nominal_precision_and_learned_recovery' if cfg.recovery is not None
+                        else 'fixed_broad_target_outreach_speed_delivery' if cfg.matching.reward_mode == 'directed_outreach_speed_delivery_v1'
+                        else 'fixed_broad_target_crossing_priority' if cfg.matching.reward_mode == 'crossing_priority_delivery_v1'
                         else 'fixed_broad_target_delivery' if cfg.matching.reward_mode == 'directed_delivery_v1'
                         else 'nominal_crossing_precision_full_horizon' if cfg.matching.reward_mode == 'directed_precision_v1'
                         else 'strict_final_target' if task_stage(snapshot) >= 2 else 'stage1_broad_wall'),

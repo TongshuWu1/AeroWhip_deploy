@@ -5,7 +5,7 @@ import sys
 from PySide6 import QtCore, QtWidgets
 
 from project_paths import ROOT, project_path
-from training.configuration import DEFAULT, FROZEN_PRESETS, load, task_configuration, evaluation_settings, algorithm, training_stage
+from training.configuration import DEFAULT, CURRENT_PRESETS, load, task_configuration, evaluation_settings, algorithm, training_stage
 from training.artifacts import RUNS, PPO_RUNS, PPO_STAGE2_RUNS, PPO_STAGE3_RUNS, PPO_STAGE4_RUNS, create_run, read_json, save_json, events
 from training.ui.plots import MetricPlot
 from training.ui.preview import EvaluationPreview
@@ -27,7 +27,7 @@ class SettingsDialog(QtWidgets.QDialog):
             used.update(keys)
             return {k:self.settings[k] for k in keys if k in self.settings}
         groups = [
-            ('Run & compute',subset(('device','seed','parallel_environments','evaluation_environments','training_episodes','evaluation_interval_episodes','policy_rate_hz','velocity_limit_mps','plateau_detection'))),
+            ('Run & compute',subset(('device','seed','parallel_environments','evaluation_environments','training_episodes','evaluation_interval_episodes','policy_rate_hz','velocity_limit_mps','acceleration_limit_mps2','plateau_detection'))),
             ('Learner & exploration',subset(('learning_rate','batch_size','hidden_units','initial_log_std','discount','ppo','exploration','initial_temperature','target_entropy','target_update_tau','replay_episodes','gradient_updates_per_round','minimum_replay_transitions'))),
             ('Reward & boundary',dict(learning=subset(('reward_scale','workspace_penalty')),return_costs=self.task['return'],matching=self.task['matching'])),
             ('Target & episode',dict(episode=self.task['episode'],workspace=self.task['workspace'],strike_surface=self.task['strike_surface'],request=self.task['request'],**subset(('target_curriculum',)))),
@@ -65,6 +65,7 @@ class SettingsDialog(QtWidgets.QDialog):
                         'anneal_end_fraction': 'Entropy decay ends (fraction of episode budget)',
                         'learning_rate': 'Learning rate', 'batch_size': 'Minibatch transitions',
                         'policy_rate_hz': 'Action frequency [Hz]', 'velocity_limit_mps': 'Velocity limits X / Y / Z [m/s]',
+                        'acceleration_limit_mps2': 'Acceleration limits X / Y / Z [m/s²]',
                         'reward_scale': 'Reward multiplier', 'radius_m': 'Horizontal radius [m]',
                         'height_lower_world_m': 'Minimum drone height [m]', 'height_upper_world_m': 'Maximum drone height [m]',
                         'duration_s': 'Maneuver duration [s]', 'settling_s': 'Maximum settling interval [s]',
@@ -83,6 +84,11 @@ class SettingsDialog(QtWidgets.QDialog):
                         'time_preference':'Legacy: earlier-event factor. Simple hit modes: total elapsed-time cost over a full episode, not a movement charge.',
                         'reward_mode':'Frozen reward version. Changing it creates a new experiment; old checkpoints retain their original objective.',
                         'center_weight':'Accuracy shaping weight. Reward changes define a new experiment, not an exact continuation.',
+                        'outreach_base_fraction':'Fraction of existing whip credit retained before joint reach/height shaping. Changing it defines a new experiment.',
+                        'outreach_height_width_fraction':'Gaussian width for tip height minus tracked-drone height at the same release, divided by rest cable length. A smooth preference, not a success cutoff.',
+                        'outreach_reach_weight':'Weight of normalized forward reach within one mechanics-gated event.',
+                        'outreach_height_weight':'Weight of linear tip-to-drone height quality within the same event.',
+                        'outreach_joint_weight':'Weight of forward reach times linear height quality at that event.',
                         'target_kl':'With the enabled post-update safeguard, trial actor updates are checked against cohort-mean KL; not a pointwise action guarantee.',
                         'initial_weight':'PPO entropy bonus coefficient, not a guaranteed achieved entropy.',
                         'hold_transitions':'Exploration hold measured in collected transitions, not episodes or wall-clock seconds.',
@@ -221,7 +227,7 @@ class TrainingWindow(QtWidgets.QMainWindow):
         grid.addWidget(self.mode,2,0); grid.addWidget(self.checkpoint_label,2,1,1,2); grid.addWidget(self.checkpoint_button,2,3)
         self.stage_presets = QtWidgets.QComboBox()
         self.stage_presets.addItem('Select current training stage…', None)
-        for stage,label in ((1,'Stage 1 · cone25 whip'),(2,'Stage 2 · broad delivery'),(3,'Stage 3 · nominal precision ±5 cm'),(4,'Stage 4 · hybrid return/cable settling')):
+        for stage,label in ((1,'Stage 1 · compact whip · acceleration'),(2,'Stage 2 · broad delivery · acceleration'),(3,'Stage 3 · precision ±5 cm · acceleration'),(4,'Stage 4 · recovery · retained velocity')):
             self.stage_presets.addItem(label,stage)
         self.stage_presets.setCurrentIndex(self.stage_presets.findData(training_stage(self.settings)))
         self.stage_presets.currentIndexChanged.connect(self.select_stage_preset)
@@ -312,11 +318,21 @@ class TrainingWindow(QtWidgets.QMainWindow):
         self.setWindowTitle(f"Training — {method} — {self.config_path.stem} — reward ×{self.settings.get('reward_scale', 1):g}")
         goal={1:'Learn a broad directed strike',2:'Improve accuracy with staged target narrowing',3:'Robustness — blocked until uncertainty is identified',4:'Stage4 learned recovery'}[stage]
         quality_mode=t['matching'].get('reward_mode') == 'geometric_hit_quality_v1'
-        whip_mode=t['matching'].get('reward_mode') == 'directed_whip_v1'
-        delivery_mode=t['matching'].get('reward_mode') == 'directed_delivery_v1'
-        precision_mode=t['matching'].get('reward_mode') == 'directed_precision_v1'
+        compact_mode=t['matching'].get('reward_mode') == 'directed_compact_whip_v1'
+        level_mode=t['matching'].get('reward_mode') == 'directed_level_outreach_whip_v1'
+        linear_height_mode=t['matching'].get('reward_mode') == 'directed_outreach_height_whip_v1'
+        whip_mode=t['matching'].get('reward_mode') in ('directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1')
+        speed_delivery_mode=t['matching'].get('reward_mode') == 'directed_outreach_speed_delivery_v1'
+        crossing_priority_mode=t['matching'].get('reward_mode') == 'crossing_priority_delivery_v1'
+        delivery_mode=t['matching'].get('reward_mode') in ('directed_delivery_v1', 'directed_outreach_speed_delivery_v1')
+        outreach_precision_mode=t['matching'].get('reward_mode') == 'directed_outreach_speed_precision_v1'
+        precision_mode=t['matching'].get('reward_mode') in ('directed_precision_v1', 'directed_outreach_speed_precision_v1')
         if whip_mode: goal='Learn directed bend propagation and unfolding'
+        if compact_mode: goal='Learn a compact directed whip with useful forward reach'
+        if level_mode: goal='Learn forward whip outreach near the drone\'s current height'
+        if linear_height_mode: goal='Improve whip outreach and tip height together'
         if delivery_mode: goal='Deliver the learned whip toward a fixed broad target; no narrowing'
+        if crossing_priority_mode: goal='Hit the fixed broad target and bring actual crossings toward its center'
         if precision_mode: goal='Precision Stage 3: narrow actual whip crossings to +/-5 cm; no randomization'
         if stage==4: goal='Stage4 learned recovery: precision whip, return and sustained hover; no randomization'
         terminal=('first geometric hit or timeout' if quality_mode else
@@ -326,11 +342,16 @@ class TrainingWindow(QtWidgets.QMainWindow):
         if whip_mode: impact='target, 3 m/s and 30° are diagnostics; no hit reward or hit termination'
         if delivery_mode: impact='same-event spatial guidance; 3 m/s / 30° diagnostic only; no hit termination'
         if precision_mode: impact='actual forward crossing center accuracy; 3 m/s / 30° diagnostic only; no hit termination'
+        if outreach_precision_mode: impact='same-release rectangle and world XYZ center guidance; 3 m/s / 30° diagnostic only'
+        if crossing_priority_mode: impact='geometric hit bonus plus strict bonus at ≥3 m/s and ≤30°; full horizon'
         self.config_label.setText(f"{goal}\n"
-            f"Compute: {self.settings['device'].upper()} · {self.settings['parallel_environments']} collection lanes · {self.settings['policy_rate_hz']} Hz velocity actions · 1 fixed evaluation case\n"
+            f"Compute: {self.settings['device'].upper()} · {self.settings['parallel_environments']} collection lanes · {self.settings['policy_rate_hz']} Hz {self.settings['action_interface'].split('_')[0]} actions · 1 fixed evaluation case\n"
             f"Task: target {wall['width_m']:g} × {wall['height_m']:g} m at wall {wall['distance_m']:g} m / height {t['request'][2]:g} m · {impact} · stop at {terminal}\n"
             f"Workspace: radius {ws['radius_m']:g} m / height {ws['height_lower_world_m']:g}–{ws['height_upper_world_m']:g} m · outside-only cost {self.settings['workspace_penalty']['weight']:g} · reward ×{self.settings.get('reward_scale',1):g}")
         entropy=self.settings.get('ppo',{}).get('entropy',{})
+        if self.settings['action_interface'] == 'acceleration_direct_v1':
+            self.config_label.setText(self.config_label.text()+
+                f"\nAcceleration: world XYZ limits {self.settings['acceleration_limit_mps2']} m/s², excluding gravity; fixed yaw. Attitude stabilization only; zero action does not brake or hold position.")
         if 'hold_fraction' in entropy:
             self.config_label.setText(self.config_label.text()+
                 f"\nEntropy: {entropy['initial_weight']:g} → {entropy['final_weight']:g} · completed training episodes · hold first {100*entropy['hold_fraction']:g}% · decay ends at {100*entropy['anneal_end_fraction']:g}% · original budget preserved on resume")
@@ -341,13 +362,40 @@ class TrainingWindow(QtWidgets.QMainWindow):
             m=t['matching']
             self.config_label.setText(self.config_label.text()+
                 f"\nHit quality: speed bonus ≤ {m['hit_speed_weight']:g} (scale {m['hit_speed_scale_mps']:g} m/s) · straightness bonus ≤ {m['hit_straightness_weight']:g} · neither is a hit threshold")
-        if whip_mode:
+        if t['matching'].get('reward_mode') in ('directed_outreach_speed_whip_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1'):
+            m=t['matching']
+            self.config_label.setText(self.config_label.text()+
+                f"\nEvent: MU/(MU+{m['outreach_mechanics_scale']:g}) × D × reach/L × height × speed² × path factor · speed scale {m['outreach_speed_scale_mps']:g} m/s · height width {m['outreach_height_width_fraction']:g} L")
+        if linear_height_mode:
+            m=t['matching']
+            bound=m['outreach_reach_weight']+m['outreach_height_weight']+m['outreach_joint_weight']
+            self.config_label.setText(self.config_label.text()+
+                f"\nStage1 event: K × ({m['outreach_reach_weight']:g}r + {m['outreach_height_weight']:g}h + {m['outreach_joint_weight']:g}rh) ≤ {bound:g}. r=clipped forward reach/L; h=clip(1−|tip_z−drone_z|/L,0,1). K keeps mechanics, alignment, speed and path factors. Same release; workspace cost is separate.")
+        if level_mode:
+            m=t['matching']
+            self.config_label.setText(self.config_label.text()+
+                f"\nStage1 experiment: best W × ({m['outreach_base_fraction']:g} + {1-m['outreach_base_fraction']:g} × reach/L × H) × exp(-{m['preparation_path_weight']:g} × drone path/L) ≤ 1. H is Gaussian tip-to-drone height quality, width {m['outreach_height_width_fraction']:g} L. All terms use the same release; workspace cost is separate.")
+        elif compact_mode:
+            m=t['matching']
+            self.config_label.setText(self.config_label.text()+
+                f"\nStage1 experiment: best W × (1 + {m['reach_weight']:g} × forward reach/L) × exp(-{m['preparation_path_weight']:g} × drone path/L) ≤ {1+m['reach_weight']:g}. Path is measured before the same release; workspace cost is separate. No new hit/whip threshold.")
+        elif t['matching'].get('reward_mode') == 'directed_whip_v1':
             self.config_label.setText(self.config_label.text()+
                 '\nStage1: best directed mechanics × unfolding event ≤ 1; outside-only cost. No acceleration, hit, accuracy or time cost/bonus.')
-        if delivery_mode:
+        if speed_delivery_mode:
+            self.config_label.setText(self.config_label.text()+
+                '\nStage2: best speed/level outreach event × (1 + target proximity) ≤ 2; path cost retained; fixed broad target, no narrowing or hit bonus.')
+        elif crossing_priority_mode:
+            m=t['matching']
+            self.config_label.setText(self.config_label.text()+
+                f"\nStage2: {m['crossing_whip_weight']:g} × normalized Stage1 whip + best crossing [C + {m['crossing_geometric_weight']:g} × geometric hit + {m['crossing_strict_weight']:g} × strict hit]. C=1/[1+(side/{m['crossing_side_scale_m']:g} m)²+(height/{m['crossing_height_scale_m']:g} m)²]. Separate whip/crossing records; repeated crossings do not accumulate.")
+        elif delivery_mode:
             self.config_label.setText(self.config_label.text()+
                 '\nStage2: best W × (1 + target proximity) ≤ 2; same-event mechanics preserved; no hit, hardness, centering or time bonus.')
-        if precision_mode and stage!=4:
+        if outreach_precision_mode:
+            self.config_label.setText(self.config_label.text()+
+                '\nPrecision event: best B × (1 + rectangle proximity + XYZ center Gaussian) ≤ 3. Same observed release; sigma 0.25/0.15/0.075/0.05 m across target ladder. 80% geometric hits for 3 all-valid cohorts + fixed replay; workspace excess measured, not a progression gate.')
+        if precision_mode and not outreach_precision_mode and stage!=4:
             self.config_label.setText(self.config_label.text()+
                 '\nStage3: best W × (1 + crossing center Gaussian) ≤ 2; 80% hits for 3 cohorts + fixed replay; workspace excess measured, not a progression gate.')
         if stage==4:
@@ -355,7 +403,7 @@ class TrainingWindow(QtWidgets.QMainWindow):
             settling=r.get('quality_mode')=='return_and_cable_settle_v1'
             gate='actual-hit gate' if settling else 'same-event W*C gate'
             self.config_label.setText(self.config_label.text()+
-                f"\nStage4: first actual hit (miss timeout {r['whip_duration_s']:g}s), then {r['recovery_duration_s']:g}s recovery; weight {r['weight']:g}, {gate}; positive bound {2+r['weight']:g}. No controller switch. Return to episode-start drone position.\nHold diagnostic: position ≤{r['position_tolerance_m']:g}m, speed ≤{r['speed_tolerance_mps']:g}m/s for final {r['final_hold_s']:g}s; separate workspace charges, no RMS gate.")
+                f"\nStage4: first actual hit (miss timeout {r['whip_duration_s']:g}s), then {r['recovery_duration_s']:g}s recovery; weight {r['weight']:g}, {gate}; positive bound {(3 if outreach_precision_mode else 2)+r['weight']:g}. No controller switch. Return to episode-start drone position.\nHold diagnostic: position ≤{r['position_tolerance_m']:g}m, speed ≤{r['speed_tolerance_mps']:g}m/s for final {r['final_hold_s']:g}s; separate workspace charges, no RMS gate.")
             if settling:
                 self.config_label.setText(self.config_label.text()+f"\nFrozen whip + internal PD return + learned recovery residual. Cable hold: relative RMS speed ≤{r['cable_speed_tolerance_mps']:g}m/s, horizontal RMS shape ≤{r['cable_horizontal_tolerance_m']:g}m. Faster settling improves window quality; fixed recovery duration.")
         if t['matching'].get('alignment_mode')=='cone_plateau_v1':
@@ -366,15 +414,15 @@ class TrainingWindow(QtWidgets.QMainWindow):
             self.config_label.setText(self.config_label.text()+f"\nPlateau mode {c['mode']}: NEVER before {c['minimum_collections']} completed collections; compare {c['window_collections']}+{c['window_collections']} same-target cohorts, patience {c['patience_checks']} checks. Final target required; {guard}; not proof of convergence. Hard budget remains a cap.")
         self.description_details=self.config_label.text()
         self.config_label.setToolTip(self.description_details)
-        self.config_label.setText(f"{goal}\n{self.settings['device'].upper()} · {self.settings['parallel_environments']} lanes · {self.settings['policy_rate_hz']} Hz actions · {self.settings['training_episodes']:,} training episodes")
+        self.config_label.setText(f"{goal}\n{self.settings['device'].upper()} · {self.settings['parallel_environments']} lanes · {self.settings['policy_rate_hz']} Hz {self.settings['action_interface'].split('_')[0]} actions · {self.settings['training_episodes']:,} training episodes")
 
     def select_stage_preset(self, index):
         stage = self.stage_presets.itemData(index)
-        if stage is None or stage not in FROZEN_PRESETS or self.process is not None or self.mode.currentIndex() == 1:
+        if stage is None or stage not in CURRENT_PRESETS or self.process is not None or self.mode.currentIndex() == 1:
             return
         try:
-            self.settings,self.snapshot,_,_ = load(FROZEN_PRESETS[stage])
-            self.task = self.snapshot['task']; self.config_path = FROZEN_PRESETS[stage]
+            self.settings,self.snapshot,_,_ = load(CURRENT_PRESETS[stage])
+            self.task = self.snapshot['task']; self.config_path = CURRENT_PRESETS[stage]
             self.initialize_actor_path = self.resume_path = None
             self.mode.setCurrentIndex(0 if stage == 1 else 2)
             self.checkpoint_label.setText('New policy' if stage == 1 else f'Choose Stage {stage-1} actor checkpoint')
@@ -599,8 +647,18 @@ class TrainingWindow(QtWidgets.QMainWindow):
         if quality_history:motion_terms+=(('strict_strike_success','Strict 3 m/s / 30° diagnostic'),)
         self.mechanics_plot.set_series([(label,[(e['round'],e['components'].get(key)) for e in rounds],False)
             for key,label in motion_terms])
-        self.reward_plot.set_series([(label,[(e['round'],scale*e['components'][key] if key in e['components'] else None) for e in rounds],False)
-            for key,label in (('mechanics_credit','Mechanics credit'),('approach_reward','Approach'),('strike_bonus','Strike bonus'),('hit_speed_bonus','Hit speed bonus'),('hit_straightness_bonus','Hit straightness bonus'),('time_cost','Time cost'),('workspace_cost','Workspace cost'))])
+        speed_outreach_history=any('outreach_credit' in e.get('components',{}) for e in rounds+evaluations)
+        base_key=('outreach_credit' if speed_outreach_history else
+            'base_mechanics_credit' if any('base_mechanics_credit' in e.get('components',{}) for e in rounds+evaluations) else 'mechanics_credit')
+        base_label='Outreach credit before path' if speed_outreach_history else 'Base mechanics credit'
+        self.reward_plot.set_series([(label,[(e['round'],scale*e['components'][key] if e['components'].get(key) is not None else None) for e in rounds],False)
+            for key,label in ((base_key,base_label),('outreach_reach_credit','Outreach contribution'),('outreach_height_credit','Height contribution'),('outreach_joint_credit','Joint outreach/height contribution'),('reach_bonus','Reach bonus'),('level_outreach_bonus','Level outreach credit'),('preparation_cost','Preparation reduction'),('approach_reward','Approach'),('center_reward','Center guidance'),('recovery_credit','Recovery credit'),('strike_bonus','Strike bonus'),('hit_speed_bonus','Hit speed bonus'),('hit_straightness_bonus','Hit straightness bonus'),('time_cost','Time cost'),('workspace_cost','Workspace cost'))])
+        if any('crossing_reward' in e.get('components',{}) for e in rounds+evaluations):
+            self.reward_plot.set_series([(label,[(e['round'],scale*e['components'][key]
+                if e['components'].get(key) is not None else None) for e in rounds],False) for key,label in (
+                ('whip_support_reward','Whip support'),('crossing_center_reward','Crossing center guidance'),
+                ('crossing_geometric_bonus','Geometric hit bonus'),('crossing_strict_bonus','Strict hit bonus'),
+                ('workspace_cost','Workspace cost'))])
         self.valid_plot.set_series([('Fraction',[(e['round'],e['valid_fraction']) for e in rounds],False)])
         self.loss_plot.set_series([(label,[(e['round'],e.get(key)) for e in rounds],False) for key,label in (('critic_loss','Critic'),('actor_loss','Actor'))])
         exploration=[e for e in history if e['phase']=='exploration']
@@ -655,10 +713,33 @@ class TrainingWindow(QtWidgets.QMainWindow):
             text+='\nSelected mechanics event is not necessarily a target crossing.'
             text+=f"\nRecovered unfolding fraction: {number(c.get('unfolding_fraction'))}"
             text+=f"\nForward alignment factor: {number(c.get('forward_alignment'))}"
-            text+=f"\nEvent credit (raw): {number(c.get('mechanics_credit'))}"
-        if 'target_proximity' in c:
-            text+=f"\nSame-event broad-target proximity: {number(c.get('target_proximity'))}"
+            credit_label=('Whip quality before shaping' if 'base_mechanics_credit' in c else
+                'Base whip credit' if 'forward_reach_fraction' in c else 'Event credit')
+            text+=f"\n{credit_label} (raw): {number(c.get('mechanics_credit'))}"
+        if 'forward_reach_fraction' in c:
+            text+=f"\nForward reach / cable length: {number(c.get('forward_reach_fraction'))}"
+            text+=f"\nDrone path before release: {number(c.get('preparation_path_m'))} m"
+            if 'level_outreach_quality' in c:
+                text+=f"\nTip height relative to tracked drone: {number(c.get('tip_drone_height_error_m'))} m"
+                text+=f"\nHeight quality / joint level outreach: {number(c.get('level_height_factor'))} / {number(c.get('level_outreach_quality'))}"
+                if 'outreach_credit' in c:
+                    text+=f"\nMechanics gate / speed factor: {number(c.get('outreach_mechanics_gate'))} / {number(c.get('outreach_speed_factor'))}"
+                    text+=f"\nOutreach credit before path reduction: {number(c.get('outreach_credit'))}"
+                else:
+                    text+=f"\nBase mechanics / level outreach credit: {number(c.get('base_mechanics_credit'))} / {number(c.get('level_outreach_bonus'))}"
+                text+=f"\nPreparation reduction: {number(c.get('preparation_cost'))}"
+            else:
+                text+=f"\nReach bonus / preparation reduction: {number(c.get('reach_bonus'))} / {number(c.get('preparation_cost'))}"
+            text+=f"\nPreparation multiplier: {number(c.get('preparation_factor'))}"
+        if 'crossing_reward' in c:
+            text+=f"\nWhip support / complete crossing credit: {number(c.get('whip_support_reward'))} / {number(c.get('crossing_reward'))}"
+            text+=f"\nRewarded crossing side / height error: {number(c.get('crossing_reward_lateral_error_m'))} / {number(c.get('crossing_reward_vertical_error_m'))} m"
+        elif 'target_proximity' in c:
+            text+=f"\nSame-event current-target proximity: {number(c.get('target_proximity'))}"
             text+=f"\nWeighted delivery credit: {number(c.get('approach_reward'))}"
+        if 'center_proximity' in c:
+            text+=f"\nSame-event center distance / sigma: {number(c.get('center_distance_m'))} / {number(c.get('precision_sigma_m'))} m"
+            text+=f"\nCenter proximity / weighted credit: {number(c.get('center_proximity'))} / {number(c.get('center_reward'))}"
         target=next((e for e in reversed(history) if e['phase']=='target_curriculum_evaluation' and e['round']==latest['round']),None)
         if target:
             text+=f"\n\nCurrent target: {target['target_width_m']:g} × {target['target_height_m']:g} m\nCurrent-target qualified: {target.get('qualified','—')}\nAbove strike / return: strict final target."
@@ -722,7 +803,7 @@ def main(*, auto_start=False, settings_path=None, resume_checkpoint=None, initia
         raise ValueError('Select exact resume OR actor-only initialization')
     app=QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
     requested_settings=load(settings_path)[0] if settings_path is not None else None
-    window=TrainingWindow(settings_path or FROZEN_PRESETS[1]); window.show()
+    window=TrainingWindow(settings_path or CURRENT_PRESETS[1]); window.show()
     if resume_checkpoint is not None:
         import torch
         checkpoint=project_path(resume_checkpoint)

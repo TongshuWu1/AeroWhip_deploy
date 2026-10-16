@@ -237,12 +237,30 @@ def main():
     parser.add_argument('--replay', help='Saved NPZ basename within the selected run')
     parser.add_argument('--audit', action='store_true', help='Read saved event metrics without a GUI')
     parser.add_argument('--snapshot', type=Path, help='Render the selected saved replay and exit')
+    parser.add_argument('--flight-view', action='store_true', help='Open saved states in the docked flight viewer')
     args = parser.parse_args()
     if args.audit:
         directory, filename = resolve_selection(args.selected or DEFAULT_RUN)
         print(json.dumps(PresentationData.load(directory, args.replay or filename).evidence()), flush=True)
         return 0
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+    if args.flight_view:
+        directory, filename = resolve_selection(args.selected or DEFAULT_RUN)
+        data = PresentationData.load(directory, args.replay or filename)
+        from viewer.pyvista_viewer import PyVistaViewer
+        from viewer.sources import ReplaySource
+        from viewer.simulation_window import SimulationWindow
+        window = SimulationWindow(PyVistaViewer(data.scene), ReplaySource(data.replay, data.scene))
+        window.show()
+        if args.snapshot:
+            def capture_flight():
+                from viewer.simulation_window import capture_window
+                capture_window(window, project_path(args.snapshot))
+                print(json.dumps(data.evidence()), flush=True)
+                window.close()
+                app.quit()
+            QtCore.QTimer.singleShot(700, capture_flight)
+        return app.exec()
     app.setFont(QtGui.QFont('Segoe UI', 10))
     window = ReplayBrowser(args.selected, args.replay)
     window.show()

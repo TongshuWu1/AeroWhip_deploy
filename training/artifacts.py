@@ -4,11 +4,12 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import numpy as np
 import torch
 
 from fitting.artifacts import atomic_save
 from project_paths import ROOT, project_path, project_reference, contained_child
-from training.configuration import digest, load, checkpoint_schema, algorithm, episode_budget, validate, training_stage, require_launchable
+from training.configuration import digest, load, checkpoint_schema, algorithm, episode_budget, validate, training_stage, require_launchable, run_schema, action_limit_key
 
 RUNS = ROOT/'runs/sac_stage1'
 PPO_RUNS = ROOT/'runs/ppo_stage1'
@@ -64,7 +65,8 @@ def validate_actor_source(saved, snapshot):
     """Allow explicit task transfer only, never weaken exact-resume identity."""
     old = saved.get('snapshot', {})
     if (saved.get('schema') != 'ppo_stage1_checkpoint_v1' or
-            old.get('schema') != 'ppo_stage1_velocity_v1' or
+            old.get('schema') not in ('ppo_stage1_velocity_v1', 'ppo_stage1_acceleration_direct_v1') or
+            old.get('schema') != run_schema(old['settings']) or
             old.get('identity') != saved.get('identity') or identity(old) != saved.get('identity')):
         raise ValueError('Actor initialization requires an identity-consistent PPO checkpoint')
     if algorithm(snapshot['settings']) != 'ppo':
@@ -76,8 +78,8 @@ def validate_actor_source(saved, snapshot):
     for key in previous.keys() | current.keys():
         if key.split('/')[0] in ('simulation', 'controllers', 'native') and previous.get(key) != current.get(key):
             raise ValueError('Physical execution changed since the actor checkpoint: '+key)
-    for key in ('policy_rate_hz', 'action_interface', 'velocity_limit_mps', 'hidden_units'):
-        if old['settings'][key] != snapshot['settings'][key]:
+    for key in ('action_interface', 'policy_rate_hz', action_limit_key(snapshot['settings']), 'hidden_units'):
+        if old['settings'].get(key) != snapshot['settings'].get(key):
             raise ValueError('Actor control interface changed: '+key)
     if (snapshot['settings']['ppo'].get('transfer_entropy_clock', 'inherit') == 'inherit'
             and old['settings']['ppo']['entropy'] != snapshot['settings']['ppo']['entropy']):
@@ -95,6 +97,8 @@ def create_run(settings, resume=None, *, task=None, root=None, initialize_actor=
     if resume:
         parent = project_path(resume)
         saved = torch.load(parent,map_location='cpu',weights_only=True)
+        if settings.get('action_interface') != saved['snapshot']['settings'].get('action_interface'):
+            raise ValueError('Exact resume cannot change the policy action interface')
         if saved.get('schema') != checkpoint_schema(saved['snapshot']['settings']):
             raise ValueError('Resume requires a current learner checkpoint. '
                              'Older checkpoints remain replayable; start a new run.')
@@ -114,7 +118,7 @@ def create_run(settings, resume=None, *, task=None, root=None, initialize_actor=
             snapshot['task'] = task
         snapshot['execution_hashes'] = execution_hashes()
         if training_stage(settings) == 2 and not initialize_actor:
-            raise ValueError('New Stage 2 requires an explicit Stage 1 actor checkpoint')
+            raise ValueError('New Stage2 requires an explicit Stage1 or Stage2 actor checkpoint')
         if settings.get('stage3_role') == 'precision_v1' and not initialize_actor:
             raise ValueError('New precision Stage3 requires an explicit Stage2 actor or precision Stage3 actor checkpoint')
         if settings.get('stage4_role') == 'learned_recovery_v1' and not initialize_actor:
@@ -124,8 +128,8 @@ def create_run(settings, resume=None, *, task=None, root=None, initialize_actor=
             source = project_path(initialize_actor)
             initialization_payload = source.read_bytes()
             saved_actor = torch.load(io.BytesIO(initialization_payload),map_location='cpu',weights_only=True)
-            if training_stage(settings) == 2 and training_stage(saved_actor['snapshot']['settings']) != 1:
-                raise ValueError('Stage2 must initialize from a Stage1 actor')
+            if training_stage(settings) == 2 and training_stage(saved_actor['snapshot']['settings']) not in (1, 2):
+                raise ValueError('Stage2 must initialize from a Stage1 or Stage2 actor')
             if settings.get('stage3_role') == 'precision_v1':
                 source_settings = saved_actor['snapshot']['settings']
                 source_stage = training_stage(source_settings)
@@ -188,6 +192,20 @@ class EventLog:
 
 def save_checkpoint(path, value):
     atomic_save(path,lambda p:torch.save(value,p))
+
+
+def checkpoint_replay(arrays):
+    """Numeric replay arrays plus scalar text metadata, safe for weights_only load."""
+    if arrays is None:
+        return None
+    return {key: value.item() if value.ndim == 0 and value.dtype.kind == 'U'
+            else torch.as_tensor(value).clone() for key, value in arrays.items()}
+
+
+def replay_from_checkpoint(saved):
+    """Restore both historical tensor-only and acceleration metadata replays."""
+    return {key: np.asarray(value) if isinstance(value, str) else value.cpu().numpy()
+            for key, value in saved.items()}
 
 
 def events(path):

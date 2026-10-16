@@ -15,7 +15,8 @@ from tasks.whip.sac_environment import Stage1Environment
 from tasks.whip.deterministic_evaluation import DeterministicEvaluationEnvironment
 from training.configuration import (task_configuration, validate, run_schema, checkpoint_schema, algorithm,
     episode_budget, evaluation_settings, collection_updates, evaluation_due, training_stage, require_launchable)
-from training.artifacts import (EventLog, read_json, save_json, execution_hashes, save_checkpoint)
+from training.artifacts import (EventLog, read_json, save_json, execution_hashes, save_checkpoint,
+                                checkpoint_replay, replay_from_checkpoint)
 from training.sac import SAC, EpisodeReplay, scalar_metrics
 from training.ppo import PPO
 from training.plateau import PlateauDetector, collection_metrics
@@ -33,7 +34,7 @@ def record_simple_collection(directory, env, returns, valid, score, round_number
     directory = Path(directory)
     workspace = env.workspace_metrics()
     qualified = valid & (score.components['strike_success'] == 1)
-    whip_mode = env.configuration.matching.reward_mode in ('directed_whip_v1', 'directed_delivery_v1', 'directed_precision_v1')
+    whip_mode = env.configuration.matching.reward_mode in ('directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1')
     quality_mode = env.configuration.matching.reward_mode == 'geometric_hit_quality_v1'
     strict_qualified = (valid & (score.components['strict_strike_success'] == 1)) if quality_mode else qualified
     payload = dict(returns=returns.cpu().numpy(), valid=valid.cpu().numpy(),
@@ -47,6 +48,8 @@ def record_simple_collection(directory, env, returns, valid, score, round_number
         payload.update(geometric_hit=(valid & (score.components['geometric_hit_success'] == 1)).cpu().numpy(),
             event_score=score.score.cpu().numpy(),
             hit_definition=np.array('diagnostic_only_full_horizon_crossings'))
+        if env.configuration.matching.reward_mode == 'crossing_priority_delivery_v1':
+            payload['hit_definition'] = np.array('best_complete_forward_crossing_reward_full_horizon_v1')
     if quality_mode:
         payload.update(geometric_hit=qualified.cpu().numpy(),
             strict_qualified=strict_qualified.cpu().numpy(),
@@ -64,7 +67,7 @@ def record_simple_collection(directory, env, returns, valid, score, round_number
         # Keep actual broad crossings represented, not only strict diagnostic
         # hits or reward-selected approaches. Source criteria remain unchanged.
         geometric_lanes = ((valid & (score.components['geometric_hit_success'] == 1)).nonzero().flatten()
-            if env.configuration.matching.reward_mode in ('directed_delivery_v1', 'directed_precision_v1') else qualified.nonzero().flatten())
+            if env.configuration.matching.reward_mode in ('directed_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_precision_v1', 'crossing_priority_delivery_v1') else qualified.nonzero().flatten())
         if geometric_lanes.numel():
             selected |= {int(geometric_lanes[0]),int(geometric_lanes[returns[geometric_lanes].argmax()]),
                 int(geometric_lanes[workspace['workspace_mean_square_excess_m2'][geometric_lanes].argmin()])}
@@ -77,7 +80,7 @@ def record_simple_collection(directory, env, returns, valid, score, round_number
             scores = score.score[candidates]
             upper = candidates[scores >= scores.median()]
             selected.add(int(upper[workspace['workspace_mean_square_excess_m2'][upper].argmin()]))
-        if env.configuration.matching.reward_mode == 'directed_precision_v1':
+        if env.configuration.matching.reward_mode in ('directed_precision_v1', 'directed_outreach_speed_precision_v1'):
             errors=score.components['best_crossing_center_error_m']
             crossing_lanes=(valid & torch.isfinite(errors)).nonzero().flatten()
             if crossing_lanes.numel():
@@ -243,7 +246,7 @@ def run(directory):
             if best_rollout is not None:
                 best_replay = 'inherited-best.npz'
                 with (directory/best_replay).open('wb') as stream:
-                    np.savez_compressed(stream,**{k:v.cpu().numpy() for k,v in best_rollout.items()})
+                    np.savez_compressed(stream,**replay_from_checkpoint(best_rollout))
                 event(**dict(best_event,replay=best_replay,inherited=True))
             torch.set_rng_state(saved['rng_cpu'].cpu())
             if env.device == 'cuda': torch.cuda.set_rng_state_all([s.cpu() for s in saved['rng_cuda']])
@@ -392,7 +395,7 @@ def run(directory):
             returns,valid,score,cost = env.finish()
             observed_plateau_metrics=(collection_metrics(training_stage(settings),returns,valid,score,env.workspace_metrics())
                 if plateau is not None else None)
-            if is_ppo and env.configuration.matching.reward_mode in ('directed_hit_v1', 'geometric_hit_quality_v1', 'directed_whip_v1', 'directed_delivery_v1', 'directed_precision_v1'):
+            if is_ppo and env.configuration.matching.reward_mode in ('directed_hit_v1', 'geometric_hit_quality_v1', 'directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1'):
                 event(**record_simple_collection(directory,env,returns,valid,score,round_number+1))
             if replay is not None:
                 replay.add(env.frames,env.actions,env.transition_rewards,env.lengths,env.critic_states)
@@ -494,7 +497,7 @@ def run(directory):
                           workspace={k:float(v[0]) for k,v in env.workspace_metrics().items()})
                     if improved:
                         best_event = evaluation_event
-                        best_rollout = {k:torch.as_tensor(v).clone() for k,v in arrays.items()} if arrays is not None else None
+                        best_rollout = checkpoint_replay(arrays)
                     event(**evaluation_event)
                     if improved: checkpoint('best.pt')
                     if target_curriculum is not None:

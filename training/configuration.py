@@ -13,9 +13,12 @@ from tasks.whip.stage1_configuration import (Stage1Configuration, BendReleaseCon
     ReleaseMatchingConfiguration, StrikeSurfaceConfiguration)
 from tasks.whip.workspace import CylinderWorkspace, WorkspacePenalty
 
-# CLI and low-level API select the same current fixed-target recipe.
+# Retained velocity recipes; their checkpoints keep their original action units.
 FROZEN_PRESETS = {i: ROOT / f'configs/learning/whip_stage{i}_ppo_cone25_v4.json' for i in (1, 2, 3, 4)}
-DEFAULT = FROZEN_PRESETS[1]
+FROZEN_PRESETS[1] = ROOT / 'configs/learning/whip_stage1_ppo_compact_v5.json'
+DEFAULT = ROOT / 'configs/learning/whip_stage1_ppo_acceleration_v1.json'
+CURRENT_PRESETS = dict(FROZEN_PRESETS)
+CURRENT_PRESETS.update({i: ROOT / f'configs/learning/whip_stage{i}_ppo_acceleration_v1.json' for i in (1, 2, 3)})
 RUN_SCHEMA = 'sac_stage1_velocity_v2'
 CHECKPOINT_SCHEMA = 'sac_stage1_checkpoint_v7'
 
@@ -42,7 +45,18 @@ def require_launchable(settings):
 
 
 def run_schema(settings):
+    if settings.get('action_interface') == 'acceleration_direct_v1':
+        return 'ppo_stage1_acceleration_direct_v1'
     return 'ppo_stage1_velocity_v1' if algorithm(settings) == 'ppo' else RUN_SCHEMA
+
+
+def action_limit_key(settings):
+    interface = settings.get('action_interface')
+    if interface == 'velocity_v1':
+        return 'velocity_limit_mps'
+    if interface == 'acceleration_direct_v1':
+        return 'acceleration_limit_mps2'
+    raise ValueError('Unknown policy action interface: '+str(interface))
 
 
 def checkpoint_schema(settings):
@@ -84,7 +98,7 @@ def validate(settings):
     from training.curriculum import validate_curriculum
     required = {'task', 'model', 'scene', 'device', 'seed', 'parallel_environments',
         'training_episodes', 'evaluation_interval_episodes', 'policy_rate_hz',
-        'action_interface', 'velocity_limit_mps', 'workspace_penalty', 'learning_rate',
+        'action_interface', action_limit_key(settings), 'workspace_penalty', 'learning_rate',
         'batch_size', 'hidden_units', 'initial_log_std', 'discount'}
     method = algorithm(settings)
     if method not in ('sac', 'ppo'):
@@ -149,10 +163,9 @@ def validate(settings):
     from training.curriculum import validate_target_curriculum
     validate_target_curriculum(settings)
     WorkspacePenalty(**settings['workspace_penalty'])
-    if settings.get('action_interface') != 'velocity_v1':
-        raise ValueError('Use current velocity settings; old interfaces require their saved implementation')
-    if any(k in settings for k in ('body_rate_limit_rad_s','rate_gain_s_inv','acceleration_limit_mps2')):
-        raise ValueError('Remove retired CTBR/acceleration settings from velocity configuration')
+    if settings['action_interface'] == 'acceleration_direct_v1':
+        if method != 'ppo' or training_stage(settings) == 4 or 'stage4_recovery_policy' in settings:
+            raise ValueError('Direct acceleration supports PPO Stages 1–3; velocity recovery is incompatible')
     integers = ('seed', 'parallel_environments', 'training_episodes', 'evaluation_interval_episodes',
         'policy_rate_hz', 'batch_size', 'hidden_units') + tuple(k for k in
         ('replay_episodes', 'gradient_updates_per_round', 'minimum_replay_transitions') if method == 'sac') + tuple(k for k in
@@ -189,9 +202,10 @@ def validate(settings):
             raise ValueError('Require 0 <= hold transitions < anneal end transitions')
     if settings['device'] not in ('cpu', 'cuda'):
         raise ValueError('Device must be cpu or cuda')
-    for name in ('velocity_limit_mps',):
+    for name in (action_limit_key(settings),):
         v = settings[name]
-        if len(v) != 3 or any(not math.isfinite(x) or x <= 0 for x in v):
+        if (not isinstance(v, (list, tuple)) or len(v) != 3 or
+                any(isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x) or x <= 0 for x in v)):
             raise ValueError('Expected three positive finite values: ' + name)
     if method == 'sac' and settings['replay_episodes'] < settings['parallel_environments']:
         raise ValueError('Replay must hold at least one parallel collection round')
@@ -203,6 +217,13 @@ def validate(settings):
 
 
 def task_configuration(raw, settings, model, scene):
+    if settings.get('action_interface') == 'acceleration_direct_v1':
+        # Positive vertical desired force keeps attitude construction nonsingular
+        # for every action in the configured box, including zero lateral input.
+        mass = model['drone']['mass_kg']
+        upward_trim_acceleration = -(mass+model['cable']['total_mass_kg'])*model['simulation']['gravity_world_m_s2'][2]/mass
+        if settings['acceleration_limit_mps2'][2] >= upward_trim_acceleration:
+            raise ValueError('Downward acceleration limit must keep desired vertical force positive')
     recovery_mode = training_stage(settings) == 4 and settings.get('stage4_role') == 'learned_recovery_v1'
     sections = {'episode', 'workspace', 'return', 'mechanics', 'request', 'matching', 'strike_surface'}
     if set(raw) != sections | ({'recovery'} if recovery_mode else set()):
@@ -229,7 +250,7 @@ def task_configuration(raw, settings, model, scene):
     # Retained snapshots without this explicit selection keep old search bounds.
     event_end = (timing.duration_s+timing.post_hold_s-raw['mechanics']['tip_lag_s']
                  if (matching.strike_mechanics_scale is not None
-                     or matching.reward_mode in ('directed_hit_v1', 'geometric_hit_quality_v1', 'directed_whip_v1', 'directed_delivery_v1', 'directed_precision_v1')) else delay+timing.duration_s)
+                     or matching.reward_mode in ('directed_hit_v1', 'geometric_hit_quality_v1', 'directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1')) else delay+timing.duration_s)
     if recovery is not None:
         event_end = recovery.whip_duration_s-raw['mechanics']['tip_lag_s']
     mechanics = BendReleaseConfiguration(**raw['mechanics'], event_start_s=delay,
@@ -237,21 +258,21 @@ def task_configuration(raw, settings, model, scene):
     cfg = Stage1Configuration(settings['scene'], settings['model'], timing, workspace,
         returns, tuple(raw['request']), mechanics, matching,
         StrikeSurfaceConfiguration(**raw['strike_surface']), raw['episode'].get('termination', 'full_horizon_v1'), recovery)
-    if matching.reward_mode == 'directed_whip_v1' and (training_stage(settings) != 1
+    if matching.reward_mode in ('directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1') and (training_stage(settings) != 1
             or 'target_curriculum' in settings or 'curriculum' in settings):
         raise ValueError('Directed-whip discovery is Stage1 only, without automatic target curriculum')
-    if matching.reward_mode == 'directed_delivery_v1' and (training_stage(settings) != 2
+    if matching.reward_mode in ('directed_delivery_v1', 'directed_outreach_speed_delivery_v1', 'crossing_priority_delivery_v1') and (training_stage(settings) != 2
             or 'target_curriculum' in settings or 'curriculum' in settings):
         raise ValueError('Directed delivery is fixed-target Stage2 only, without automatic curriculum')
     precision = training_stage(settings) == 3 and settings.get('stage3_role') == 'precision_v1'
-    if (matching.reward_mode == 'directed_precision_v1') != (precision or recovery_mode):
+    if (matching.reward_mode in ('directed_precision_v1', 'directed_outreach_speed_precision_v1')) != (precision or recovery_mode):
         raise ValueError('Directed precision reward requires explicit precision Stage3 or learned recovery Stage4')
     if recovery_mode and (cfg.strike_surface.width_m != .1 or cfg.strike_surface.height_m != .1
             or matching.center_sigma_m != .05):
         raise ValueError('Recovery Stage4 preserves fixed +/-5cm precision target and sigma')
-    if training_stage(settings) == 2 and 'target_curriculum' not in settings and matching.reward_mode != 'directed_delivery_v1':
-        raise ValueError('Stage2 without target curriculum requires directed_delivery_v1')
-    if ('training_stage' in settings and matching.reward_mode not in ('directed_whip_v1', 'directed_delivery_v1', 'directed_precision_v1')
+    if training_stage(settings) == 2 and 'target_curriculum' not in settings and matching.reward_mode not in ('directed_delivery_v1', 'directed_outreach_speed_delivery_v1', 'crossing_priority_delivery_v1'):
+        raise ValueError('Stage2 without target curriculum requires a fixed-target directed delivery reward')
+    if ('training_stage' in settings and matching.reward_mode not in ('directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1')
             and cfg.termination not in ('first_qualified_hit_v1', 'first_geometric_hit_v1')):
         raise ValueError('Staged presets require explicit first-hit termination')
     from training.curriculum import validate_curriculum

@@ -115,6 +115,33 @@ class HandoffTests(unittest.TestCase):
             if name not in trainable:
                 torch.testing.assert_close(value, target.actor.state_dict()[name], rtol=0, atol=0)
 
+    def test_level_outreach_transfer_restarts_exploration_and_keeps_fresh_critic(self):
+        settings, _, _, _ = load('configs/learning/whip_stage1_ppo_level_outreach_v6.json')
+        source = self.agent()
+        source.collections = source.updates = source.value_updates = 80
+        source.environment_steps = 460800
+        source.set_completed_episodes(10240)
+        for optimizer in (source.actor_optimizer, source.value_optimizer):
+            for group in optimizer.param_groups:
+                for parameter in group['params']:
+                    parameter.grad = torch.full_like(parameter, .01)
+            optimizer.step()
+        columns, frames, privileged, options = self.interfaces[1]
+        target = PPO(dict(settings, device='cpu'), columns, frames, 'cpu',
+                     privileged_size=privileged, encoder_options=options)
+        value, rng = deepcopy(target.value.state_dict()), torch.get_rng_state().clone()
+        target.initialize_actor(source.state_dict())
+        self.assertTrue(exact_state(target.actor.state_dict(), source.actor.state_dict()))
+        self.assertTrue(exact_state(target.value.state_dict(), value))
+        torch.testing.assert_close(torch.get_rng_state(), rng, rtol=0, atol=0)
+        self.assertFalse(target.actor_optimizer.state)
+        self.assertFalse(target.value_optimizer.state)
+        self.assertEqual((target.collections, target.updates, target.value_updates,
+                          target.environment_steps, target.completed_episodes,
+                          target.entropy_episode_offset, target.entropy_step_offset), (0,)*7)
+        self.assertEqual(target.entropy_episode_budget, 5120)
+        self.assertEqual(target.entropy_weight, .02)
+
     def test_current_goal_actor_causality_and_full_training_mask(self):
         for stage in (1, 2, 3, 4):
             with self.subTest(stage=stage):
@@ -195,6 +222,30 @@ class HandoffTests(unittest.TestCase):
                                          actor=agent.actor.state_dict()), env)
                 self.assertTrue(exact_state(actor.state_dict(), agent.actor.state_dict()))
                 self.assertFalse(any(p.requires_grad for p in actor.parameters()))
+
+    def test_stage2_refinement_accepts_saved_actor_with_new_workspace(self):
+        saved = self.checkpoint(2, lambda s: s['snapshot']['task']['workspace'].update(radius_m=.4))
+        with patch('training.artifacts.execution_hashes', return_value=self.hashes), project_temporary() as folder:
+            source = Path(folder)/'source.pt'
+            save_checkpoint(source, saved)
+            run = create_run(self.presets[2][0], root=Path(folder)/'new-runs', initialize_actor=source)
+            snapshot = read_json(run/'configuration.json')
+            self.assertEqual(snapshot['task']['workspace']['radius_m'], .55)
+            self.assertEqual(saved['snapshot']['task']['workspace']['radius_m'], .4)
+            self.assertNotEqual(snapshot['identity'], saved['identity'])
+            self.assertEqual(read_json(run/'request.json'),
+                             {'resume': None, 'initialize_actor': 'initial-actor.pt'})
+            self.assertEqual((run/'initial-actor.pt').read_bytes(), source.read_bytes())
+            self.assertEqual(snapshot['policy_initialization']['source_identity'], saved['identity'])
+            self.assertEqual(snapshot['policy_initialization']['value_and_optimizers'], 'fresh')
+            target = self.agent(2)
+            value = deepcopy(target.value.state_dict())
+            target.initialize_actor(saved['agent'])
+            self.assertTrue(exact_state(target.actor.state_dict(), saved['agent']['actor']))
+            self.assertTrue(exact_state(target.value.state_dict(), value))
+            self.assertFalse(target.actor_optimizer.state)
+            self.assertFalse(target.value_optimizer.state)
+            self.assertEqual((target.collections, target.completed_episodes), (0, 0))
 
     def test_fresh_run_stage_guards_and_recorded_actor_only_provenance(self):
         with patch('training.artifacts.execution_hashes', return_value=self.hashes):

@@ -75,15 +75,45 @@ class ReleaseMatchingConfiguration:
     # Omitted fields retain byte-exact historical squared-cosine arithmetic.
     alignment_mode: str = 'squared_cosine_v1'
     alignment_cone_deg: float = 25.0
+    # Explicit compact Stage1 experiment only. Omission preserves saved recipes.
+    reach_weight: float | None = None
+    preparation_path_weight: float | None = None
+    # Explicit level-outreach Stage1 experiment; older recipes omit these.
+    outreach_base_fraction: float | None = None
+    outreach_height_width_fraction: float | None = None
+    # Explicit demonstration-seeded, speed/outreach Stage1 experiment.
+    outreach_mechanics_scale: float | None = None
+    outreach_speed_scale_mps: float | None = None
+    outreach_speed_power: float | None = None
+    # Separate approved linear-height Stage1 experiment; omitted in old tasks.
+    outreach_reach_weight: float | None = None
+    outreach_height_weight: float | None = None
+    outreach_joint_weight: float | None = None
+    # Explicit crossing-priority Stage2 experiment; historical tasks omit these.
+    crossing_whip_weight: float | None = None
+    crossing_side_scale_m: float | None = None
+    crossing_height_scale_m: float | None = None
+    crossing_geometric_weight: float | None = None
+    crossing_strict_weight: float | None = None
 
     def __post_init__(self):
+        for name in ('crossing_whip_weight', 'crossing_side_scale_m',
+                     'crossing_height_scale_m', 'crossing_geometric_weight',
+                     'crossing_strict_weight'):
+            value = getattr(self, name)
+            if self.reward_mode == 'crossing_priority_delivery_v1':
+                if value is None:
+                    raise ValueError('Crossing-priority delivery requires explicit '+name)
+                _positive(value, name)
+            elif value is not None:
+                raise ValueError(name+' requires crossing-priority delivery')
         if self.alignment_mode not in ('squared_cosine_v1', 'cone_plateau_v1'):
             raise ValueError('Unknown directed alignment mode')
         _positive(self.alignment_cone_deg, 'alignment_cone_deg')
         if self.alignment_cone_deg >= 90:
             raise ValueError('Alignment cone must be strictly below 90 degrees')
         if self.alignment_mode != 'squared_cosine_v1' and self.reward_mode not in (
-                'directed_whip_v1', 'directed_delivery_v1', 'directed_precision_v1'):
+                'directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1'):
             raise ValueError('Cone alignment requires a directed whip reward')
         for name in ('height_width_m', 'speed_width_mps', 'direction_width_deg'):
             _positive(getattr(self, name), name)
@@ -110,13 +140,54 @@ class ReleaseMatchingConfiguration:
                 raise ValueError(name+' must be finite and in [0,1]')
         if self.reward_mode != 'geometric_hit_quality_v1' and (self.hit_speed_weight or self.hit_straightness_weight):
             raise ValueError('Hit-quality weights require the geometric-hit reward mode')
-        if self.reward_mode not in ('mechanics_event_v1', 'directed_hit_v1', 'geometric_hit_quality_v1', 'directed_whip_v1', 'directed_delivery_v1', 'directed_precision_v1'):
+        if self.reward_mode not in ('mechanics_event_v1', 'directed_hit_v1', 'geometric_hit_quality_v1', 'directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1'):
             raise ValueError('Unknown reward mode')
-        if self.reward_mode in ('directed_whip_v1', 'directed_delivery_v1', 'directed_precision_v1') and (
+        if self.reward_mode in ('directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1') and (
                 self.mechanics_credit_weight != 1 or self.shaping_weight != 1
                 or self.time_preference != 0 or self.center_weight != 0
                 or self.strike_mechanics_scale is not None):
             raise ValueError('Directed whip uses one unit mechanics event and no matching/time/center bonus')
+        for name in ('reach_weight', 'preparation_path_weight'):
+            value = getattr(self, name)
+            modes = (('directed_compact_whip_v1',) if name == 'reach_weight' else
+                     ('directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1'))
+            if self.reward_mode in modes:
+                if (value is None or isinstance(value, bool) or not math.isfinite(value) or value < 0):
+                    label = 'Compact Stage1' if self.reward_mode == 'directed_compact_whip_v1' else 'Level outreach Stage1'
+                    raise ValueError(label+' requires explicit finite nonnegative '+name)
+            elif value is not None:
+                raise ValueError(name+' requires an applicable compact Stage1 reward mode')
+        for name in ('outreach_base_fraction', 'outreach_height_width_fraction'):
+            value = getattr(self, name)
+            modes = (('directed_level_outreach_whip_v1',) if name == 'outreach_base_fraction' else
+                     ('directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1'))
+            if self.reward_mode in modes:
+                if value is None or isinstance(value, bool) or not math.isfinite(value):
+                    raise ValueError('Level outreach Stage1 requires explicit finite '+name)
+                if (name == 'outreach_base_fraction' and not 0 <= value <= 1
+                        or name == 'outreach_height_width_fraction' and value <= 0):
+                    raise ValueError('Invalid level outreach Stage1 '+name)
+            elif value is not None:
+                raise ValueError(name+' requires the level outreach Stage1 reward mode')
+        for name in ('outreach_mechanics_scale', 'outreach_speed_scale_mps', 'outreach_speed_power'):
+            value = getattr(self, name)
+            if self.reward_mode in ('directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1'):
+                if value is None:
+                    raise ValueError('Speed outreach Stage1 requires explicit '+name)
+                _positive(value, name)
+            elif value is not None:
+                raise ValueError(name+' requires the speed outreach Stage1 reward mode')
+        for name in ('outreach_reach_weight', 'outreach_height_weight', 'outreach_joint_weight'):
+            value = getattr(self, name)
+            if self.reward_mode in ('directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1'):
+                if value is None or isinstance(value, bool) or not math.isfinite(value) or value < 0:
+                    raise ValueError('Linear outreach/height Stage1 requires explicit finite nonnegative '+name)
+            elif value is not None:
+                raise ValueError(name+' requires the linear outreach/height Stage1 reward mode')
+        if self.reward_mode in ('directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1'):
+            total = self.outreach_reach_weight+self.outreach_height_weight+self.outreach_joint_weight
+            if not math.isfinite(total) or total <= 0:
+                raise ValueError('Linear outreach/height weights must have a finite positive sum')
         if self.reward_mode in ('directed_hit_v1', 'geometric_hit_quality_v1') and (
                 self.mechanics_credit_weight != 0 or self.center_weight != 0
                 or self.strike_mechanics_scale is not None):
@@ -175,11 +246,11 @@ class Stage1Configuration:
     def __post_init__(self):
         if self.termination not in ('full_horizon_v1', 'first_qualified_hit_v1', 'first_geometric_hit_v1'):
             raise ValueError('Unknown task termination rule')
-        if self.matching.reward_mode in ('directed_whip_v1', 'directed_delivery_v1', 'directed_precision_v1') and (
+        if self.matching.reward_mode in ('directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1') and (
                 self.termination != 'full_horizon_v1' or self.returns.acceleration_cost_weight != 0
                 or (self.strike_surface is not None and self.strike_surface.strike_bonus_weight != 0)):
             raise ValueError('Directed whip requires full horizon, zero acceleration cost and zero strike bonus')
-        if self.matching.reward_mode in ('directed_delivery_v1', 'directed_precision_v1') and (
+        if self.matching.reward_mode in ('directed_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_precision_v1', 'crossing_priority_delivery_v1') and (
                 self.strike_surface is None or self.strike_surface.overflow_width_m is not None):
             raise ValueError('Directed delivery requires a fixed rectangle and isotropic distance guidance')
         if self.termination in ('first_qualified_hit_v1', 'first_geometric_hit_v1') and self.strike_surface is None:
@@ -209,7 +280,7 @@ class Stage1Configuration:
         horizon = self.episode.duration_s+self.episode.post_hold_s
         if self.recovery is not None:
             r = self.recovery
-            if (self.matching.reward_mode != 'directed_precision_v1'
+            if (self.matching.reward_mode not in ('directed_precision_v1', 'directed_outreach_speed_precision_v1')
                     or self.termination != 'full_horizon_v1'
                     or not math.isclose(horizon,r.whip_duration_s+r.recovery_duration_s,abs_tol=1e-12)
                     or not math.isclose(self.mechanics.event_end_s+self.mechanics.tip_lag_s,r.whip_duration_s,abs_tol=1e-12)):

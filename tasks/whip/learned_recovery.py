@@ -46,7 +46,8 @@ class LearnedRecoveryScorer:
             raise ValueError('Recovery requires complete drone position/velocity histories')
         if positions.shape[1] != len(self.time) or state_valid.shape != positions.shape[:2]:
             raise ValueError('Recovery history horizon mismatch')
-        base = self.base(positions[:,:end+1],velocities[:,:end+1],state_valid[:,:end+1])
+        base = self.base(positions[:,:end+1],velocities[:,:end+1],state_valid[:,:end+1],
+            drone_positions=drone_positions[:,:end+1])
         finite = (state_valid & torch.isfinite(positions).flatten(2).all(-1)
             & torch.isfinite(velocities).flatten(2).all(-1)
             & torch.isfinite(drone_positions).all(-1) & torch.isfinite(drone_velocities).all(-1))
@@ -105,7 +106,8 @@ class EventRecoveryScorer(LearnedRecoveryScorer):
         first_end = torch.minimum(start,terminal_samples-1).clamp_min(0)
         whip_valid = state_valid[:,:self.whip_end+1] & (grid[:,:self.whip_end+1]<=first_end[:,None])
         base = self.base(positions[:,:self.whip_end+1],velocities[:,:self.whip_end+1],
-                         whip_valid,terminal_samples=first_end+1)
+                         whip_valid,terminal_samples=first_end+1,
+                         drone_positions=drone_positions[:,:self.whip_end+1])
         finite = (state_valid & torch.isfinite(positions).flatten(2).all(-1)
             & torch.isfinite(velocities).flatten(2).all(-1)
             & torch.isfinite(drone_positions).all(-1) & torch.isfinite(drone_velocities).all(-1))

@@ -15,3 +15,9 @@ __pycache__/
 /data/take_processing/catalog.json
 /data/recordings/*
 !/data/recordings/.gitkeep
+
+# Generated sessions and local credentials (source/model artifacts stay tracked).
+/output/
+/.env
+/.env.*
+!/.env.example

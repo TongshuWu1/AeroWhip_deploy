@@ -11,7 +11,7 @@ def add_environment(plotter, pv, viewer: ViewerConfiguration) -> None:
     floor = pv.Plane(center=(0, 0, z), direction=(0, 0, 1),
                      i_size=viewer.ground_size_m * 5, j_size=viewer.ground_size_m * 5,
                      i_resolution=1, j_resolution=1)
-    plotter.add_mesh(floor, name="environment/floor", color="#b8bec2",
+    plotter.add_mesh(floor, name="environment/floor", color="#99a8b5",
                      pbr=True, metallic=0.0, roughness=0.95, pickable=False)
 
     # Thin filled strips give grid lines a consistent metric width. A small
@@ -20,7 +20,7 @@ def add_environment(plotter, pv, viewer: ViewerConfiguration) -> None:
     indices = range(-int(np.floor(half / spacing)), int(np.floor(half / spacing)) + 1)
     for major in (False, True):
         points, faces = [], []
-        width = 0.003 if major else 0.0015
+        width = 0.005 if major else 0.003
         for index in indices:
             value = index * spacing
             if bool(np.isclose(value, round(value), atol=1e-9)) != major:
@@ -36,7 +36,7 @@ def add_environment(plotter, pv, viewer: ViewerConfiguration) -> None:
         if points:
             plotter.add_mesh(pv.PolyData(np.asarray(points), faces),
                              name=f"environment/grid-{'major' if major else 'minor'}",
-                             color="#87949d" if major else "#a3afb7",
+                             color="#526477" if major else "#74879a",
                              pbr=True, metallic=0.0, roughness=0.95, pickable=False)
 
 

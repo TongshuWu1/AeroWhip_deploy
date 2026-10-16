@@ -44,6 +44,18 @@ class GeometricController:
         desired = self.desired_rotation(force,command[3])
         return self._wrench(state,force,desired,torch.zeros_like(state.omega_body))
 
+    def acceleration(self, state, command):
+        """World XYZ acceleration request [m/s²], excluding gravity, and fixed yaw.
+
+        Direct nominal force conversion with the existing static cable-weight
+        trim. No position/velocity servo, integrated reference or load observer.
+        This requests acceleration; the coupled plant need not achieve it.
+        """
+        m = self.model
+        force = m.mass*command[:3]-(m.mass+m.node_mass.sum())*m.gravity
+        desired = self.desired_rotation(force,command[3])
+        return self._wrench(state,force,desired,torch.zeros_like(state.omega_body))
+
     def _wrench(self, state, force, desired, rate):
         m = self.model
         R,omega = state.rotation,state.omega_body

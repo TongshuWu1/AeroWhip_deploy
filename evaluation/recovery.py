@@ -107,6 +107,11 @@ def return_command(position, origin, previous, elapsed, settings, dt=.01):
 
 class StrikeReturnEnvironment(DeterministicEvaluationEnvironment):
     """One lane, stop issuing actor actions at first qualified sampled crossing."""
+    def __init__(self, settings, *args, **kwargs):
+        if settings.get('action_interface') != 'velocity_v1':
+            raise ValueError('Scripted return requires the velocity interface; acceleration recovery is not implemented')
+        super().__init__(settings, *args, **kwargs)
+
     @torch.no_grad()
     def reset(self):
         self.hit = None

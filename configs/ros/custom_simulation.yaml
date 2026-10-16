@@ -1,0 +1,5 @@
+# Explicit simulation-only initial conditions. Hardware YAML stays unchanged.
+# This is an airborne connection check: no floor or cable contact is modeled.
+robots:
+  cf_2:
+    initial_position: [0.0, 0.0, 1.1]

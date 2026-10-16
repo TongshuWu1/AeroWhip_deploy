@@ -27,7 +27,7 @@ class PipelineTests(unittest.TestCase):
                                  snapshot, cfg, scene or original_scene, capture=False)
 
     def test_four_current_roles_budgets_and_shared_physics(self):
-        modes = ['directed_whip_v1', 'directed_delivery_v1',
+        modes = ['directed_compact_whip_v1', 'directed_delivery_v1',
                  'directed_precision_v1', 'directed_precision_v1']
         reference = self.presets[1][1]
         for stage, (settings, snapshot, cfg, _) in self.presets.items():
@@ -51,6 +51,8 @@ class PipelineTests(unittest.TestCase):
         self.assertNotIn('target_curriculum', self.presets[2][0])
         self.assertEqual(self.presets[3][0]['stage3_role'], 'precision_v1')
         self.assertEqual(self.presets[4][0]['stage4_role'], 'learned_recovery_v1')
+        self.assertEqual(self.presets[1][2].matching.reach_weight, .25)
+        self.assertEqual(self.presets[1][2].matching.preparation_path_weight, .15)
 
     def test_all_stage_goal_columns_and_fixed_nominal_target(self):
         for stage in self.presets:

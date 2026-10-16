@@ -1,0 +1,13 @@
+{
+  "initialization_radius_m": 0.035,
+  "length_tolerance_m": 0.015,
+  "position_noise_m": 0.012,
+  "maximum_speed_mps": 12.0,
+  "maximum_gap_s": 0.25,
+  "ambiguity_margin": 1.0,
+  "missing_cost": 4.0,
+  "beam_width": 128,
+  "maximum_candidates_per_marker": 12,
+  "maximum_cloud_points": 2048,
+  "duplicate_radius_m": 0.001
+}

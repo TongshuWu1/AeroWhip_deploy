@@ -288,6 +288,10 @@ class PPO:
         self.interface = dict(schema='ppo_history_state_v1', frame_size=frame_size,
             actor_columns=list(columns), privileged_size=privileged_size, action_size=action_size,
             hidden_units=settings['hidden_units'], optimizer_convolution='deterministic_cudnn_v1')
+        if settings.get('action_interface') == 'acceleration_direct_v1':
+            self.interface.update(action_interface='acceleration_direct_v1',
+                acceleration_limit_mps2=list(settings['acceleration_limit_mps2']),
+                policy_rate_hz=settings['policy_rate_hz'])
         h = settings['hidden_units']
         options = dict(encoder_options or {})
         phase_options = {k:v for k,v in options.items() if k != 'goal_columns'}

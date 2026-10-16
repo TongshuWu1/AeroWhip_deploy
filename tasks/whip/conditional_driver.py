@@ -1,10 +1,12 @@
-"""Windows CUDA conditional graphs; PyTorch-bundled NVRTC, no build.
+"""Windows/Linux CUDA conditional graphs; installed NVRTC, no build.
 
 ABI layouts follow CUDA12.8+ cuda.h. No physical arithmetic runs in this helper.
 This is a single-context/stream owner; failures are explicit, not eager fallback.
 """
 import ctypes as C
 import os
+import sys
+from ctypes.util import find_library
 from pathlib import Path
 import torch
 
@@ -39,12 +41,33 @@ class KernelParams(C.Structure):
 
 class Driver:
     def __init__(self,out=None):
-        if os.name!="nt" or C.sizeof(C.c_void_p)!=8:
-            raise RuntimeError("Conditional solver currently requires64-bit Windows")
+        if (os.name != 'nt' and sys.platform != 'linux') or C.sizeof(C.c_void_p)!=8:
+            raise RuntimeError("Conditional solver requires64-bit Windows or Linux")
         assert C.sizeof(NodeParams)==256 and C.sizeof(Conditional)==32
-        self.directory=os.add_dll_directory(str(Path(torch.__file__).parent/'lib'))
-        self.driver=C.WinDLL('nvcuda.dll')
-        self.nvrtc=C.CDLL(str(Path(torch.__file__).parent/'lib/nvrtc64_120_0.dll'))
+        torch_lib=Path(torch.__file__).parent/'lib'
+        if os.name == 'nt':
+            self.directory=os.add_dll_directory(str(torch_lib))
+            self.driver=C.WinDLL('nvcuda.dll')
+            candidates=sorted(torch_lib.glob('nvrtc64_*.dll'))
+        else:
+            self.driver=C.CDLL('libcuda.so.1')
+            package_root=Path(torch.__file__).parent.parent
+            major=(torch.version.cuda or '').split('.')[0]
+            candidates=[*sorted(torch_lib.glob('libnvrtc.so*')),
+                *sorted((package_root/'nvidia'/f'cu{major}'/'lib').glob('libnvrtc.so*')),
+                *sorted((package_root/'nvidia'/'cuda_nvrtc'/'lib').glob('libnvrtc.so*'))]
+            system_nvrtc=find_library('nvrtc')
+            if system_nvrtc:candidates.append(system_nvrtc)
+        failures=[]
+        for candidate in candidates:
+            try:
+                self.nvrtc=C.CDLL(str(candidate))
+                self.nvrtc_library=str(candidate)
+                break
+            except OSError as exc:failures.append(str(exc))
+        else:
+            raise RuntimeError('Cannot load NVRTC for conditional solver: '+
+                ('; '.join(failures) if failures else 'no installed NVRTC library found'))
         self._bind()
         version=C.c_int();self.call("cuDriverGetVersion",C.byref(version))
         self.driver_version=version.value

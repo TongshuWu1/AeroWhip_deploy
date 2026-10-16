@@ -1,6 +1,8 @@
 from pathlib import Path
 import argparse
 import sys
+import signal
+from threading import Event
 
 
 ROOT = Path(__file__).resolve().parent
@@ -35,10 +37,17 @@ def main() -> None:
         controls = receiver.poll()
         manual.controls = controls
         return controls
+    stop = Event()
+    handlers = {sig: signal.signal(sig, lambda *_: stop.set())
+                for sig in (signal.SIGINT, signal.SIGTERM)}
     try:
-        PyVistaViewer(configuration).show(simulation, control_source=poll_controls)
+        viewer = PyVistaViewer(configuration)
+        viewer.stop_requested = stop
+        viewer.show(simulation, control_source=poll_controls)
     finally:
         receiver.close()
+        for sig, handler in handlers.items():
+            signal.signal(sig, handler)
 
 
 if __name__ == "__main__":

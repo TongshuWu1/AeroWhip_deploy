@@ -150,8 +150,8 @@ class InterfaceTests(unittest.TestCase):
         self.assertEqual(self.window.status.text(), 'Stopped')
 
     def test_settings_no_edit_roundtrip_keeps_every_value(self):
-        for stage in (1,2,3,4):
-            settings, snapshot, _, _ = load(FROZEN_PRESETS[stage])
+        for path in (*FROZEN_PRESETS.values(), 'configs/learning/whip_stage1_ppo_level_outreach_v6.json'):
+            settings, snapshot, _, _ = load(path)
             dialog=SettingsDialog(settings,snapshot['task'])
             self.addCleanup(dialog.close)
             with patch.object(QtWidgets.QMessageBox,'warning') as warning:

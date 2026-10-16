@@ -36,6 +36,22 @@ def stage_label(snapshot):
 
 
 def scoring_label(snapshot):
+    if snapshot['task'].get('matching', {}).get('reward_mode') == 'crossing_priority_delivery_v1':
+        return 'Actual target crossings with center guidance and whip support'
+    if snapshot['task'].get('matching', {}).get('reward_mode') == 'directed_outreach_height_whip_v1':
+        return 'Directed outreach and linear height whip'
+    if snapshot['task'].get('matching', {}).get('reward_mode') == 'directed_outreach_speed_precision_v1':
+        return ('Speed and level outreach precision + learned recovery'
+            if snapshot['settings'].get('stage4_role') == 'learned_recovery_v1'
+            else 'Speed and level outreach with same-event center guidance')
+    if snapshot['task'].get('matching', {}).get('reward_mode') == 'directed_outreach_speed_delivery_v1':
+        return 'Speed and level outreach with fixed broad-target delivery'
+    if snapshot['task'].get('matching', {}).get('reward_mode') == 'directed_outreach_speed_whip_v1':
+        return 'Directed speed and level outreach whip'
+    if snapshot['task'].get('matching', {}).get('reward_mode') == 'directed_level_outreach_whip_v1':
+        return 'Level forward outreach whip (drone-relative height)'
+    if snapshot['task'].get('matching', {}).get('reward_mode') == 'directed_compact_whip_v1':
+        return 'Compact forward outreach whip'
     if snapshot['settings'].get('stage4_role') == 'learned_recovery_v1':
         return 'Precision whip + learned recovery (nominal, event-relative)'
     if snapshot['task'].get('matching', {}).get('reward_mode') == 'directed_precision_v1':
@@ -131,7 +147,7 @@ def discover(root):
         if not path.is_dir() or not (path/'configuration.json').exists():
             continue
         try:
-            if read_json(path/'configuration.json').get('schema') in ('ppo_stage1_velocity_v1','sac_stage1_ctbr_v1','sac_stage1_ctbr_v2','sac_stage1_acceleration_v1','sac_stage1_velocity_v1','sac_stage1_velocity_filtered_v1','sac_stage1_velocity_v2'):
+            if read_json(path/'configuration.json').get('schema') in ('ppo_stage1_velocity_v1','ppo_stage1_acceleration_direct_v1','sac_stage1_ctbr_v1','sac_stage1_ctbr_v2','sac_stage1_acceleration_v1','sac_stage1_velocity_v1','sac_stage1_velocity_filtered_v1','sac_stage1_velocity_v2'):
                 result.append(path)
         except (OSError, ValueError) as exc:
             warnings.append(f'{path.name}: {exc}')
@@ -147,10 +163,19 @@ def load_checkpoint(path):
         raise ValueError('Select a PPO/SAC Stage 1 or Stage 2 checkpoint, not a historical CEM checkpoint')
     snapshot = saved['snapshot']
     is_ppo = saved['schema'] == 'ppo_stage1_checkpoint_v1'
-    if is_ppo != (snapshot.get('schema') == 'ppo_stage1_velocity_v1') or (
+    if is_ppo:
+        from training.configuration import run_schema
+        if snapshot.get('schema') != run_schema(snapshot['settings']):
+            raise ValueError('Checkpoint schema and action interface differ')
+        if snapshot['settings'].get('action_interface') == 'acceleration_direct_v1':
+            interface = saved['agent'].get('interface', {})
+            for key in ('action_interface', 'acceleration_limit_mps2', 'policy_rate_hz'):
+                if interface.get(key) != snapshot['settings'].get(key):
+                    raise ValueError('Acceleration checkpoint control interface differs: '+key)
+    if is_ppo != (snapshot.get('schema') in ('ppo_stage1_velocity_v1','ppo_stage1_acceleration_direct_v1')) or (
             is_ppo != (snapshot['settings'].get('algorithm', 'sac') == 'ppo')):
         raise ValueError('Checkpoint learner and snapshot schemas differ')
-    if (snapshot.get('schema') not in ('ppo_stage1_velocity_v1','sac_stage1_ctbr_v1','sac_stage1_ctbr_v2','sac_stage1_acceleration_v1','sac_stage1_velocity_v1','sac_stage1_velocity_filtered_v1','sac_stage1_velocity_v2')
+    if (snapshot.get('schema') not in ('ppo_stage1_velocity_v1','ppo_stage1_acceleration_direct_v1','sac_stage1_ctbr_v1','sac_stage1_ctbr_v2','sac_stage1_acceleration_v1','sac_stage1_velocity_v1','sac_stage1_velocity_filtered_v1','sac_stage1_velocity_v2')
             or checkpoint_identity(snapshot) != saved['identity']
             or snapshot.get('identity') != saved['identity']):
         raise ValueError('Checkpoint configuration identity is inconsistent')
@@ -199,8 +224,8 @@ def evaluation_contract(snapshot, mode):
             raise ValueError('Current-code reevaluation requires unchanged physical execution: '+', '.join(physical))
         from training.configuration import validate
         validate(snapshot['settings'])  # No silent settings/schema migration.
-        if snapshot['settings'].get('action_interface') != 'velocity_v1':
-            raise ValueError('Current-code reevaluation supports the current velocity interface only; use saved replay')
+        if snapshot['settings'].get('action_interface') not in ('velocity_v1', 'acceleration_direct_v1'):
+            raise ValueError('Current-code reevaluation requires a supported action interface; use saved replay')
     return dict(source_mode=mode, execution_hashes=current,
                 source_execution_hashes=snapshot['execution_hashes'], changed_files=changed,
                 evaluator_hashes=evaluator_hashes(), exact_source_reproduction=(mode == 'exact_source'))
