@@ -87,7 +87,7 @@ class WhipDiagnosticsData:
                 record = json.loads(value)
                 if not isinstance(record, dict):
                     raise ValueError('Expected an individual saved fold record.')
-            if record.get('physical_termination') is False:
+            if 'physical_violation' in record:
                 notices.append('Tilt and cable-height limits are diagnostic only; full horizon is not physical validity.')
                 if record.get('physical_violation'):
                     notices.append(f"Physical envelope violated: minimum cable height {record['minimum_cable_height_m']:.3f} m; maximum tilt {record['maximum_tilt_deg']:.1f} degrees. No extra physical-violation reward penalty.")
@@ -131,24 +131,14 @@ class WhipDiagnosticsData:
             raise ValueError('Saved model rest lengths do not match this recording; no guessed normalization.')
         rel = positions - positions[:, :1]
         rv = velocities - velocities[:, :1]
-        horizontal = np.linalg.norm(rel[:, -1, :2], axis=1)
-        radial = np.zeros_like(rel[:, -1])
-        nonzero = horizontal > 1e-6 * rest.sum()
-        radial[nonzero, :2] = rel[nonzero, -1, :2]/horizontal[nonzero, None]
         ws = np.linalg.norm(velocities[:, -1], axis=1)
         rs = np.linalg.norm(rv[:, -1], axis=1)
-        uw = np.sum(velocities[:, -1] * radial, axis=1)
-        ur = np.sum(rv[:, -1] * radial, axis=1)
-        wc = np.divide(uw, ws, out=np.full_like(ws, np.nan), where=nonzero & (ws > 0))
-        rc = np.divide(ur, rs, out=np.full_like(rs, np.nan), where=nonzero & (rs > 0))
-        uw[~nonzero] = ur[~nonzero] = np.nan
-        if snapshot.get('task', {}).get('matching', {}).get('reward_mode') in ('continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6'):
-            horizontal = np.maximum(0., rel[:, -1, 0])
-            uw = velocities[:, -1, 0].copy()
-            ur = rv[:, -1, 0].copy()
-            wc = np.divide(uw, ws, out=np.zeros_like(ws), where=ws > 0)
-            rc = np.divide(ur, rs, out=np.zeros_like(rs), where=rs > 0)
-            notices.append('Directed output: reach is positive +X extension; velocity and alignment use fixed world +X, not moving radial heading.')
+        # Same fixed world +X output as the Stage 1 reward; zero speed has zero cosine.
+        reach = np.maximum(0., rel[:, -1, 0])
+        uw = velocities[:, -1, 0].copy()
+        ur = rv[:, -1, 0].copy()
+        wc = np.divide(uw, ws, out=np.zeros_like(ws), where=ws > 0)
+        rc = np.divide(ur, rs, out=np.zeros_like(rs), where=rs > 0)
         edges = np.diff(positions, axis=1)
         edge_lengths = np.linalg.norm(edges, axis=2)
         if np.any(edge_lengths <= 0):
@@ -174,9 +164,9 @@ class WhipDiagnosticsData:
         if not record:
             notices.append('No saved fold-event log. Detector phase and qualification are unavailable; no rescoring performed.')
         return cls(path, time, positions, rel, velocities, rv, rest,
-                   horizontal/rest.sum(), rel[:, -1, 2], ws, rs, uw, ur, wc, rc,
+                   reach/rest.sum(), rel[:, -1, 2], ws, rs, uw, ur, wc, rc,
                    np.degrees(turn), density, grid, regions, record, events,
-                   snapshot.get('task', {}).get('matching', {}).get('reward_mode', 'unknown'), validity, notices,continuous)
+                   snapshot.get('task', {}).get('continuous_whip', {}).get('version', 'unknown'), validity, notices,continuous)
 
     def phase(self, index):
         past = [e for e in self.events if e['time_s'] <= self.time[index]+1e-9]

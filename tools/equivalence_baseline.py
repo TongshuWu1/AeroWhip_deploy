@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 import torch
 
 from training.configuration import load
-from tasks.whip.sac_environment import make_environment
+from tasks.whip.environment import make_environment
 from training.ppo import PPO
 
 REFERENCE = ROOT/'tests/data/stage1_equivalence_reference.pt'

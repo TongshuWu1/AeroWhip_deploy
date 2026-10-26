@@ -59,8 +59,3 @@ class IterationGraphs:
         graph.replay()
         return result
 
-
-class PhysicsReplay:
-    """Composite replay coordinator retaining the adapter's replay entry point."""
-    def __init__(self,callback): self.callback=callback
-    def replay(self): self.callback()

@@ -69,8 +69,8 @@ class ContinuousWhipTests(unittest.TestCase):
         self.assertAlmostEqual(sum(h.rewards), a.total, places=12)
         self.assertAlmostEqual(a.accrued, a.total, places=12)
         self.assertEqual(len(a.trace), 401)
-        self.assertEqual(np.asarray(a.trace).shape, (401, len(TRACE_FIELDS)+3))
-        self.assertEqual(a.features().shape, (FEATURE_SIZE+2,))
+        self.assertEqual(np.asarray(a.trace).shape, (401, len(TRACE_FIELDS)))
+        self.assertEqual(a.features().shape, (FEATURE_SIZE,))
         self.assertIsNone(a.record()['qualified'])
         self.assertEqual([e['kind'] for e in a.log], ['horizon'])
         with self.assertRaises(RuntimeError):

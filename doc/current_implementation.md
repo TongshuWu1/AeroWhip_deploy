@@ -10,7 +10,9 @@ termination, control, exploration, evidence and limitations. The default is
 [the v6 preset](../configs/learning/whip_stage1_ppo_continuous_directional_four_second_v6.json):
 64 lanes, 200 collections, 12,800 episodes, ten physical links, fresh actor/critic.
 The latest production run `20261025-215750-176045` completed zero collections and
-zero optimizer updates. Its stopped checkpoint is not a learned policy.
+zero optimizer updates. Its stopped checkpoint is not a learned policy. Its saved
+task snapshot uses the pre-2026-10-26 task layout, so current code no longer opens
+it; use commit `375b44e` to inspect it.
 
 There is no target-hit reward, early completion, automatic Stage 2 or hardware deployment.
 Current reward and physics are unchanged by the cleanup. Old reward modes, Stage 2–4
@@ -27,7 +29,8 @@ release and describe their original experiments, not a new verification.
 
 - `simulation/` and `native/`: reusable coupled drone/cable physical model.
 - `controllers/`: flight control, separate from the physical plant.
-- `tasks/whip/`: current Stage 1 geometry, reward, observation and environment adapter.
+- `tasks/whip/`: current Stage 1 geometry, reward, observation and environment adapter
+  ([environment.py](../tasks/whip/environment.py) is the single environment class).
 - `training/`: PPO, snapshots, cooperative worker and desktop UI.
 - `evaluation/`: saved-motion measurements, checkpoint evaluation and review tools.
 - `fitting/` and `take_processing/`: measured-data preparation and physical model fitting.
@@ -942,3 +945,32 @@ export check), with synthetic tests in `tests/test_take_checks.py`. `load_take`,
 fitting, splits and physical models are unchanged. Neither script has been run on
 a recorded take: the `backup-2026-10-16` recordings archive contains no flight
 takes. Thresholds remain to be confirmed on the first refit-collection takes.
+
+## Dated change note — 2026-10-26 reorganization phase 1 (retired code removed)
+
+Removed code and configuration that no current path used, on branch `reorganize`:
+- Task file sections `mechanics`, `matching`, `strike_surface`, `request` and the
+  unused `return` fields (`acceleration_cost_*`, `failure_return`), `episode.settling_s`
+  and `episode.termination`; learning keys `algorithm`, `training_stage` and
+  `ppo.transfer_entropy_clock`. The task file now has `episode`, `workspace`, `return`
+  and `continuous_whip` only.
+- The three-level environment chain (`sac_environment.py`, `horizontal_fold_environment.py`,
+  `continuous_whip_environment.py`) is one class in `tasks/whip/environment.py`; branches
+  for physical/workspace termination, velocity actions and radial output were never
+  taken by the current task and are gone.
+- PPO actor-transfer entropy offsets and unused phase/goal encoder inputs; the
+  `model_catalog.py` packaged-model support (no `models/` folder exists),
+  `evaluation/worker.py`, `simulation/batched_rollout.py`, SAC/historical branches in
+  `evaluation/records.py`, the replay viewer's strike/target cards, and the policy
+  tester's display-only target field (protocol now `initial_state_policy_test_v1`).
+- The offline event review's virtual board (1.1 m along +X, 1 × 0.6 m at z = 2 m) now
+  lives in `evaluation/whip_event_review.review_surface`, with unchanged geometry.
+- Whipping diagnostics now use only the fixed world +X output, as the reward does.
+
+Checked: `tools/equivalence_baseline.py` (fixed open-loop actions through four CPU
+lanes and four CUDA lanes, plus one seeded PPO collection and update) reproduces all
+154 recorded tensors exactly against the reference recorded at `375b44e`; 231 unit
+tests pass (five tests of removed features were deleted). Physics, reward, controller,
+timing and PPO arithmetic are unchanged. Runs saved before this change no longer load.
+Not checked: the GUIs beyond offscreen construction; no training or flight was run.
+

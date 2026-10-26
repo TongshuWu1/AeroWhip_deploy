@@ -5,7 +5,7 @@ import unittest
 import numpy as np
 import torch
 from tasks.whip.continuous_whip import ContinuousWhipAttempt, SHORT_MODE
-from tasks.whip.sac_environment import make_environment
+from tasks.whip.environment import make_environment
 from training.configuration import load, task_configuration
 from training.ppo import PPO
 
@@ -23,7 +23,7 @@ class FourSecondTests(unittest.TestCase):
         a=PPO(e.settings,e.actor_columns,e.frame_size,'cpu',privileged_size=e.critic_state_size,encoder_options=e.policy_encoder_options)
         self.assertEqual(a.interface['time_reference_samples'],400)
         self.assertEqual(a.interface['history_layout'],'continuous_directional_whip_401_v1')
-        self.assertEqual(a.entropy_episode_budget,12800);self.assertEqual(a.entropy_episode_offset,0)
+        self.assertEqual(a.entropy_episode_budget,12800)
         self.assertFalse(a.actor_optimizer.state_dict()['state'])
         bad=replace(e.state,position_com=e.state.position_com+e.model.tensor([.8,0,-2.3]))
         def fixed(state,command,controller,**kw):
@@ -47,7 +47,7 @@ class FourSecondTests(unittest.TestCase):
         p=np.linspace([0,0,0],[.8,0,0],11);v=np.zeros_like(p);v[-1,0]=2
         result=[]
         for horizon in (4.,):
-            a=ContinuousWhipAttempt(np.full(10,.1),workspace_origin=np.zeros(3),plain_net=True,directed_x=True,horizon_s=horizon)
+            a=ContinuousWhipAttempt(np.full(10,.1),workspace_origin=np.zeros(3),horizon_s=horizon)
             a.initialize(p,v);a._fold_support=lambda *args:(1.,1.,np.pi)
             rewards=[a.observe(k*.01,p,v,drone_position=[.65,0,2]) for k in range(1,int(horizon*100)+1)]
             self.assertAlmostEqual(a.cost,.1)

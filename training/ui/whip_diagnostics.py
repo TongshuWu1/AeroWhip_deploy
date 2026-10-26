@@ -117,8 +117,8 @@ class DiagnosticCanvas(QtWidgets.QWidget):
         p.drawText(QtCore.QRectF(2,r.top(),40,18),QtCore.Qt.AlignmentFlag.AlignRight,f'{high:.2f} m')
         p.drawText(QtCore.QRectF(2,r.bottom()-18,40,18),QtCore.Qt.AlignmentFlag.AlignRight,f'{low:.2f} m')
         self.curves(p,panel(0,h*.71,w/2,h*.29,'Reach / height · attachment-relative (m)'),
-                    [(d.reach*d.length,'#087d79'),(d.tip_height,'#7352bd')], ('teal: positive +X reach   purple: tip height' if d.mode in ('continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6') else 'teal: horizontal reach   purple: tip height'))
-        self.curves(p,panel(w/2,h*.71,w/2,h*.29,('+X velocity (m/s)' if d.mode in ('continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6') else 'Outward radial velocity (m/s)')),
+                    [(d.reach*d.length,'#087d79'),(d.tip_height,'#7352bd')], 'teal: positive +X reach   purple: tip height')
+        self.curves(p,panel(w/2,h*.71,w/2,h*.29,'+X velocity (m/s)'),
                     [(d.world_outward,'#2877c7'),(d.relative_outward,'#d17b25')], 'blue: world   orange: relative   negative = inward')
 
     def curves(self,p,r,series,legend):
@@ -189,7 +189,7 @@ class WhippingDiagnostics(QtWidgets.QWidget):
         self.speed.setCurrentIndex(1);controls.addWidget(self.speed)
         self.slider=QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal);self.slider.valueChanged.connect(self.seek);controls.addWidget(self.slider,1)
         self.clock=QtWidgets.QLabel('—');controls.addWidget(self.clock);layout.addLayout(controls)
-        note=QtWidgets.QLabel('Attachment-centred views; red arrow = relative tip velocity. Orange circles / white tracks = bend centres, not automatically folds.\nFull-history plots are offline context. Recorded opening or validity is not proof of useful horizontal whipping.')
+        note=QtWidgets.QLabel('Attachment-centred views; red arrow = relative tip velocity. Orange circles / white tracks = bend centres, not automatically folds.\nFull-history plots are offline context. Recorded opening or validity is not proof of useful whipping.')
         note.setWordWrap(True);note.setStyleSheet('color:#607486;font-size:11px');layout.addWidget(note)
         self.timer=QtCore.QTimer(self);self.timer.setInterval(30);self.timer.timeout.connect(self.tick)
 
@@ -248,7 +248,7 @@ class WhippingDiagnostics(QtWidgets.QWidget):
         def angle(cosine):return f'{np.degrees(np.arccos(np.clip(cosine,-1,1))):.1f}°' if np.isfinite(cosine) else 'undefined'
         rows=d.regions[i];b=max(rows,key=lambda b:b['theta']) if rows else None
         bend=(f"Largest bend: {np.degrees(b['theta']):.1f}° total turn\nCentre: {b['centre_m']:.3f} m · coherence {b['coherence']:.2f}" if b else 'No reconstructed bend centre')
-        self.telemetry.setText(f"At cursor: {d.phase(i)}\n\nHorizontal reach: {100*d.reach[i]:.1f}% L\nTip height vs attachment: {d.tip_height[i]:+.3f} m\nTip speed world / relative:\n{d.world_speed[i]:.2f} / {d.relative_speed[i]:.2f} m/s\nOutward world / relative:\n{number(d.world_outward[i])} / {number(d.relative_outward[i])} m/s\nAngle to horizontal outward:\nworld {angle(d.world_cosine[i])} · relative {angle(d.relative_cosine[i])}\n\n{bend}")
+        self.telemetry.setText(f"At cursor: {d.phase(i)}\n\n+X reach: {100*d.reach[i]:.1f}% L\nTip height vs attachment: {d.tip_height[i]:+.3f} m\nTip speed world / relative:\n{d.world_speed[i]:.2f} / {d.relative_speed[i]:.2f} m/s\n+X velocity world / relative:\n{number(d.world_outward[i])} / {number(d.relative_outward[i])} m/s\nAngle to +X:\nworld {angle(d.world_cosine[i])} · relative {angle(d.relative_cosine[i])}\n\n{bend}")
         if d.continuous:
             extra='\n\nSaved continuous reward trace'
             for key,label in [('fold_support','Fold support'),('straightening_mps','Endpoint extension (m/s)'),

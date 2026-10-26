@@ -5,7 +5,7 @@ import sys
 from PySide6 import QtCore, QtWidgets
 
 from project_paths import ROOT, project_path
-from training.configuration import DEFAULT, CURRENT_PRESETS, load, task_configuration, evaluation_settings, algorithm, training_stage
+from training.configuration import DEFAULT, load, task_configuration
 from training.artifacts import PPO_RUNS, create_run, read_json, save_json, events
 from training.ui.plots import MetricPlot
 from training.ui.preview import EvaluationPreview
@@ -45,58 +45,32 @@ class SettingsDialog(QtWidgets.QDialog):
                 for key,value in mapping.items():
                     path=prefix+key
                     owner=learning_owners.get(id(mapping),mapping)
-                    if key=='target_curriculum': owner=self.settings
                     label = {
                         'training_episodes': 'Training episodes',
                         'parallel_environments': 'Collection environments',
                         'evaluation_environments': 'Evaluation actor lanes (one physical case)',
-                        'gradient_updates_per_round': 'Gradient updates per full collection',
                         'evaluation_interval_episodes': 'Evaluation interval (episodes)',
                         'batch_size': 'Optimizer minibatch size',
                         'initial_weight': 'Initial entropy bonus weight',
                         'final_weight': 'Final entropy bonus weight',
-                        'target_entropy': 'Final target entropy (nats)',
-                        'initial_target_entropy': 'Initial target entropy (nats)',
-                        'hold_transitions': 'Initial exploration hold (training steps)',
-                        'anneal_end_transitions': 'Exploration decay ends (training steps)',
-                        'hold_fraction': 'Entropy hold (fraction of episode budget)',
-                        'anneal_end_fraction': 'Entropy decay ends (fraction of episode budget)',
                         'learning_rate': 'Learning rate', 'batch_size': 'Minibatch transitions',
-                        'policy_rate_hz': 'Action frequency [Hz]', 'velocity_limit_mps': 'Velocity limits X / Y / Z [m/s]',
+                        'policy_rate_hz': 'Action frequency [Hz]',
                         'acceleration_limit_mps2': 'Acceleration limits X / Y / Z [m/s²]',
                         'reward_scale': 'Reward multiplier', 'radius_m': 'Horizontal radius [m]',
                         'height_lower_world_m': 'Minimum drone height [m]', 'height_upper_world_m': 'Maximum drone height [m]',
-                        'duration_s': 'Maneuver duration [s]', 'settling_s': 'Maximum settling interval [s]',
-                        'distance_m': 'Wall distance [m]', 'width_m': 'Target full width [m]', 'height_m': 'Target full height [m]',
-                        'center_sigma_m': 'Center accuracy scale [m]', 'center_weight': 'Center accuracy weight',
-                        'target_kl': 'Maximum cohort-mean policy KL', 'time_preference': 'Earlier-strike preference',
-                        'request': 'Heading [rad] / reserved / target height [m] / forward speed [m/s]',
+                        'duration_s': 'Maneuver duration [s]',
+                        'target_kl': 'Maximum cohort-mean policy KL',
                     }.get(key, key.replace('_',' ').capitalize())
                     help_text = {
                         'parallel_environments':'Episodes simulated together in each collection. More lanes require more memory; speed is not guaranteed to improve.',
                         'evaluation_environments':'Actor batch layout only. Deterministic evaluation runs one native physical lane from a fixed initial condition, not independent trials.',
                         'training_episodes':'Total episode budget including earlier completed episodes when resuming; not an iteration count.',
                         'evaluation_interval_episodes':'Evaluation happens when this cumulative episode boundary is crossed, plus first and final collections.',
-                        'reward_scale':'Multiplies task returns for optimization. It does not change strike qualification or physical units.',
+                        'reward_scale':'Multiplies task returns for optimization. It does not change physical units.',
                         'workspace_penalty':'Outside-only soft cost. Zero inside/on the workspace; no action filter or enforced confinement.',
-                        'time_preference':'Legacy: earlier-event factor. Simple hit modes: total elapsed-time cost over a full episode, not a movement charge.',
                         'reward_mode':'Frozen reward version. Changing it creates a new experiment; old checkpoints retain their original objective.',
-                        'center_weight':'Accuracy shaping weight. Reward changes define a new experiment, not an exact continuation.',
-                        'outreach_base_fraction':'Fraction of existing whip credit retained before joint reach/height shaping. Changing it defines a new experiment.',
-                        'outreach_height_width_fraction':'Gaussian width for tip height minus tracked-drone height at the same release, divided by rest cable length. A smooth preference, not a success cutoff.',
-                        'outreach_reach_weight':'Weight of normalized forward reach within one mechanics-gated event.',
-                        'outreach_height_weight':'Weight of linear tip-to-drone height quality within the same event.',
-                        'outreach_joint_weight':'Weight of forward reach times linear height quality at that event.',
                         'target_kl':'With the enabled post-update safeguard, trial actor updates are checked against cohort-mean KL; not a pointwise action guarantee.',
                         'initial_weight':'PPO entropy bonus coefficient, not a guaranteed achieved entropy.',
-                        'hold_transitions':'Exploration hold measured in collected transitions, not episodes or wall-clock seconds.',
-                        'anneal_end_transitions':'Transition count where linear exploration decay reaches its final value.',
-                        'hold_fraction':'0.1 means hold initial entropy for the first 10% of completed training episodes. Evaluation and discarded collections do not count.',
-                        'anneal_end_fraction':'0.8 means reach final entropy at 80% of the original episode budget; checkpoint resume preserves that budget, even if extended.',
-                        'plateau_detection':'Stage-aware ALL-lane rolling-window heuristic, not proof of convergence. Warn or safely stop at a completed collection boundary. Never before40 collections; hard episode budget remains the cap.',
-                        'minimum_collections':'Minimum completed training collections before plateau stopping. Cannot be less than40; failures/user stops remain possible earlier.',
-                        'mechanics':'Research diagnostic definitions; changing them changes the interpretation of a whip, not merely the display.',
-                        'termination':'Geometric quality mode stops at the first geometric forward target hit; retained strict tasks stop at the first qualified hit. No unexecuted suffix is learned.',
                     }.get(key,'Stored configuration key: '+path)
                     if isinstance(value,dict):
                         box = QtWidgets.QGroupBox(label); inner=QtWidgets.QFormLayout(box)
@@ -114,20 +88,11 @@ class SettingsDialog(QtWidgets.QDialog):
                         row.setToolTip(help_text); self.controls[path]=controls
                         form.addRow(label,row); self.fields.append((owner,key,lambda controls=controls:[c.value() for c in controls]))
                         continue
-                    elif key=='target_observation':
-                        control=QtWidgets.QLabel('Target position relative to initial drone position (world axes)')
-                    elif key=='stage3_actor_training':
-                        control=QtWidgets.QLabel('Retired combined adaptation (historical checkpoint metadata; training blocked)')
-                    elif key=='target_sampler':
-                        control=QtWidgets.QLabel('Retired target-grid sampler (historical checkpoint metadata; training blocked)')
-                    elif key=='training_stage':
-                        control=QtWidgets.QLabel(f'Stage {value} (select stage in the main window)')
                     elif isinstance(value,bool):
                         control=QtWidgets.QCheckBox(); control.setChecked(value)
                         form.addRow(label,control); self.fields.append((owner,key,control.isChecked))
                     elif type(value) is int:
-                        # Signed task values (e.g. failure_return=-1) must round
-                        # trip unchanged. The configuration validator sets semantics.
+                        # Signed values must round trip unchanged. The configuration validator sets semantics.
                         control=QtWidgets.QSpinBox(); control.setRange(-10000000,10000000); control.setValue(value)
                         form.addRow(label,control); self.fields.append((owner,key,control.value))
                     elif isinstance(value,float):
@@ -138,9 +103,8 @@ class SettingsDialog(QtWidgets.QDialog):
                         form.addRow(label,control); self.fields.append((owner,key,control.currentText))
                     else:
                         control=QtWidgets.QLineEdit(str(value))
-                        if key in ('task','model','scene','speed_mode','action_interface','algorithm','termination','status'): control.setReadOnly(True)
+                        if key in ('task','model','scene','action_interface','version'): control.setReadOnly(True)
                         form.addRow(label,control); self.fields.append((owner,key,control.text))
-                    if key in ('training_stage','target_observation','stage3_actor_training','target_sampler'): form.addRow(label,control)
                     control.setToolTip(help_text); self.controls[path]=control
             add(values,form)
         if read_only:
@@ -222,13 +186,6 @@ class TrainingWindow(QtWidgets.QMainWindow):
         self.checkpoint_label=QtWidgets.QLabel('New policy'); self.checkpoint_label.setWordWrap(True)
         self.checkpoint_button=QtWidgets.QPushButton('Choose checkpoint'); self.checkpoint_button.clicked.connect(self.choose_checkpoint); self.checkpoint_button.setEnabled(False)
         grid.addWidget(self.mode,2,0); grid.addWidget(self.checkpoint_label,2,1,1,2); grid.addWidget(self.checkpoint_button,2,3)
-        self.stage_presets = QtWidgets.QComboBox()
-        self.stage_presets.addItem('Select current training stage…', None)
-        for stage,label in ((1,'Stage 1 · +X fold transport · 4 seconds'),):
-            self.stage_presets.addItem(label,stage)
-        self.stage_presets.setCurrentIndex(self.stage_presets.findData(training_stage(self.settings)))
-        self.stage_presets.currentIndexChanged.connect(self.select_stage_preset)
-        grid.addWidget(self.stage_presets,3,0,1,4)
         layout.addWidget(setup)
         cards=QtWidgets.QHBoxLayout(); self.cards={}
         for key,label in (('round','Collections'),('episodes','Episodes'),('steps','Environment steps'),('gradient_updates','Gradient updates'),('elapsed','Elapsed')):
@@ -325,20 +282,6 @@ class TrainingWindow(QtWidgets.QMainWindow):
             "Deterministic evaluation is one fixed physical case; the saved actor batch layout is not independent trials.\n"
             "Continuous score is an experimental guide, not a validated binary whipping-success definition.")
 
-    def select_stage_preset(self, index):
-        stage = self.stage_presets.itemData(index)
-        if stage is None or stage not in CURRENT_PRESETS or self.process is not None or self.mode.currentIndex() == 1:
-            return
-        try:
-            self.settings,self.snapshot,_,_ = load(CURRENT_PRESETS[stage])
-            self.task = self.snapshot['task']; self.config_path = CURRENT_PRESETS[stage]
-            self.resume_path = None
-            self.mode.setCurrentIndex(0 if stage == 1 else 2)
-            self.checkpoint_label.setText('New policy' if stage == 1 else f'Choose Stage {stage-1} actor checkpoint')
-            self.sync_budget_control(); self.update_description()
-        except Exception as exc:
-            self.error(exc)
-
     def edit_settings(self):
         if self.process is not None or self.mode.currentIndex()==1:
             SettingsDialog(self.settings,self.task,self,read_only=True).exec()
@@ -418,7 +361,7 @@ class TrainingWindow(QtWidgets.QMainWindow):
 
     def set_running(self,running):
         self.start_button.setEnabled(not running); self.stop_button.setEnabled(running); self.save_button.setEnabled(running)
-        for control in (self.mode,self.rounds,self.open_button,self.preset_button,self.checkpoint_button,self.stage_presets): control.setEnabled(not running)
+        for control in (self.mode,self.rounds,self.open_button,self.preset_button,self.checkpoint_button): control.setEnabled(not running)
         self.settings_button.setEnabled(True)
         self.settings_button.setText('Inspect active configuration…' if running else 'Configure experiment…')
         if not running: self.mode_changed(self.mode.currentIndex())
@@ -459,9 +402,7 @@ class TrainingWindow(QtWidgets.QMainWindow):
         paths=[p for root in (PPO_RUNS,) if root.exists()
                for p in root.iterdir() if p.is_dir() and (p/'configuration.json').exists()]
         for path in sorted(paths,key=lambda p:p.name,reverse=True):
-            saved_settings=read_json(path/'configuration.json')['settings']
-            label=f'{algorithm(saved_settings).upper()} Stage {training_stage(saved_settings)}'
-            self.runs.addItem(label+' · '+path.name,path)
+            self.runs.addItem('PPO Stage 1 · '+path.name,path)
         # Qt's QVariant lookup does not compare separately created Path objects
         # by value. Keep Path data for replay callers, but select in Python.
         index=next((i for i in range(self.runs.count()) if self.runs.itemData(i)==current),-1)
@@ -483,7 +424,6 @@ class TrainingWindow(QtWidgets.QMainWindow):
                 self.review_button.setEnabled(pending)
                 if phase:
                     label='Iteration completed' if phase=='round' else phase.replace('_',' ').capitalize()
-                    if 'stage' in progress: label+=f" · Stage {progress['stage']}"
                     if (self.current_run/'stop.request').exists() and phase not in ('stopped','failed','completed','plateau_stopped'):
                         label='Stopping safely'
                     self.status.setText(label)
@@ -510,9 +450,8 @@ class TrainingWindow(QtWidgets.QMainWindow):
         selected_settings=selected_snapshot['settings']
         self.update_overview(directory,history,selected_settings)
         self.whip_diagnostics.set_run(directory,history)
-        method=algorithm(selected_settings)
         scale=selected_settings.get('reward_scale',1.0)
-        self.loss_plot.title=method.upper()+' losses (last minibatch)'
+        self.loss_plot.title='PPO losses (last minibatch)'
         self.return_plot.title=f'Episode return (reward ×{scale:g})'
         self.reward_plot.title=f'Event reward components (×{scale:g})'
         self.return_plot.setToolTip('Training reward units. Original task returns are retained in the log; compare runs using the same scale.')
@@ -564,7 +503,7 @@ class TrainingWindow(QtWidgets.QMainWindow):
         episodes=next((e['episodes'] for e in reversed(history) if 'episodes' in e),0)
         budget=settings['training_episodes']
         self.budget_progress.setValue(min(1000,round(1000*episodes/budget)))
-        self.budget_progress.setFormat(f'Stage {training_stage(settings)} · {episodes:,} / {budget:,} training episodes · {100*episodes/budget:.1f}%')
+        self.budget_progress.setFormat(f'Stage 1 · {episodes:,} / {budget:,} training episodes · {100*episodes/budget:.1f}%')
         if self.process is None:
             phase=history[-1]['phase'] if history else 'no events'
             self.live_detail.setText(f'Viewing saved run: {directory.name} · {phase.replace("_"," ")} · no worker owned by this window')
@@ -642,7 +581,7 @@ def configure_resume(window, checkpoint, saved, requested_settings=None):
 def main(*, auto_start=False, settings_path=None, resume_checkpoint=None):
     app=QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
     requested_settings=load(settings_path)[0] if settings_path is not None else None
-    window=TrainingWindow(settings_path or CURRENT_PRESETS[1]); window.show()
+    window=TrainingWindow(settings_path or DEFAULT); window.show()
     if resume_checkpoint is not None:
         import torch
         checkpoint=project_path(resume_checkpoint)

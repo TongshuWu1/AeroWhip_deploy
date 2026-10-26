@@ -1,5 +1,4 @@
 """Pinned offline review presentation; synthetic states only, no physics or scoring."""
-from copy import deepcopy
 import json
 from pathlib import Path
 import unittest
@@ -51,7 +50,6 @@ class MeasurementReplayTests(unittest.TestCase):
                                                 self.directory/'events.jsonl')}
         data = self.read()
         self.assertEqual(data.event, self.recorded)
-        self.assertIsNone(data.strike)
         self.assertEqual(data.measurement_event['event'], self.candidate)
         self.assertEqual(data.evidence()['recorded_event'], self.recorded)
         self.assertTrue(all(sha256(path) == value for path, value in before.items()))
@@ -73,7 +71,6 @@ class MeasurementReplayTests(unittest.TestCase):
         data = self.read()
         self.assertEqual(data.directory, detached)
         self.assertEqual(data.event, {})
-        self.assertIsNone(data.strike)
 
     def test_hash_mismatch_rejected_for_both_sources(self):
         for field in ('replay_sha256', 'source_snapshot_sha256'):
@@ -99,13 +96,6 @@ class MeasurementReplayTests(unittest.TestCase):
             with self.subTest(updates=updates), self.assertRaises(ValueError):
                 self.report['cases'][0]['events'] = [dict(self.candidate, **updates)]
                 self.read()
-
-    def test_target_geometry_mismatch_rejected(self):
-        surface = deepcopy(self.read().surface)
-        surface['center_world_m'][0] += 1.
-        self.report['cases'][0]['target_surface'] = surface
-        with self.assertRaisesRegex(ValueError, 'target geometry differs'):
-            self.read()
 
 
 if __name__ == '__main__':

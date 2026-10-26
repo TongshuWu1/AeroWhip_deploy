@@ -279,7 +279,6 @@ class WhipEventCoreTests(unittest.TestCase):
         data = PresentationData.load_measurement(output/'report.json', 0, 1)
         self.assertEqual(data.measurement_event['event']['release_measurement'], emitted[1]['release_measurement'])
         self.assertEqual(data.event, {})
-        self.assertIsNone(data.strike)
         # A report written before the additive fields existed still loads.
         old = deepcopy(report)
         for event in old['cases'][0]['events']:

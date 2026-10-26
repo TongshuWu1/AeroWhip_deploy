@@ -9,15 +9,15 @@ import torch
 
 from fitting.artifacts import atomic_save
 from simulation.configuration import load_configuration
-from tasks.whip.sac_environment import make_environment
-from training.configuration import (task_configuration, validate, run_schema, checkpoint_schema, algorithm,
-    episode_budget, evaluation_settings, evaluation_due, training_stage, require_launchable)
+from tasks.whip.environment import make_environment
+from training.configuration import (task_configuration, validate, run_schema, checkpoint_schema,
+    episode_budget, evaluation_due, require_launchable)
 from training.artifacts import (EventLog, read_json, save_json, execution_hashes, save_checkpoint,
                                 checkpoint_replay, replay_from_checkpoint)
 from training.ppo import PPO
 
 
-def record_horizontal_fold_collection(directory,env,returns,valid,score,round_number):
+def record_collection(directory,env,returns,valid,score,round_number):
     """Retain every causal-fold outcome, with task-specific qualification labels."""
     qualification=(torch.zeros_like(returns))
     payload=dict(returns=returns.cpu().numpy(),valid=valid.cpu().numpy(),
@@ -39,7 +39,7 @@ def record_horizontal_fold_collection(directory,env,returns,valid,score,round_nu
         transition_rewards=env.transition_rewards.cpu().numpy())
     save_arrays(f'collection-{round_number:05d}.npz',payload)
     save_json(directory/f'collection-{round_number:05d}-events.json',
-        dict(schema=env.configuration.matching.reward_mode,lanes=env.event_records(),substep_failures=env.substep_records))
+        dict(schema=env.configuration.reward_mode,lanes=env.event_records(),substep_failures=env.substep_records))
     ordered=returns.argsort();selected={int(ordered[0]),int(ordered[len(ordered)//2]),int(ordered[-1])}
     for mask in (valid,~valid,qualification.bool(),valid&~qualification.bool()):
         lanes=mask.nonzero().flatten()
@@ -58,10 +58,6 @@ def record_horizontal_fold_collection(directory,env,returns,valid,score,round_nu
         accounting=f'collection-{round_number:05d}.npz',motions=retained,
         hit_definition=('continuous diagnostic only; no binary whip-success or target-hit gate'),
         policy_measurement='stochastic pre-update collection')
-
-
-def record_simple_collection(directory,env,returns,valid,score,round_number):
-    return record_horizontal_fold_collection(directory,env,returns,valid,score,round_number)
 
 
 def run(directory):
@@ -105,28 +101,22 @@ def run(directory):
         if torch.cuda.is_available(): torch.cuda.manual_seed_all(settings['seed'])
         scene = load_configuration(directory/'scene.toml')
         cfg = task_configuration(snapshot['task'],settings,snapshot['model'],scene)
-        event(phase='initializing',pid=os.getpid(),algorithm=algorithm(settings),message='Preparing '+algorithm(settings).upper()+' and physics')
+        event(phase='initializing',pid=os.getpid(),algorithm='ppo',message='Preparing PPO and physics')
         environments = {}
-        strict_scorers = {}
         def environment(width):
             if width not in environments:
                 local_settings = dict(settings,parallel_environments=width)
                 environments[width] = make_environment(local_settings,snapshot,cfg,scene,
                     progress=lambda x:event(**dict(x,parallel_environments=width)))
-                strict_scorers[width] = environments[width].scorer
             return environments[width]
 
         env = environment(min(settings['parallel_environments'],episode_budget(settings)))
         evaluation_env = make_environment(dict(settings,parallel_environments=1),snapshot,cfg,scene)
-        def set_reward(strict=False):
-            env.configuration = cfg
         agent = PPO(settings,env.actor_columns,env.frame_size,env.device,env.action_size,
                     privileged_size=env.critic_state_size,
                     **({'encoder_options': env.policy_encoder_options}))
         ppo_rollout = None
         request = read_json(directory/'request.json')
-        if request.get('initialize_actor'):
-            raise ValueError('Historical actor transfer is retired; start Stage 1 fresh')
         if request['resume']:
             saved = torch.load(project_path(request['resume']),map_location=env.device,weights_only=True)
             if saved.get('schema') != checkpoint_schema(settings):
@@ -221,12 +211,11 @@ def run(directory):
             # A smaller final graph avoids padded/fictitious episodes and preserves
             # the exact user budget without changing the environment's physics.
             env = environment(min(settings['parallel_environments'],episode_budget(settings)-episodes))
-            set_reward()
             if not collect():
                 event(phase='discarded',message='Interrupted cohort omitted from learning data',decisions=env.decision)
                 break
             returns,valid,score,cost = env.finish()
-            event(**record_simple_collection(directory,env,returns,valid,score,round_number+1))
+            event(**record_collection(directory,env,returns,valid,score,round_number+1))
             before_episodes = episodes
             episodes += env.batch
             losses = {}
@@ -252,13 +241,11 @@ def run(directory):
                   value_gradient_updates=agent.value_updates)
             event(phase='exploration',round=round_number,steps=steps,
                   completed_episodes=agent.completed_episodes,entropy_clock=agent.entropy_clock,
-                  entropy_episode_budget=agent.entropy_episode_budget,entropy_episode_offset=agent.entropy_episode_offset,
+                  entropy_episode_budget=agent.entropy_episode_budget,
                   entropy_weight=agent.entropy_weight,entropy=losses.get('entropy'),
-                  entropy_step_offset=agent.entropy_step_offset,
                   entropy_measurement='last PPO update minibatch; bounded-action MC estimate')
             if not stop() and evaluation_due(settings, round_number, before_episodes, episodes):
                 env = evaluation_env
-                set_reward(strict=True)
                 if collect(deterministic=True):
                     evaluated,valid,score,cost = env.finish()
                     # Identical initial states: deterministic evaluation is one unique
@@ -288,7 +275,7 @@ def run(directory):
                 event(phase='saved',round=round_number,checkpoint='latest.pt')
         checkpoint()
         status = 'stopped' if stop() else 'completed'
-        summary = dict(phase=status,round=round_number,episodes=episodes,steps=steps,training_stage=training_stage(settings),
+        summary = dict(phase=status,round=round_number,episodes=episodes,steps=steps,
             evaluation_steps=evaluation_steps,gradient_updates=agent.updates,best_return=best,
             reward_scale=reward_scale,scaled_best_return=reward_scale*best,
             best_replay=best_replay,latest_checkpoint='latest.pt',elapsed_s=perf_counter()-started)

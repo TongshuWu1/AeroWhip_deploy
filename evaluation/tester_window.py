@@ -8,9 +8,8 @@ from PySide6 import QtCore, QtWidgets
 
 from evaluation.policy_test import (prepare, checkpoint_context, initial_case, case_warnings,
                                     rpy_quaternion, PROTOCOL)
-from evaluation.records import discover_stages, task_stage, evaluation_contract
+from evaluation.records import RUNS, discover_runs, evaluation_contract
 from project_paths import ROOT, project_path
-from model_catalog import checkpoint_for_directory
 from simulation.state import quaternion_xyzw_to_rotation_matrix
 from training.artifacts import read_json
 from training.ui.preview import EvaluationPreview
@@ -38,16 +37,13 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
         controls=QtWidgets.QWidget(objectName='testerControls')
         panel=QtWidgets.QVBoxLayout(controls)
         panel.addWidget(QtWidgets.QLabel('<h2>Test a learned policy</h2>'))
-        self.stage=QtWidgets.QComboBox(); self.stage.addItem('All stages',None)
-        for i in (1,2,3,4): self.stage.addItem(f'Stage {i}',i)
         self.runs=QtWidgets.QComboBox()
         self.runs.setSizeAdjustPolicy(QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.runs.setMinimumContentsLength(10)
         self.runs.setSizePolicy(QtWidgets.QSizePolicy.Policy.Ignored,QtWidgets.QSizePolicy.Policy.Fixed)
         self.runs.setPlaceholderText('Custom checkpoint')
-        self.stage.currentIndexChanged.connect(self.refresh_runs)
         self.runs.currentIndexChanged.connect(self.select_run)
-        row=QtWidgets.QHBoxLayout(); row.addWidget(self.stage); row.addWidget(self.runs,1)
+        row=QtWidgets.QHBoxLayout(); row.addWidget(self.runs,1)
         refresh=QtWidgets.QPushButton('Refresh'); refresh.clicked.connect(self.refresh_runs); row.addWidget(refresh)
         panel.addLayout(row)
         self.checkpoint=QtWidgets.QLineEdit(); self.checkpoint.setReadOnly(True)
@@ -68,13 +64,11 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
                 spin.valueChanged.connect(self.update_warnings)
                 column.addWidget(spin); layout.addLayout(column); self.values[key].append(spin)
             form.addRow(QtWidgets.QLabel(title)); form.addRow(row)
-        triple('target','Target world position [m]')
         triple('initial','Drone initial position [m]')
         triple('attitude','Initial body→world [deg]')
         triple('velocity','Initial world velocity [m/s]')
         triple('omega','Initial body rate [rad/s]')
         panel.addWidget(self.inputs)
-        self.normal=QtWidgets.QLabel(); self.normal.setWordWrap(True); panel.addWidget(self.normal)
         self.warning=QtWidgets.QLabel(); self.warning.setWordWrap(True); panel.addWidget(self.warning)
         self.test=QtWidgets.QPushButton('Run simulation test'); self.test.clicked.connect(self.start)
         self.stop=QtWidgets.QPushButton('Stop this test'); self.stop.clicked.connect(self.request_stop); self.stop.setEnabled(False)
@@ -83,7 +77,7 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
         panel.addWidget(self.status)
         saved=QtWidgets.QPushButton('Open saved test…'); saved.clicked.connect(self.open_saved); panel.addWidget(saved)
         self.result_path=QtWidgets.QLabel(); self.result_path.setWordWrap(True); panel.addWidget(self.result_path)
-        for widget in (self.source,self.normal,self.warning,self.status,self.result_path):
+        for widget in (self.source,self.warning,self.status,self.result_path):
             widget.setSizePolicy(QtWidgets.QSizePolicy.Policy.Ignored,QtWidgets.QSizePolicy.Policy.Preferred)
         panel.addStretch()
         scroll=QtWidgets.QScrollArea(); scroll.setWidgetResizable(True); scroll.setWidget(controls)
@@ -92,25 +86,25 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
         outer.addWidget(scroll)
         self.preview=EvaluationPreview(); outer.addWidget(self.preview,1)
         self.preview.caption.setText('Test result')
-        self.preview.placeholder.setText('Run a case to see its recorded motion, strike speed, direction and target error.')
-        self.preview.note.setText('Stationary target · frozen checkpoint · native simulation · no learning or hardware')
-        self.selectors=[self.stage,self.runs,refresh,browse,saved]
+        self.preview.placeholder.setText('Run a case to see its recorded motion.')
+        self.preview.note.setText('Frozen checkpoint · native simulation · no learning or hardware')
+        self.selectors=[self.runs,refresh,browse,saved]
         self.refresh_runs()
         if checkpoint: self.load_source(Path(checkpoint))
 
     def refresh_runs(self):
         self.runs.blockSignals(True); self.runs.clear()
         try:
-            paths,_=discover_stages(self.stage.currentData())
+            paths,_=discover_runs()
         except (OSError, ValueError, KeyError) as exc:
             self.runs.blockSignals(False)
             self.info=None; self.test.setEnabled(False); self.status.setText(str(exc))
             return
         for path in paths:
             try:
-                checkpoint=checkpoint_for_directory(path)
+                checkpoint=path/'latest.pt'
                 if checkpoint.exists():
-                    self.runs.addItem(f'S{task_stage(read_json(path/"configuration.json"))} · {path.parent.name}/{path.name}',str(checkpoint))
+                    self.runs.addItem(f'{path.parent.name}/{path.name}',str(checkpoint))
             except (OSError, ValueError) as exc:
                 self.status.setText(str(exc))
         self.runs.blockSignals(False)
@@ -120,7 +114,7 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
         if self.runs.currentData(): self.load_source(Path(self.runs.currentData()))
 
     def browse(self):
-        filename,_=QtWidgets.QFileDialog.getOpenFileName(self,'Learned policy checkpoint',str(ROOT/'models'),'Checkpoint (*.pt)')
+        filename,_=QtWidgets.QFileDialog.getOpenFileName(self,'Learned policy checkpoint',str(RUNS),'Checkpoint (*.pt)')
         if filename: self.load_source(Path(filename))
 
     def load_source(self,path):
@@ -132,13 +126,8 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
             self.runs.blockSignals(True)
             self.runs.setCurrentIndex(self.runs.findData(str(path.resolve())))
             self.runs.blockSignals(False)
-            conditioned=info['snapshot']['settings'].get('target_observation')=='initial_relative_position_v1'
-            self.source.setText(f'Stage {task_stage(info["snapshot"])} · checkpoint iteration {info["round"]}\n'
-                                +('Target-conditioned policy' if conditioned else 'Historical fixed-target policy (no goal input)'))
-            self.set_case_inputs(initial_case(scene,cfg))
-            normal=cfg.strike_surface.description(scene.initial_state.position_world_m,cfg.request)['normal_world']
-            self.normal.setText('Strike-plane normal stays fixed in world axes: '+str(normal)+'\n'
-                                'Changing yaw does not rotate the target. Velocity-action controller is unchanged.')
+            self.source.setText(f'Stage 1 · checkpoint iteration {info["round"]}')
+            self.set_case_inputs(initial_case(scene))
             self.update_warnings()
         except Exception as exc:
             self.info=None; self.test.setEnabled(False); self.status.setText(str(exc))
@@ -147,7 +136,7 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
         rotation=quaternion_xyzw_to_rotation_matrix(np.asarray(case['initial_quaternion_body_to_world_xyzw']))
         pitch=np.arcsin(np.clip(-rotation[2,0],-1,1))
         rpy=np.degrees([np.arctan2(rotation[2,1],rotation[2,2]),pitch,np.arctan2(rotation[1,0],rotation[0,0])])
-        values={'target':case['target_position_world_m'],'initial':case['initial_position_world_m'],
+        values={'initial':case['initial_position_world_m'],
                 'attitude':rpy,'velocity':case['initial_linear_velocity_world_mps'],
                 'omega':case['initial_angular_velocity_body_radps']}
         for key,vector in values.items():
@@ -156,14 +145,14 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
 
     def case(self):
         v={key:[spin.value() for spin in spins] for key,spins in self.values.items()}
-        return dict(target_position_world_m=v['target'],initial_position_world_m=v['initial'],
+        return dict(initial_position_world_m=v['initial'],
                     initial_quaternion_body_to_world_xyzw=rpy_quaternion(v['attitude']).tolist(),
                     initial_linear_velocity_world_mps=v['velocity'],initial_angular_velocity_body_radps=v['omega'])
 
     def update_warnings(self):
         if self.info is None: return
         try:
-            warnings=case_warnings(self.info['snapshot'],self.scene,self.cfg,self.case())
+            warnings=case_warnings(self.scene,self.cfg,self.case())
             evaluation_contract(self.info['snapshot'], 'current_code')
             self.warning.setText('\n\n'.join(warnings))
             self.test.setEnabled(self.process.state()==QtCore.QProcess.ProcessState.NotRunning)
@@ -213,11 +202,7 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
         if summary.get('case'):
             self.set_case_inputs(summary['case']); self.update_warnings()
         if summary['phase']=='completed':
-            c=summary.get('components',{})
-            hit=bool(summary.get('valid') and c.get('geometric_hit_success',c.get('strike_success',0))==1)
-            error=c.get('first_crossing_center_error_m')
-            error_text='No valid crossing' if error is None else f'First crossing error {100*error:.2f} cm'
-            self.status.setText(f'Valid: {summary["valid"]} · Target hit: {hit}\n{error_text}')
+            self.status.setText(f'Valid: {summary["valid"]} · Return: {summary["evaluation_return"]:.5g}')
             if summary.get('replay'): self.preview.set_result(directory,summary)
             else: self.clear_preview('No valid numerical replay prefix; see the retained validity/failure evidence.')
         else:

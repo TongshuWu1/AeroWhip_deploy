@@ -9,7 +9,7 @@ import torch
 
 from fitting.artifacts import atomic_save
 from project_paths import ROOT, project_path, project_reference, contained_child
-from training.configuration import digest, load, checkpoint_schema, algorithm, episode_budget, validate, training_stage, require_launchable, run_schema, action_limit_key
+from training.configuration import digest, load, checkpoint_schema, episode_budget, validate, require_launchable
 
 PPO_RUNS = ROOT/'runs/ppo_stage1'
 
@@ -52,9 +52,7 @@ def identity(snapshot):
     return digest(snapshot)
 
 
-def create_run(settings, resume=None, *, task=None, root=None, initialize_actor=None):
-    if initialize_actor:
-        raise ValueError('Current Stage 1 starts fresh; historical actor transfer is retired')
+def create_run(settings, resume=None, *, task=None, root=None):
     parent = None
     if resume:
         parent = project_path(resume)
@@ -87,8 +85,7 @@ def create_run(settings, resume=None, *, task=None, root=None, initialize_actor=
     path.mkdir(parents=True,exist_ok=False)
     save_json(path/'configuration.json',snapshot)
     (path/'scene.toml').write_text(snapshot['scene_text'],encoding='utf-8')
-    save_json(path/'request.json',dict(resume=project_reference(parent) if parent else None,
-        initialize_actor=None))
+    save_json(path/'request.json',dict(resume=project_reference(parent) if parent else None))
     return path
 
 

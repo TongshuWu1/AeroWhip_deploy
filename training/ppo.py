@@ -18,10 +18,8 @@ from training.networks import Actor, HistoryEncoder, scalar_metrics
 def validate_ppo(c):
     keys = {'epochs', 'clip_ratio', 'gae_lambda', 'value_loss_weight',
             'max_grad_norm', 'target_kl', 'entropy'}
-    if set(c)-{'post_step_kl', 'transfer_entropy_clock', 'action_noise'} != keys or type(c['epochs']) is not int or c['epochs'] < 1:
+    if set(c)-{'post_step_kl', 'action_noise'} != keys or type(c['epochs']) is not int or c['epochs'] < 1:
         raise ValueError('PPO requires explicit epochs, clipping, GAE, value/gradient/KL and entropy settings')
-    if c.get('transfer_entropy_clock', 'inherit') not in ('inherit', 'stage_local'):
-        raise ValueError('Transfer entropy clock must be inherit or stage_local')
     noise = c.get('action_noise')
     if 'action_noise' in c and (not isinstance(noise, dict)
             or set(noise) != {'mode','correlation_time_s'} or noise['mode'] != 'ar1_v1'
@@ -181,8 +179,6 @@ class PPOActor(Actor):
 
 
 def make_ppo_actor(settings, columns, action_size=3, **options):
-    if any(k in settings for k in ('stage4_recovery_policy','stage3_actor_training','target_observation')):
-        raise ValueError('Historical actor variants are retired')
     return PPOActor(columns,settings['hidden_units'],settings['initial_log_std'],action_size,**options)
 
 
@@ -228,8 +224,7 @@ class PPO:
         self.actor_optimizer = torch.optim.Adam((p for p in self.actor.parameters() if p.requires_grad), lr=settings['learning_rate'])
         self.value_optimizer = torch.optim.Adam(self.value.parameters(), lr=settings['learning_rate'])
         self.updates = self.value_updates = self.environment_steps = self.collections = 0
-        self.entropy_step_offset = 0
-        self.completed_episodes = self.entropy_episode_offset = 0
+        self.completed_episodes = 0
         self.entropy_episode_budget = settings['training_episodes']
         self._kl_inputs = None  # Ephemeral, scoped to ONE optimize call, never serialized.
         self._kl_input_cache_limit = 512*1024*1024  # Bounded additional memory, not a learning setting.
@@ -253,7 +248,7 @@ class PPO:
     @property
     def entropy_weight(self):
         e=self.settings['ppo']['entropy']
-        progress=(self.completed_episodes+self.entropy_episode_offset)/self.entropy_episode_budget
+        progress=self.completed_episodes/self.entropy_episode_budget
         return e['final_weight']+(e['initial_weight']-e['final_weight'])*math.exp(-e['decay_exponent']*progress)
 
     def conditional_distribution(self, history, index, previous_raw=None, previous_index=None):
@@ -325,7 +320,7 @@ class PPO:
 
     @torch.no_grad()
     def prepare_kl_inputs(self,r,episode,step):
-        """Bounded fixed prefixes and ONLY Stage4's immutable whip distributions.
+        """Bounded fixed actor input prefixes for the post-step KL passes.
 
         Overflow chunks use the original path. No change of batch size/order,
         convolution shape/strides, float64 KL reduction, threshold, RNG or trials.
@@ -492,13 +487,12 @@ class PPO:
             actor_optimizer=self.actor_optimizer.state_dict(), value_optimizer=self.value_optimizer.state_dict(),
             updates=self.updates, value_updates=self.value_updates,
             environment_steps=self.environment_steps, collections=self.collections,
-            entropy_step_offset=self.entropy_step_offset, entropy_clock=self.entropy_clock,
-            completed_episodes=self.completed_episodes, entropy_episode_offset=self.entropy_episode_offset,
+            entropy_clock=self.entropy_clock, completed_episodes=self.completed_episodes,
             entropy_episode_budget=self.entropy_episode_budget)
 
     def load_state_dict(self, saved):
         if saved.get('interface') != self.interface:
-            raise ValueError('PPO checkpoint interface differs; SAC weights/replay are not a PPO continuation')
+            raise ValueError('PPO checkpoint interface differs from the current actor/value interface')
         def finite(value):
             if isinstance(value, torch.Tensor):
                 return bool(torch.isfinite(value).all())
@@ -512,35 +506,18 @@ class PPO:
                 raise ValueError('Missing PPO saved '+name)
             if not finite(saved.get(name)):
                 raise ValueError('Nonfinite PPO saved '+name)
-        if 'goal_columns' in self.interface:
-            expected = torch.tensor(self.interface['goal_columns'])
-            for network in ('actor','value'):
-                columns = saved.get(network,{}).get('encoder.goal_columns')
-                if not isinstance(columns,torch.Tensor) or not torch.equal(columns.cpu(),expected):
-                    raise ValueError('Saved '+network+' goal columns disagree with its interface')
-        for k in ('updates', 'environment_steps', 'collections'):
+        for k in ('updates', 'value_updates', 'environment_steps', 'collections', 'completed_episodes'):
             if type(saved.get(k)) is not int or saved[k] < 0:
                 raise ValueError('Invalid PPO saved '+k)
-        value_updates = saved.get('value_updates', saved['updates'])  # Legacy paired optimizer clock.
-        offset = saved.get('entropy_step_offset', 0)
-        if type(offset) is not int or offset < 0:
-            raise ValueError('Invalid PPO saved entropy step offset')
-        if type(value_updates) is not int or value_updates < saved['updates']:
+        if saved['value_updates'] < saved['updates']:
             raise ValueError('Invalid PPO saved value_updates')
-        if saved.get('entropy_clock', 'transitions_v1') != self.entropy_clock:
+        if saved.get('entropy_clock') != self.entropy_clock:
             raise ValueError('PPO checkpoint entropy clock units differ from settings')
-        completed = saved.get('completed_episodes', 0)
-        episode_offset = saved.get('entropy_episode_offset', 0)
-        budget = saved.get('entropy_episode_budget', self.entropy_episode_budget)
-        if any(type(v) is not int or v < 0 for v in (completed, episode_offset)) or type(budget) is not int or budget <= 0:
-            raise ValueError('Invalid PPO saved episode entropy clock')
-        if self.entropy_clock == 'completed_episodes_v1' and not all(k in saved for k in
-                ('completed_episodes', 'entropy_episode_offset', 'entropy_episode_budget')):
-            raise ValueError('Episode entropy checkpoint requires its original budget and clock')
+        budget = saved.get('entropy_episode_budget')
+        if type(budget) is not int or budget <= 0:
+            raise ValueError('Invalid PPO saved episode entropy budget')
         for k in ('actor', 'value', 'actor_optimizer', 'value_optimizer'):
             getattr(self, k).load_state_dict(saved[k])
-        self.updates, self.environment_steps, self.collections = (saved[k] for k in
-                                                               ('updates', 'environment_steps', 'collections'))
-        self.value_updates = value_updates
-        self.entropy_step_offset = offset
-        self.completed_episodes, self.entropy_episode_offset, self.entropy_episode_budget = completed, episode_offset, budget
+        for k in ('updates', 'value_updates', 'environment_steps', 'collections', 'completed_episodes'):
+            setattr(self, k, saved[k])
+        self.entropy_episode_budget = budget

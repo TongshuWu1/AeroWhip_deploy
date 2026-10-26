@@ -12,7 +12,7 @@ class WorkspacePenalty:
     mode: str = 'squared_excess_v1'
 
     def __post_init__(self):
-        if self.mode not in ('squared_excess_v1', 'bounded_density_v1'):
+        if self.mode != 'squared_excess_v1':
             raise ValueError('Unknown workspace penalty mode')
         if (isinstance(self.weight, bool) or not math.isfinite(self.weight) or self.weight < 0
                 or isinstance(self.distance_scale_m, bool) or not math.isfinite(self.distance_scale_m)
@@ -33,8 +33,6 @@ class WorkspacePenalty:
         """
         radial, vertical = self.distances(positions, initial_positions, workspace)
         density = self.weight*((radial/self.distance_scale_m).square()+(vertical/self.distance_scale_m).square())
-        if self.mode == 'bounded_density_v1':
-            density = density.clamp_max(self.weight)
         return torch.where(observed[:, 1:], density[:, 1:]/(positions.shape[1]-1), 0.)
 
 @dataclass(frozen=True)
@@ -48,12 +46,6 @@ class CylinderWorkspace:
                 self.radius_m, self.height_lower_world_m, self.height_upper_world_m))
                 or self.radius_m <= 0 or self.height_lower_world_m >= self.height_upper_world_m):
             raise ValueError('Workspace requires a positive radius and increasing finite world heights')
-
-    def validate_placement(self, initial_position, target_position):
-        if not self.height_lower_world_m <= initial_position[2] <= self.height_upper_world_m:
-            raise ValueError('Initial tracking position is outside the cylindrical workspace')
-        if math.hypot(target_position[0]-initial_position[0], target_position[1]-initial_position[1]) <= self.radius_m:
-            raise ValueError('The target must be horizontally outside the drone workspace')
 
     def contains(self, positions, initial_positions):
         """(batch,samples,3) world tracking positions; fixed initial XY center.

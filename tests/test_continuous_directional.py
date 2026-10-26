@@ -6,7 +6,7 @@ import unittest
 import numpy as np
 import torch
 from tasks.whip.continuous_whip import ContinuousWhipAttempt, output_metrics, SHORT_MODE
-from tasks.whip.sac_environment import make_environment
+from tasks.whip.environment import make_environment
 from training.configuration import load, task_configuration
 from training.ppo import PPO
 
@@ -20,8 +20,8 @@ class DirectionalTests(unittest.TestCase):
         v[-1]=np.array(direction if velocity is None else velocity)*2
         return p,v
 
-    def rate(self,p,v,directed=True):
-        m=output_metrics(p,v,1.,directed_x=directed)
+    def rate(self,p,v):
+        m=output_metrics(p,v,1.)
         return 10*m['horizontal_reach_fraction']**2*m['alignment']**2*m['effective_outward_mps']
 
     def test_forward_exact(self):
@@ -32,8 +32,6 @@ class DirectionalTests(unittest.TestCase):
         for direction in ((0.,1.,0.),(-1.,0.,0.),(0.,0.,-1.)):
             p,v=self.sample(direction)
             self.assertEqual(self.rate(p,v),0.)
-        p,v=self.sample((0.,1.,0.))
-        with self.assertRaises(ValueError):self.rate(p,v,False)
 
     def test_oblique_receives_partial_credit(self):
         p,v=self.sample((math.sqrt(.5),math.sqrt(.5),0.))
@@ -51,7 +49,7 @@ class DirectionalTests(unittest.TestCase):
 
     def test_no_fold_zero_credit_repetition_and_workspace_accounting(self):
         p,v=self.sample()
-        a=ContinuousWhipAttempt(np.full(10,.1),workspace_origin=np.zeros(3),plain_net=True,directed_x=True)
+        a=ContinuousWhipAttempt(np.full(10,.1),workspace_origin=np.zeros(3))
         a.initialize(p,v)
         self.assertEqual(a.observe(.01,p,v,drone_position=[0,0,2]),0.)
         # Isolate scoring from fold geometry with explicitly synthetic support.
@@ -106,7 +104,6 @@ class DirectionalTests(unittest.TestCase):
         e=self.env()
         a=PPO(e.settings,e.actor_columns,e.frame_size,'cpu',privileged_size=e.critic_state_size,encoder_options=e.policy_encoder_options)
         self.assertEqual(a.entropy_episode_budget,12800)
-        self.assertEqual(a.entropy_episode_offset,0)
         self.assertFalse(a.actor_optimizer.state_dict()['state'])
         self.assertFalse(a.value_optimizer.state_dict()['state'])
 

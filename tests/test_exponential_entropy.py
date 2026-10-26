@@ -1,4 +1,4 @@
-"""Approved absolute-episode exponential schedule and legacy compatibility."""
+"""Approved absolute-episode exponential entropy schedule."""
 from copy import deepcopy
 import math
 from types import SimpleNamespace
@@ -12,10 +12,9 @@ class ExponentialEntropyTests(unittest.TestCase):
     def settings(self):
         return load()[0]
 
-    def weight(self, episodes, *, offset=0, budget=12800, lanes=64):
+    def weight(self, episodes, *, budget=12800, lanes=64):
         settings=self.settings();settings['parallel_environments']=lanes
-        a=SimpleNamespace(settings=settings,completed_episodes=episodes,
-            entropy_episode_offset=offset,entropy_episode_budget=budget)
+        a=SimpleNamespace(settings=settings,completed_episodes=episodes,entropy_episode_budget=budget)
         return PPO.entropy_weight.fget(a)
 
     def test_approved_curve_and_fixed_episode_timescale(self):
@@ -32,10 +31,6 @@ class ExponentialEntropyTests(unittest.TestCase):
         self.assertGreater(values[-1],.001)
         self.assertEqual(self.weight(10**9),.001)
 
-    def test_inherited_offset_is_not_restarted(self):
-        self.assertEqual(self.weight(0,offset=10368),self.weight(10368))
-        self.assertEqual(self.weight(128,offset=10368),self.weight(10496))
-
     def test_clock_units_compatible_with_existing_episode_state(self):
         a=SimpleNamespace(settings=self.settings())
         self.assertEqual(PPO.entropy_clock.fget(a),'completed_episodes_v1')
@@ -47,8 +42,6 @@ class ExponentialEntropyTests(unittest.TestCase):
         for edit in ({'mode':'unknown'},{'hold_fraction':.1}):
             s=self.settings()['ppo'];s['entropy'].update(edit)
             with self.assertRaises(ValueError):validate_ppo(s)
-
-
 
 
 if __name__=='__main__':unittest.main()

@@ -5,23 +5,14 @@ from pathlib import Path
 import numpy as np
 from PySide6 import QtCore, QtGui, QtWidgets
 from project_paths import ROOT, project_path
-from model_catalog import packaged_stages, packaged_stage
-from viewer.replay_data import DEFAULT_RUN, PresentationData, read_events
-
-
-def run_stage(directory):
-    snapshot = json.loads(project_path(Path(directory) / 'configuration.json').read_text())
-    return snapshot['settings'].get('training_stage', 1)
+from viewer.replay_data import PresentationData, read_events
 
 
 def discover_runs(root=ROOT):
-    roots = [project_path(root) / 'runs' / name for name in
-             ('ppo_stage4', 'ppo_stage3', 'ppo_stage2', 'ppo_stage1', 'sac_stage1')]
-    runs = [directory for folder in roots if folder.exists()
-                   for directory in folder.iterdir()
-                   if directory.is_dir() and (directory / 'configuration.json').exists()]
-    return sorted(runs + [entry['directory'] for entry in packaged_stages(root)],
-                  key=lambda p: p.name, reverse=True)
+    folder = project_path(root) / 'runs' / 'ppo_stage1'
+    runs = [directory for directory in folder.iterdir()
+            if directory.is_dir() and (directory / 'configuration.json').exists()] if folder.exists() else []
+    return sorted(runs, key=lambda p: p.name, reverse=True)
 
 
 def resolve_selection(path):
@@ -29,9 +20,6 @@ def resolve_selection(path):
     path = project_path(path)
     if not path.exists():
         raise ValueError('Selected file/folder does not exist')
-    packaged = packaged_stage(path)
-    if packaged is not None:
-        return packaged['directory'], path.name if path.suffix.lower()=='.npz' else None
     if path.is_dir():
         directory, filename = path, None
     elif path.suffix.lower() in ('.pt', '.json', '.npz', '.jsonl'):
@@ -77,13 +65,8 @@ class ReplayBrowser(QtWidgets.QMainWindow):
         layout = QtWidgets.QVBoxLayout(central)
         layout.setContentsMargins(8, 8, 8, 8)
         row = QtWidgets.QHBoxLayout()
-        self.stage = QtWidgets.QComboBox()
-        self.stage.addItem('All stages', None)
-        for value in (1, 2, 3, 4):
-            self.stage.addItem(f'Stage {value}', value)
         self.runs = QtWidgets.QComboBox()
         self.runs.setMinimumWidth(380)
-        row.addWidget(self.stage)
         row.addWidget(self.runs, 1)
         for name, callback in (('Refresh', self.refresh_runs), ('Run folder…', self.choose_folder),
                                ('Training / replay file…', self.choose_file)):
@@ -101,10 +84,8 @@ class ReplayBrowser(QtWidgets.QMainWindow):
         layout.addWidget(self.message)
         self.body = QtWidgets.QVBoxLayout()
         layout.addLayout(self.body, 1)
-        self.stage.currentIndexChanged.connect(lambda _: self.refresh_runs())
         self.runs.currentIndexChanged.connect(self.select_run)
         self.replays.currentIndexChanged.connect(self.select_replay)
-        selected = selected or (DEFAULT_RUN if DEFAULT_RUN.exists() else None)
         if selected is not None:
             directory, selected_filename = resolve_selection(selected)
             filename = filename or selected_filename
@@ -128,13 +109,7 @@ class ReplayBrowser(QtWidgets.QMainWindow):
         with QtCore.QSignalBlocker(self.runs):
             self.runs.clear()
             for directory in directories:
-                try:
-                    stage = run_stage(directory)
-                except (OSError, KeyError, ValueError):
-                    continue
-                if self.stage.currentData() is not None and self.stage.currentData() != stage:
-                    continue
-                self.runs.addItem(f'Stage {stage} · {directory.parent.name} / {directory.name}', directory)
+                self.runs.addItem(f'{directory.parent.name} / {directory.name}', directory)
                 self.runs.setItemData(self.runs.count() - 1, str(directory), QtCore.Qt.ItemDataRole.ToolTipRole)
             for i in range(self.runs.count()):
                 if self.runs.itemData(i) == preferred:
@@ -203,20 +178,18 @@ class ReplayBrowser(QtWidgets.QMainWindow):
     def open_selection(self, path):
         directory, filename = resolve_selection(path)
         self.extra_runs.add(directory)
-        with QtCore.QSignalBlocker(self.stage):
-            self.stage.setCurrentIndex(0)
         self.refresh_runs(directory)
         if filename:
             self.select_filename(filename)
 
     def choose_folder(self):
-        path = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select training run / packaged evidence', str(self.root))
+        path = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select training run', str(self.root / 'runs'))
         if path:
             self.try_open(path)
 
     def choose_file(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(self, 'Select training checkpoint or replay',
-            str(self.root / 'models'), 'Training / replay files (*.pt *.npz *.json *.jsonl)')
+            str(self.root / 'runs'), 'Training / replay files (*.pt *.npz *.json *.jsonl)')
         if path:
             self.try_open(path)
 
@@ -255,7 +228,9 @@ def main():
         parser.error('--case and --event require --measurement-report')
     if args.audit:
         if measurement is None:
-            directory, filename = resolve_selection(args.selected or DEFAULT_RUN)
+            if args.selected is None:
+                parser.error('--audit requires --run/--file or --measurement-report')
+            directory, filename = resolve_selection(args.selected)
             measurement_data = PresentationData.load(directory, args.replay or filename)
         else:
             measurement_data = measurement
@@ -263,7 +238,9 @@ def main():
         return 0
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     if args.flight_view:
-        directory, filename = resolve_selection(args.selected or DEFAULT_RUN)
+        if args.selected is None:
+            parser.error('--flight-view requires --run/--file')
+        directory, filename = resolve_selection(args.selected)
         data = PresentationData.load(directory, args.replay or filename)
         from viewer.pyvista_viewer import PyVistaViewer
         from viewer.sources import ReplaySource
@@ -294,9 +271,7 @@ def main():
                 print(window.message.text(), flush=True)
                 app.exit(1)
                 return
-            if measurement is None:
-                motion.jump_to_strike()
-            else:
+            if measurement is not None:
                 motion.jump_to_measurement()
             pixels = np.ascontiguousarray(motion.plotter.screenshot(return_img=True))
             frame = window.grab()

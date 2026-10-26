@@ -11,23 +11,14 @@ from project_paths import ROOT, project_path
 from simulation.configuration import load_configuration
 from simulation.model_configuration import load_model_configuration
 from tasks.whip.configuration import EpisodeTiming, WhipReturnConfiguration
-from tasks.whip.stage1_configuration import (Stage1Configuration, BendReleaseConfiguration,
-    ReleaseMatchingConfiguration, StrikeSurfaceConfiguration)
+from tasks.whip.stage1_configuration import Stage1Configuration
 from tasks.whip.workspace import CylinderWorkspace, WorkspacePenalty
 from tasks.whip.continuous_whip import SHORT_MODE, SHORT_CONTRACT
 
 DEFAULT = ROOT / 'configs/learning/whip_stage1_ppo_continuous_directional_four_second_v6.json'
-CURRENT_PRESETS = {1: DEFAULT}
-
-def algorithm(settings):
-    return settings.get('algorithm', 'ppo')
-
-def training_stage(settings):
-    return settings.get('training_stage', 1)
 
 def require_launchable(settings):
-    if (algorithm(settings) != 'ppo' or training_stage(settings) != 1
-            or settings.get('continuous_whip_contract') != SHORT_MODE):
+    if settings.get('continuous_whip_contract') != SHORT_MODE:
         raise ValueError('Only the current four-second +X Stage 1 PPO task is supported')
 
 def run_schema(settings):
@@ -54,11 +45,6 @@ def iteration_budget(settings):
     return (total+width-1)//width
 
 
-def evaluation_settings(settings):
-    return dict(settings, parallel_environments=settings.get(
-        'evaluation_environments', settings['parallel_environments']))
-
-
 def evaluation_due(settings, iteration, before, after):
     if iteration == 1 or after == episode_budget(settings):
         return True
@@ -71,7 +57,7 @@ def collection_limit(settings):
 
 def validate(settings):
     require_launchable(settings)
-    required = {'algorithm','training_stage','continuous_whip_contract','task','model','scene',
+    required = {'continuous_whip_contract','task','model','scene',
         'device','seed','parallel_environments','training_episodes','evaluation_interval_episodes',
         'policy_rate_hz','action_interface','acceleration_limit_mps2','workspace_penalty',
         'learning_rate','batch_size','hidden_units','initial_log_std','discount','ppo'}
@@ -95,8 +81,7 @@ def validate(settings):
             or settings['policy_rate_hz'] != 50 or settings['acceleration_limit_mps2'] != [8,8,4]
             or settings['workspace_penalty'] != dict(mode='squared_excess_v1',weight=.1,distance_scale_m=.1)
             or settings['ppo'].get('entropy') != dict(mode='exponential_budget_v1',initial_weight=.02,final_weight=.001,decay_exponent=8.)
-            or settings['ppo'].get('action_noise') != dict(mode='ar1_v1',correlation_time_s=.1)
-            or settings['ppo'].get('transfer_entropy_clock') != 'stage_local'):
+            or settings['ppo'].get('action_noise') != dict(mode='ar1_v1',correlation_time_s=.1)):
         raise ValueError('Current Stage 1 requires its approved control, cost and exploration contract')
     WorkspacePenalty(**settings['workspace_penalty'])
     from training.ppo import validate_ppo
@@ -104,12 +89,11 @@ def validate(settings):
 
 def task_configuration(raw, settings, model, scene):
     validate(settings)
-    if set(raw) != {'episode','workspace','return','mechanics','request','matching','strike_surface','continuous_whip'}:
+    if set(raw) != {'episode','workspace','return','continuous_whip'}:
         raise ValueError('Unexpected Stage 1 task sections')
-    if (raw['episode'] != dict(duration_s=4,settling_s=0,termination='continuous_whip_horizon_v1')
+    if (raw['episode'] != dict(duration_s=4)
             or raw['continuous_whip'] != SHORT_CONTRACT
             or raw['workspace'] != dict(radius_m=.55,height_lower_world_m=1.5,height_upper_world_m=2.6)
-            or raw['matching']['reward_mode'] != SHORT_MODE
             or model['simulation']['segments_per_marker_interval'] != [1]*10):
         raise ValueError('Current Stage 1 requires its four-second ten-link contract')
     mass = model['drone']['mass_kg']
@@ -122,14 +106,8 @@ def task_configuration(raw, settings, model, scene):
     returns=WhipReturnConfiguration(**raw['return'])
     if returns.maximum_tilt_deg!=60 or returns.minimum_cable_height_m!=.05:
         raise ValueError('Physical diagnostic limits must remain unchanged')
-    # These display metadata fields are retained in saved snapshots. The active
-    # reward uses continuous_whip, not the retired peak/window/target scorers.
-    mechanics=BendReleaseConfiguration(**raw['mechanics'],event_start_s=delay,
-        event_end_s=4-raw['mechanics']['tip_lag_s'])
-    return Stage1Configuration(settings['scene'],settings['model'],EpisodeTiming(4,0),
-        CylinderWorkspace(**raw['workspace']),returns,tuple(raw['request']),mechanics,
-        ReleaseMatchingConfiguration(**raw['matching']),StrikeSurfaceConfiguration(**raw['strike_surface']),
-        'continuous_whip_horizon_v1',continuous_whip=raw['continuous_whip'])
+    return Stage1Configuration(settings['scene'],settings['model'],EpisodeTiming(4),
+        CylinderWorkspace(**raw['workspace']),returns,raw['continuous_whip'])
 
 def load(path=DEFAULT):
     settings = deepcopy(path) if isinstance(path, dict) else json.loads(project_path(path).read_text(encoding='utf-8-sig'))

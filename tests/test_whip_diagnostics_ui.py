@@ -21,7 +21,7 @@ class DiagnosticsTests(unittest.TestCase):
         self.widgets=[]
         self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name)
         self.rest=np.full(10,.1)
-        (self.root/'configuration.json').write_text(json.dumps({'model':{'cable':{'marker_interval_lengths_m':self.rest.tolist()}},'task':{'matching':{'reward_mode':'fixture'}}}))
+        (self.root/'configuration.json').write_text(json.dumps({'model':{'cable':{'marker_interval_lengths_m':self.rest.tolist()}},'task':{'continuous_whip':{'version':'fixture'}}}))
         self.time=np.arange(5)*.01
         self.positions=np.zeros((5,11,3));self.positions[:,:,0]=np.linspace(0,1,11)
         self.velocities=np.zeros_like(self.positions)
@@ -46,7 +46,7 @@ class DiagnosticsTests(unittest.TestCase):
         d=self.save()
         np.testing.assert_allclose(d.reach,1)
         np.testing.assert_allclose(d.joint_turn_deg,0)
-        self.assertTrue(np.isnan(d.relative_cosine).all())
+        np.testing.assert_array_equal(d.relative_cosine,0)
         self.assertEqual(d.record,{})
         self.assertEqual(d.phase(4),'No recorded fold phase')
 
@@ -58,24 +58,13 @@ class DiagnosticsTests(unittest.TestCase):
         np.testing.assert_allclose(d.relative_outward,0)
         np.testing.assert_allclose(d.tip_height,0)
 
-    def test_radial_direction_uses_y_too(self):
-        self.positions[:,:,1]=self.positions[:,:,0];self.positions[:,:,0]=0
-        self.velocities[:,-1,1]=-2
-        d=self.save()
-        np.testing.assert_allclose(d.relative_outward,-2)
-        np.testing.assert_allclose(d.relative_cosine,-1)
-
-    def test_directed_v5_uses_world_x_instead_of_radial_heading(self):
-        path=self.root/'configuration.json';snapshot=json.loads(path.read_text())
-        snapshot['task']['matching']['reward_mode']='continuous_directional_whip_full_horizon_v5'
-        path.write_text(json.dumps(snapshot))
+    def test_output_uses_world_x_not_radial_heading(self):
         self.positions[:,:,1]=self.positions[:,:,0];self.positions[:,:,0]=0
         self.velocities[:,-1,1]=2
         d=self.save()
         np.testing.assert_allclose(d.reach,0)
         np.testing.assert_allclose(d.world_outward,0)
         np.testing.assert_allclose(d.relative_outward,0)
-        self.assertTrue(any('fixed world +X' in n for n in d.notices))
         page=WhippingDiagnostics();self.widgets.append(page);page.resize(1100,800);page.show()
         page.set_run(self.root,[{'phase':'evaluation','round':1,'replay':'motion.npz'}])
         self.app.processEvents()
@@ -110,12 +99,12 @@ class DiagnosticsTests(unittest.TestCase):
 
     def continuous_fixture(self):
         snapshot=json.loads((self.root/'configuration.json').read_text())
-        snapshot['task']['matching']['reward_mode']='continuous_horizontal_whip_v1'
+        snapshot['task']['continuous_whip']={'version':'continuous_directional_whip_four_second_v6'}
         (self.root/'configuration.json').write_text(json.dumps(snapshot))
         fields=np.array(['fold_support','straightening_mps','reward_rate','accrued_credit'])
         values=np.array([[0.,0.,0.,0.], [.2,.5,1.,.01], [.4,.8,2.,.03],
                          [.5,1.25,3.,.06], [np.nan,np.nan,np.nan,np.nan]])
-        record=dict(contract='continuous_horizontal_whip_v1',terminal='workspace_failure',
+        record=dict(contract='continuous_directional_whip_four_second_v6',terminal='workspace_failure',
                     terminal_time_s=.04,qualified=None,selected=None,
                     events=[dict(kind='workspace_failure',time_s=.04)])
         return dict(continuous_whip_fields=fields,continuous_whip_diagnostics=values,
@@ -124,7 +113,7 @@ class DiagnosticsTests(unittest.TestCase):
     def test_saved_continuous_fields_follow_prefix_trimming(self):
         fixture=self.continuous_fixture()
         d=self.save(**fixture,terminal_time_s=.02)
-        self.assertEqual(d.mode,'continuous_horizontal_whip_v1')
+        self.assertEqual(d.mode,'continuous_directional_whip_four_second_v6')
         self.assertEqual(len(d.time),3)
         self.assertEqual(set(d.continuous),set(fixture['continuous_whip_fields']))
         for i,field in enumerate(fixture['continuous_whip_fields']):
@@ -138,7 +127,7 @@ class DiagnosticsTests(unittest.TestCase):
         self.app.processEvents()
         page.set_run(self.root,[{'phase':'evaluation','round':1,'replay':'motion.npz'}])
         self.app.processEvents();page.seek(3)
-        self.assertIn('continuous_horizontal_whip_v1',page.caption.text())
+        self.assertIn('continuous_directional_whip_four_second_v6',page.caption.text())
         self.assertIn('Saved continuous reward trace',page.telemetry.text())
         self.assertIn('Fold support: +0.50',page.telemetry.text())
         self.assertIn('Endpoint extension (m/s): +1.25',page.telemetry.text())

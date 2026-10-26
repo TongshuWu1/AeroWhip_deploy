@@ -10,7 +10,7 @@ import numpy as np
 from .horizontal_fold import FoldGeometry
 
 SHORT_MODE = 'continuous_directional_whip_four_second_v6'
-FEATURE_SIZE = 16
+FEATURE_SIZE = 18  # Critic task features, including workspace cost and net return.
 SHORT_CONTRACT = {'version': 'continuous_directional_whip_four_second_v6',
  'links': 10,
  'horizon_s': 4.0,
@@ -50,19 +50,16 @@ SHORT_CONTRACT = {'version': 'continuous_directional_whip_four_second_v6',
  'numerical_termination': True,
  'output_direction_world': [1.0, 0.0, 0.0],
  'reach_measure': 'positive_world_x_attachment_relative_extension_v1'}
-TRACE_FIELDS = ('fold_support', 'horizontal_reach_fraction', 'alignment', 'world_outward_mps', 'relative_outward_mps', 'straightening_mps', 'effective_outward_mps', 'reward_rate', 'accrued_credit', 'end_to_end_fraction', 'transport_signal', 'max_turn_rad')
-SOFT_TRACE_FIELDS = TRACE_FIELDS + ('workspace_cost', 'raw_net_return', 'net_return')
+_OUTPUT_FIELDS = ('fold_support', 'horizontal_reach_fraction', 'alignment', 'world_outward_mps', 'relative_outward_mps', 'straightening_mps', 'effective_outward_mps', 'reward_rate', 'accrued_credit', 'end_to_end_fraction', 'transport_signal', 'max_turn_rad')
+TRACE_FIELDS = _OUTPUT_FIELDS + ('workspace_cost', 'raw_net_return', 'net_return')
 
 
-def output_metrics(positions, velocities, length, *, directed_x=True):
+def output_metrics(positions, velocities, length):
     """Same-sample world +X output; preparation remains unconstrained."""
-    if not directed_x: raise ValueError("Only world +X output is supported")
     r=positions[-1]-positions[0];relative=velocities[-1]-velocities[0]
-    rho=float(np.linalg.norm(r[:2]));distance=float(np.linalg.norm(r))
-    radial=np.r_[r[:2]/rho,0.] if rho>1e-6*length else np.zeros(3)
-    if directed_x:
-        radial=np.array([1.,0.,0.])
-        rho=max(0.,float(r[0]))
+    distance=float(np.linalg.norm(r))
+    radial=np.array([1.,0.,0.])
+    rho=max(0.,float(r[0]))
     world=velocities[-1]
     uw=float(world@radial);ur=float(relative@radial)
     ws=float(np.linalg.norm(world));rs=float(np.linalg.norm(relative))
@@ -77,19 +74,17 @@ def output_metrics(positions, velocities, length, *, directed_x=True):
 
 class ContinuousWhipAttempt:
     """One full-horizon episode, without event-count or preparation bonuses."""
-    def __init__(self, rest, *, workspace_origin=None, plain_net=True, directed_x=True, horizon_s=4.):
-        if horizon_s != 4. or not (directed_x and plain_net and workspace_origin is not None):
-            raise ValueError('Four-second horizon requires the directed plain-workspace task')
+    def __init__(self, rest, *, workspace_origin, horizon_s=4.):
+        if horizon_s != 4.:
+            raise ValueError('Current Stage 1 requires the four-second horizon')
         self.horizon_s=float(horizon_s)
         self.geometry=FoldGeometry(rest);self.L=self.geometry.L
-        self.workspace_origin=None if workspace_origin is None else np.asarray(workspace_origin,float)
-        if self.workspace_origin is not None and (self.workspace_origin.shape!=(3,) or not np.isfinite(self.workspace_origin).all()):
+        self.workspace_origin=np.asarray(workspace_origin,float)
+        if self.workspace_origin.shape!=(3,) or not np.isfinite(self.workspace_origin).all():
             raise ValueError('Workspace origin must be finite world XYZ')
-        if plain_net and workspace_origin is None:raise ValueError('Plain net task requires a soft workspace')
-        self.directed_x=directed_x
-        self.plain_net=plain_net;self.failure_cost=0.
+        self.failure_cost=0.
         self.cost=0.
-        self.fields=TRACE_FIELDS if workspace_origin is None else SOFT_TRACE_FIELDS
+        self.fields=TRACE_FIELDS
         self.histories={};self.support=deque(maxlen=11)
         self.time=self.total=self.accrued=self.peak_rate=self.support_time=self.output_time=0.
         self.terminal=None;self.initialized=False;self.selected=None
@@ -124,7 +119,7 @@ class ContinuousWhipAttempt:
         if self.initialized:raise RuntimeError('Initialize exactly once')
         p,v=self._arrays(positions,velocities);_,rows=self.geometry.observe(p)
         support,transport,turn=self._fold_support(0.,rows)
-        self.last.update(output_metrics(p,v,self.L,directed_x=self.directed_x),fold_support=support,transport_signal=transport,max_turn_rad=turn)
+        self.last.update(output_metrics(p,v,self.L),fold_support=support,transport_signal=transport,max_turn_rad=turn)
         self.trace.append([self.last[k] for k in self.fields]);self.initialized=True
 
     def observe(self,time,positions,velocities, *, drone_position=None):
@@ -132,27 +127,24 @@ class ContinuousWhipAttempt:
         if not math.isclose(time-self.time,.01,abs_tol=1e-8) or time>self.horizon_s+1e-9:
             raise ValueError('Observe causal 100Hz endpoints through the configured horizon')
         p,v=self._arrays(positions,velocities)
-        charge=0.
-        if self.workspace_origin is not None:
-            tracking=np.asarray(drone_position,float)
-            if tracking.shape!=(3,) or not np.isfinite(tracking).all():
-                raise ValueError('Soft workspace cost requires finite drone tracking-point XYZ')
-            radial=max(0.,float(np.linalg.norm(tracking[:2]-self.workspace_origin[:2]))-.55)
-            vertical=max(0.,1.5-tracking[2])+max(0.,tracking[2]-2.6)
-            charge=10.*(radial*radial+vertical*vertical)/(100.*self.horizon_s)
+        tracking=np.asarray(drone_position,float)
+        if tracking.shape!=(3,) or not np.isfinite(tracking).all():
+            raise ValueError('Soft workspace cost requires finite drone tracking-point XYZ')
+        radial=max(0.,float(np.linalg.norm(tracking[:2]-self.workspace_origin[:2]))-.55)
+        vertical=max(0.,1.5-tracking[2])+max(0.,tracking[2]-2.6)
+        charge=10.*(radial*radial+vertical*vertical)/(100.*self.horizon_s)
         previous=self.total
         _,rows=self.geometry.observe(p)
         support,transport,turn=self._fold_support(time,rows)
-        m=output_metrics(p,v,self.L,directed_x=self.directed_x)
+        m=output_metrics(p,v,self.L)
         rate=10.*support*m['horizontal_reach_fraction']**2*m['alignment']**2*m['effective_outward_mps']/self.L
         reward=rate*.01;self.accrued+=reward;self.cost+=charge
         self.total=self.prefix_return()
-        if self.workspace_origin is not None:reward=self.total-previous
+        reward=self.total-previous
         self.time=float(time)
         self.last=dict(m,fold_support=support,transport_signal=transport,max_turn_rad=turn,
-                       reward_rate=rate,accrued_credit=self.accrued)
-        if self.workspace_origin is not None:
-            self.last.update(workspace_cost=self.cost,raw_net_return=self.accrued-self.cost,failure_cost=self.failure_cost,net_return=self.total)
+                       reward_rate=rate,accrued_credit=self.accrued,workspace_cost=self.cost,
+                       raw_net_return=self.accrued-self.cost,failure_cost=self.failure_cost,net_return=self.total)
         self.trace.append([self.last[k] for k in self.fields])
         self.support_time+=.01*support;self.output_time+=.01*(rate>0.)
         if rate>self.peak_rate:
@@ -162,9 +154,7 @@ class ContinuousWhipAttempt:
         return reward
 
     def prefix_return(self):
-        if self.workspace_origin is None:return self.accrued
-        raw=self.accrued-self.cost
-        return raw
+        return self.accrued-self.cost
 
     def fail(self,time,reason='physical_failure'):
         if self.terminal is not None or not self.initialized:raise RuntimeError('Episode is not active')
@@ -189,8 +179,8 @@ class ContinuousWhipAttempt:
             m['world_outward_mps']/10.,m['relative_outward_mps']/10.,m['straightening_mps']/10.,
             m['effective_outward_mps']/10.,m['reward_rate']/10.,self.accrued/10.,
             m['end_to_end_fraction'],m['transport_signal'],m['max_turn_rad']/math.pi,
-            self.peak_rate/10.,self.support_time/self.horizon_s,self.output_time/self.horizon_s]
-        if self.workspace_origin is not None:values.extend((self.cost/10.,self.total/10.))
+            self.peak_rate/10.,self.support_time/self.horizon_s,self.output_time/self.horizon_s,
+            self.cost/10.,self.total/10.]
         return np.asarray(values,np.float32)
 
     def record(self):
@@ -199,5 +189,5 @@ class ContinuousWhipAttempt:
             continuous_metrics=dict(accrued_credit=self.accrued,peak_reward_rate=self.peak_rate,
                 fold_support_integral_s=self.support_time,positive_output_duration_s=self.output_time),
             workspace_cost=self.cost,raw_net_return=self.accrued-self.cost,failure_cost=self.failure_cost,
-            output_direction_world=[1.,0.,0.] if self.directed_x else None,
+            output_direction_world=[1.,0.,0.],
             contract=SHORT_MODE,qualification_note='Continuous diagnostic; binary whip success is not defined.')

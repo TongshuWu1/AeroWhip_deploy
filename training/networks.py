@@ -13,30 +13,18 @@ def scalar_metrics(metrics):
 
 
 class HistoryEncoder(nn.Module):
-    def __init__(self, columns, hidden, *, history_samples=None, phase_columns=(), goal_columns=()):
+    def __init__(self, columns, hidden, *, history_samples=None):
         super().__init__()
         self.register_buffer('columns', torch.as_tensor(columns, dtype=torch.long))
         self.temporal = nn.Sequential(nn.Conv1d(len(columns)+1,32,5,stride=2,padding=2),nn.ReLU(),
             nn.Conv1d(32,32,5,stride=2,padding=2),nn.ReLU(),nn.AdaptiveAvgPool1d(16))
         self.output = nn.Sequential(nn.Linear(512+len(columns),hidden),nn.ReLU())
         self.history_samples = history_samples
-        if phase_columns:
-            self.register_buffer('phase_columns',torch.tensor(phase_columns,dtype=torch.long))
-            self.phase_projection = nn.Linear(len(phase_columns),hidden,bias=False)
-            nn.init.zeros_(self.phase_projection.weight)
-        if goal_columns:
-            self.register_buffer('goal_columns',torch.tensor(goal_columns,dtype=torch.long))
-            self.goal_projection = nn.Linear(len(goal_columns),hidden,bias=False)
-            nn.init.zeros_(self.goal_projection.weight)
 
     def prepare(self, history, index):
         """Immutable observable prefix only; NEVER cache learned embeddings."""
-        phase = (history[torch.arange(len(index),device=index.device),index].index_select(-1,self.phase_columns)
-                 if hasattr(self,'phase_columns') else None)
-        goal = (history[torch.arange(len(index),device=index.device),index].index_select(-1,self.goal_columns)
-                if hasattr(self,'goal_columns') else None)
         if self.history_samples is not None and history.shape[1] != self.history_samples:
-            # Fixed source layout until sample450; causal rolling451 thereafter.
+            # Causal window of the latest history_samples frames.
             # Shared by acting, value fitting and PPO prepared-input/KL paths.
             start = (index-(self.history_samples-1)).clamp_min(0)
             sample = start[:,None]+torch.arange(self.history_samples,device=index.device)[None]
@@ -47,20 +35,14 @@ class HistoryEncoder(nn.Module):
         # Mask BEFORE temporal operations: no later frames can leak into a sample.
         prefix = torch.cat((values.masked_fill(~mask[:,:,None],0),mask[:,:,None].to(values.dtype)), -1)
         current = values[torch.arange(len(index),device=index.device),index]
-        prepared = (prefix,current,phase) if phase is not None else (prefix,current)
-        return prepared+(goal,) if goal is not None else prepared
+        return prefix,current
 
     def forward(self, history, index):
         # PPO's fixed-cohort KL passes can reuse these weight-independent inputs.
         # Shapes/strides and ALL learned operations remain the same as ordinary input.
         prepared = history if isinstance(history,tuple) else self.prepare(history,index)
-        prefix,current = prepared[:2]
-        feature = self.output(torch.cat((self.temporal(prefix.transpose(1,2)).flatten(1),current),-1))
-        if hasattr(self,'phase_columns'):
-            feature = feature+self.phase_projection(prepared[2])
-        if hasattr(self,'goal_columns'):
-            feature = feature+self.goal_projection(prepared[3 if hasattr(self,'phase_columns') else 2])
-        return feature
+        prefix,current = prepared
+        return self.output(torch.cat((self.temporal(prefix.transpose(1,2)).flatten(1),current),-1))
 
 
 class Actor(nn.Module):

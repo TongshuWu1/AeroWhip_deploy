@@ -9,7 +9,7 @@ import torch
 from helpers import project_temporary
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtWidgets
 from project_paths import ROOT, project_reference
 from training.artifacts import identity, save_json
 from training.configuration import DEFAULT, load
@@ -40,13 +40,12 @@ class HistoryFixture:
         self.snapshot['identity'] = identity(self.snapshot)
         self.reader = ResumeHistory()
 
-    def run_folder(self, name, numbers, *, parent=None, cutoff=None, extra=(), actor=None):
+    def run_folder(self, name, numbers, *, parent=None, cutoff=None, extra=()):
         directory = self.root/name
         directory.mkdir()
         save_json(directory/'configuration.json', self.snapshot)
         save_json(directory/'request.json', dict(
-            resume=project_reference(parent/'latest.pt') if parent else None,
-            initialize_actor=actor))
+            resume=project_reference(parent/'latest.pt') if parent else None))
         records = list(extra)
         if parent:
             records.append(dict(phase='resumed', round=cutoff, episodes=cutoff*128))
@@ -90,13 +89,6 @@ class HistoryTests(HistoryFixture, unittest.TestCase):
         self.assertEqual(rows[0]['replay'], original['replay'])
         self.assertTrue(rows[0]['inherited'])
 
-    def test_actor_transfer_keeps_a_separate_training_history(self):
-        parent = self.run_folder('parent', range(1, 9))
-        child = self.run_folder('child', [1, 2], actor=project_reference(parent/'latest.pt'))
-        history = self.reader.load(child)
-        self.assertEqual([e['round'] for e in history.records], [1, 2])
-        self.assertEqual(history.directories, (child,))
-
     def test_missing_parent_warns_and_restores_when_files_return(self):
         parent = self.run_folder('parent', [1, 2])
         child = self.run_folder('child', [3], parent=parent, cutoff=2)
@@ -113,7 +105,7 @@ class HistoryTests(HistoryFixture, unittest.TestCase):
         parent = self.run_folder('parent', [1, 2])
         child = self.run_folder('child', [3], parent=parent, cutoff=2)
         changed = deepcopy(self.snapshot)
-        changed['task']['request'][2] += .1
+        changed['task']['workspace']['radius_m'] += .1
         changed['identity'] = identity(changed)
         save_json(parent/'configuration.json', changed)
         history = self.reader.load(child)
@@ -170,8 +162,14 @@ class HistoryInterfaceTests(HistoryFixture, unittest.TestCase):
             self.addCleanup(patcher.stop)
         self.window = HistoryTrainingWindow()
         self.window.timer.stop()
-        self.addCleanup(self.window.close)
+        self.addCleanup(self.dispose_window)
         self.window.refresh_runs(self.child)
+
+    def dispose_window(self):
+        # close() only hides; delete while QApplication is alive, not during GC.
+        self.window.close()
+        self.window.deleteLater()
+        QtCore.QCoreApplication.sendPostedEvents(None, QtCore.QEvent.Type.DeferredDelete)
 
     def test_plots_join_earlier_collections_and_preview_has_original_owner(self):
         with patch.object(self.window.preview, 'set_result') as result:

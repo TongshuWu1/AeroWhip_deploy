@@ -6,11 +6,6 @@ from pathlib import Path
 
 import numpy as np
 from project_paths import project_path, contained_child
-from model_catalog import packaged_event
-
-
-DEMO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_RUN = DEMO_ROOT / 'models/milestone-20261009/evidence/stage4'
 
 
 def sha256(path):
@@ -33,57 +28,6 @@ def velocity_metrics(velocity, normal):
     return dict(speed=speed, forward=forward, direction=direction, angle_deg=angle)
 
 
-def strike_metrics(arrays, time_s, center, normal):
-    """Same linear position/velocity interpolation as the saved strike scorer.
-
-    This locates the saved selected crossing, not maximum speed or nearest point.
-    No contact impulse or between-sample dynamics is reconstructed.
-    """
-    times = np.asarray(arrays['time_s'])
-    if not np.isfinite(time_s) or not times[0] <= time_s <= times[-1]:
-        raise ValueError('Selected strike time must lie within a saved interval')
-    index = min(len(times) - 2, int(np.searchsorted(times, time_s, side='right') - 1))
-    positions = arrays['cable_positions'][:, -1]
-    velocities = arrays['cable_velocities'][:, -1]
-    center, normal = np.asarray(center), np.asarray(normal)
-    old = float((positions[index] - center) @ normal)
-    new = float((positions[index + 1] - center) @ normal)
-    if not old < 0 <= new:
-        # A crossing exactly at an endpoint belongs to its preceding interval.
-        if index and abs(time_s - times[index]) <= 1e-12:
-            index -= 1
-            old = float((positions[index] - center) @ normal)
-            new = float((positions[index + 1] - center) @ normal)
-        if not old < 0 <= new:
-            raise ValueError('Recorded selected event is not a forward target-plane crossing')
-    fraction = -old / (new - old)
-    crossing_time = float(times[index] + fraction * (times[index + 1] - times[index]))
-    if not np.isclose(crossing_time, time_s, atol=1e-9, rtol=0):
-        raise ValueError('Saved scoring event time disagrees with the replay crossing')
-    position = positions[index] + fraction * (positions[index + 1] - positions[index])
-    velocity = velocities[index] + fraction * (velocities[index + 1] - velocities[index])
-    side = np.array([-normal[1], normal[0], 0.])
-    delta = position - center
-    result = velocity_metrics(velocity, normal)
-    result.update(time_s=crossing_time, position=position, velocity=velocity,
-                  lateral_m=float(delta @ side), vertical_m=float(delta[2]),
-                  center_error_m=float(np.hypot(delta @ side, delta[2])), interval=index)
-    return result
-
-
-def verify_recorded_metrics(metrics, event):
-    components = event.get('components', {})
-    fields = dict(speed='tip_speed_mps', forward='forward_mps',
-                  lateral_m='target_lateral_error_m', vertical_m='target_vertical_error_m')
-    for measured, saved in fields.items():
-        if saved in components and not np.isclose(metrics[measured], components[saved], atol=1e-9, rtol=1e-9):
-            raise ValueError('Presentation/replay mismatch: ' + saved)
-    if 'direction_error_rad' in components and not np.isclose(
-            np.pi if metrics['angle_deg'] is None else np.radians(metrics['angle_deg']),
-            components['direction_error_rad'], atol=1e-9, rtol=1e-9):
-        raise ValueError('Presentation/replay mismatch: direction_error_rad')
-
-
 @dataclass
 class PresentationData:
     directory: Path
@@ -94,8 +38,6 @@ class PresentationData:
     scene: object
     config: object
     replay: object
-    surface: dict
-    strike: dict
     hashes: dict
     measurement_event: dict | None = None
 
@@ -137,18 +79,9 @@ class PresentationData:
             config = task_configuration(snapshot['task'], snapshot['settings'], snapshot['model'], scene)
             with np.load(replay_path, allow_pickle=False) as archive:
                 replay = StateReplay(dict(archive))
-            surface = config.strike_surface.description(scene.initial_state.position_world_m, config.request)
             # Detached diagnostics have no recorded training outcome to infer.
             data = cls(replay_path.parent, replay_path.name, {}, {}, snapshot, scene,
-                       config, replay, surface, None, {})
-        reported_surface = case.get('target_surface')
-        if reported_surface is not None:
-            for key in ('center_world_m', 'normal_world', 'width_m', 'height_m'):
-                actual = np.asarray(data.surface[key], dtype=np.float64)
-                reported = np.asarray(reported_surface.get(key), dtype=np.float64)
-                if (reported.shape != actual.shape or not np.isfinite(reported).all()
-                        or not np.allclose(reported, actual, atol=1e-12, rtol=0)):
-                    raise ValueError('Measurement target geometry differs from pinned snapshot: '+key)
+                       config, replay, {})
         events = case.get('events')
         if not isinstance(events, list):
             raise ValueError('Measurement case must contain an event list')
@@ -183,7 +116,7 @@ class PresentationData:
         return data
 
     @classmethod
-    def load(cls, directory=DEFAULT_RUN, filename=None, event=None):
+    def load(cls, directory, filename=None, event=None):
         from simulation.configuration import load_configuration
         from training.configuration import task_configuration
         from viewer.replay import StateReplay
@@ -209,97 +142,45 @@ class PresentationData:
         snapshot = json.loads(contained_child(directory, 'configuration.json').read_text())
         scene = load_configuration(directory / 'scene.toml')
         case_path = contained_child(directory, 'case.json')
-        if event.get('protocol') == 'stationary_target_policy_test_v1':
+        if event.get('protocol') == 'initial_state_policy_test_v1':
             from evaluation.policy_test import case_scene
             from training.configuration import digest
             case = json.loads(case_path.read_text())
             request = json.loads(contained_child(directory, 'request.json').read_text())
             if event.get('case') != case or request.get('case_sha256') != digest(case):
                 raise ValueError('Saved test case differs from its frozen request/result')
-            if event.get('target_surface',{}).get('center_world_m') != case['target_position_world_m']:
-                raise ValueError('Saved test surface differs from its actual case target')
-            scene, _ = case_scene(scene,case)
+            scene = case_scene(scene,case)
         config = task_configuration(snapshot['task'], snapshot['settings'], snapshot['model'], scene)
         with np.load(contained_child(directory, filename), allow_pickle=False) as data:
             replay = StateReplay(dict(data))
-        surface = config.strike_surface.description(scene.initial_state.position_world_m, config.request)
-        if 'target_surface' in event:
-            selected = event['target_surface']
-            center = np.asarray(selected['center_world_m'],dtype=np.float64)
-            normal = np.asarray(selected['normal_world'],dtype=np.float64)
-            if (center.shape != (3,) or normal.shape != (3,) or not np.isfinite(center).all()
-                    or not np.isfinite(normal).all() or not np.allclose(normal,surface['normal_world'],rtol=0,atol=1e-12)
-                    or any(selected[k] != surface[k] for k in ('width_m','height_m'))):
-                raise ValueError('Invalid saved stationary target surface')
-            surface = dict(selected)
-        components = event.get('components', {})
-        strike = None
-        selected_time = components.get('release_time_s')
-        if selected_time is not None:
-            if components.get('plane_crossing') == 1:
-                strike = strike_metrics(replay.arrays, selected_time,
-                                        surface['center_world_m'], surface['normal_world'])
-                verify_recorded_metrics(strike, event)
-                strike['kind'] = 'Target crossing'
-            else:
-                strike = sampled_event_metrics(replay.arrays, selected_time,
-                                               surface['center_world_m'], surface['normal_world'])
-                # Stage1/2 reward selects a mechanics/proximity event, not a hit.
-                verify_recorded_metrics(strike, event)
-                strike['kind'] = 'Scored whip event (not a selected target crossing)'
         hashes = {name: sha256(contained_child(directory, name)) for name in
                   (filename, 'configuration.json', 'scene.toml', 'summary.json', 'latest.pt', 'case.json', 'request.json')
                   if (directory / name).exists()}
-        return cls(directory, filename, event, summary, snapshot, scene, config, replay, surface, strike, hashes)
+        return cls(directory, filename, event, summary, snapshot, scene, config, replay, hashes)
 
     @property
-    def stage(self):
-        return self.snapshot['settings'].get('training_stage', 1)
+    def output_direction(self):
+        """Task output direction in world axes, for live tip-velocity display."""
+        return self.config.continuous_whip['output_direction_world']
 
     def evidence(self):
-        return dict(run=str(self.directory), replay=self.filename, stage=self.stage,
+        return dict(run=str(self.directory), replay=self.filename,
                     selected_round=self.event.get('round'), final_round=self.summary.get('round'),
                     collections=self.summary.get('round'), episodes=self.summary.get('episodes'),
                     saved_states_only=True, physics_steps=0, policy_inference_steps=0,
-                    selected_event=None if self.strike is None else {
-                        key: value.tolist() if isinstance(value, np.ndarray) else value
-                        for key, value in self.strike.items()},
                     recorded_event=self.event, workspace=self.event.get('workspace', {}),
                     measurement_review=self.measurement_event,
                     sha256=self.hashes,
                     limitations=['One selected saved motion, not robustness or real-flight evidence',
-                                 'Virtual target plane: no target contact/impact force',
                                  'Linear interpolation of saved states, not unsaved physics substeps',
-                                 'Selected mechanics event is not necessarily a crossing or a hit',
                                  'Latest checkpoint hash does not identify every historical replay actor',
                                  'Full saved paths include future samples as visual context, not policy inputs'])
 
 
 def read_events(directory):
     """Ignore a writer's incomplete last line, not complete invalid evaluations."""
-    packaged = packaged_event(directory)
-    if packaged is not None:
-        return [packaged]
     source = contained_child(directory, 'events.jsonl')
     if not source.exists():
         return []
     return [json.loads(line) for line in source.read_bytes().splitlines(keepends=True)
             if line.endswith(b'\n')]
-
-
-def sampled_event_metrics(arrays, time_s, center, normal):
-    times = arrays['time_s']
-    if not np.isfinite(time_s) or not times[0] <= time_s <= times[-1]:
-        raise ValueError('Selected event time lies outside the saved replay')
-    position = np.array([np.interp(time_s, times, arrays['cable_positions'][:, -1, k])
-                         for k in range(3)])
-    velocity = np.array([np.interp(time_s, times, arrays['cable_velocities'][:, -1, k])
-                         for k in range(3)])
-    delta = position - np.asarray(center)
-    side = np.array([-normal[1], normal[0], 0.])
-    metrics = velocity_metrics(velocity, normal)
-    metrics.update(time_s=float(time_s), position=position, velocity=velocity,
-                   lateral_m=float(delta @ side), vertical_m=float(delta[2]),
-                   center_error_m=float(np.hypot(delta @ side, delta[2])),
-                   interval=int(np.searchsorted(times, time_s, side='right') - 1))
-    return metrics

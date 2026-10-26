@@ -1,5 +1,4 @@
 {
-  "algorithm": "ppo",
   "task": "configs/tasks/whip_stage1_continuous_directional_four_second_v6.json",
   "model": "configs/simulation.json",
   "scene": "configs/scenes/default.toml",
@@ -32,7 +31,6 @@
     "post_step_kl": {
       "maximum_trials": 8
     },
-    "transfer_entropy_clock": "stage_local",
     "entropy": {
       "mode": "exponential_budget_v1",
       "initial_weight": 0.02,
@@ -44,7 +42,6 @@
       "correlation_time_s": 0.1
     }
   },
-  "training_stage": 1,
   "acceleration_limit_mps2": [
     8.0,
     8.0,

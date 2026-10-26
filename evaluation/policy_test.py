@@ -13,18 +13,18 @@ import traceback
 import numpy as np
 import torch
 
-from evaluation.records import load_checkpoint, evaluation_contract, verify_contract, task_stage
+from evaluation.records import load_checkpoint, evaluation_contract, verify_contract
 from fitting.artifacts import atomic_save
 from project_paths import ROOT, project_path, project_reference
 from simulation.configuration import load_configuration
 from simulation.state import quaternion_xyzw_to_rotation_matrix, rotation_matrix_to_quaternion_xyzw
-from tasks.whip.sac_environment import make_environment
+from tasks.whip.environment import make_environment
 from training.artifacts import EventLog, clean, read_json, save_json
 from training.configuration import digest, task_configuration, validate
 
 RESULTS = ROOT/'runs/policy_tests'
-PROTOCOL = 'stationary_target_policy_test_v1'
-CASE_FIELDS = {'target_position_world_m','initial_position_world_m',
+PROTOCOL = 'initial_state_policy_test_v1'
+CASE_FIELDS = {'initial_position_world_m',
                'initial_quaternion_body_to_world_xyzw','initial_linear_velocity_world_mps',
                'initial_angular_velocity_body_radps'}
 
@@ -45,11 +45,9 @@ def rpy_quaternion(degrees):
     return rotation_matrix_to_quaternion_xyzw(rotation)
 
 
-def initial_case(scene, cfg):
+def initial_case(scene):
     state = scene.initial_state
-    return dict(target_position_world_m=cfg.strike_surface.description(
-                    state.position_world_m, cfg.request)['center_world_m'],
-                initial_position_world_m=state.position_world_m.tolist(),
+    return dict(initial_position_world_m=state.position_world_m.tolist(),
                 initial_quaternion_body_to_world_xyzw=state.quaternion_body_to_world_xyzw.tolist(),
                 initial_linear_velocity_world_mps=state.linear_velocity_world_mps.tolist(),
                 initial_angular_velocity_body_radps=state.angular_velocity_body_radps.tolist())
@@ -58,7 +56,6 @@ def initial_case(scene, cfg):
 def case_scene(scene, case):
     if set(case) != CASE_FIELDS:
         raise ValueError('Unknown or missing policy-test case fields')
-    target = vector(case['target_position_world_m'])
     position = vector(case['initial_position_world_m'])
     q = vector(case['initial_quaternion_body_to_world_xyzw'], 4)
     if not np.isclose(np.linalg.norm(q), 1., rtol=0, atol=1e-9):
@@ -76,13 +73,15 @@ def case_scene(scene, case):
         raise ValueError('Explicit cable initial states cannot be silently rebuilt for a new drone state')
     initial = replace(old,position_world_m=position,quaternion_body_to_world_xyzw=q,
                       linear_velocity_world_mps=velocity,angular_velocity_body_radps=omega)
-    return replace(scene,initial_state=initial), target
+    return replace(scene,initial_state=initial)
 
 
-def case_warnings(snapshot, scene, cfg, case):
-    selected, target = case_scene(scene, case)
-    cfg.workspace.validate_placement(selected.initial_state.position_world_m, target)
-    warnings = ['Current Stage 1 has NO target input or target reward. Target coordinates are display metadata only and do not affect scoring or termination.']
+def case_warnings(scene, cfg, case):
+    selected = case_scene(scene, case)
+    position = selected.initial_state.position_world_m
+    if not cfg.workspace.contains(torch.as_tensor(position)[None,None],torch.as_tensor(position)[None])[0,0]:
+        raise ValueError('Initial tracking position is outside the cylindrical workspace')
+    warnings = ['Current Stage 1 has no target: it scores +X fold transport only.']
     fields = ('position_world_m','quaternion_body_to_world_xyzw','linear_velocity_world_mps','angular_velocity_body_radps')
     if any(not np.allclose(getattr(selected.initial_state,k),getattr(scene.initial_state,k),rtol=0,atol=1e-12) for k in fields):
         warnings.append('Initial drone state differs from the fixed training start: outside the sampled training domain.')
@@ -92,7 +91,7 @@ def case_warnings(snapshot, scene, cfg, case):
 
 def require_idle(directory=None):
     """No competing training/evaluation; exclude only this run's venv parent."""
-    pattern = r'\b(?:training\.worker|evaluation\.(?:worker|policy_test)|run_goal_stages_comparison\.py)\b'
+    pattern = r'\b(?:training\.worker|evaluation\.policy_test)\b'
     if os.name == 'nt':
         script = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'python*' -and $_.CommandLine -match '"
                   +pattern+"' } | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress")
@@ -120,8 +119,6 @@ def require_idle(directory=None):
         raise RuntimeError('Policy test waits for training/evaluation workers to exit: '+str(active))
     if project_path(RESULTS/'worker.lock').exists() and directory is None:
         raise RuntimeError('Policy tester lock exists; inspect its owner instead of deleting or relaunching')
-    if project_path(ROOT/'runs/context_evaluation/worker.lock').exists():
-        raise RuntimeError('Context evaluation lock exists; inspect its owner instead of deleting or relaunching')
 
 
 def checkpoint_context(checkpoint):
@@ -144,7 +141,7 @@ def prepare(checkpoint, case, *, root=RESULTS):
     snapshot = info['snapshot']
     contract = evaluation_contract(snapshot,'current_code')
     require_idle()
-    warnings = case_warnings(snapshot,scene,cfg,case)
+    warnings = case_warnings(scene,cfg,case)
     path = project_path(root)/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     path.mkdir(parents=True,exist_ok=False)
     save_json(path/'configuration.json',snapshot)
@@ -161,9 +158,8 @@ def frozen_actor(info, env):
     settings = info['snapshot']['settings']
     actor = make_ppo_actor(settings,env.actor_columns,env.action_size,**env.policy_encoder_options)
     expected = actor.state_dict()
-    for name in ('encoder.columns','encoder.phase_columns','encoder.goal_columns','recovery_limits'):
-        if name in expected and (name not in info['actor'] or not torch.equal(info['actor'][name],expected[name])):
-            raise ValueError('Checkpoint observation/control interface differs: '+name)
+    if 'encoder.columns' not in info['actor'] or not torch.equal(info['actor']['encoder.columns'],expected['encoder.columns']):
+        raise ValueError('Checkpoint observation interface differs: encoder.columns')
     actor.load_state_dict(info['actor'],strict=True)
     if not all(bool(torch.isfinite(p).all()) for p in actor.parameters()):
         raise ValueError('Nonfinite frozen actor')
@@ -202,8 +198,8 @@ def run(directory):
         torch.set_num_threads(min(8,os.cpu_count() or 1))
         scene = load_configuration(directory/'scene.toml')
         cfg = task_configuration(snapshot['task'],settings,snapshot['model'],scene)
-        warnings = case_warnings(snapshot,scene,cfg,case)
-        scene, target = case_scene(scene,case)
+        warnings = case_warnings(scene,cfg,case)
+        scene = case_scene(scene,case)
         emit(phase='initializing',round=info['round'],pid=os.getpid())
         env = make_environment(dict(settings,parallel_environments=1),snapshot,cfg,scene)
         actor = frozen_actor(info,env)
@@ -224,7 +220,6 @@ def run(directory):
             summary=dict(phase='cancelled',round=info['round'],message='Incomplete episode was not scored',replay=None)
         else:
             returns,valid,score,cost=env.finish()
-            goal_contract = None
             arrays=env.replay_arrays(0)
             filename='rollout.npz' if arrays is not None else None
             if arrays is not None:
@@ -235,9 +230,8 @@ def run(directory):
                 valid=bool(valid[0]),evaluation_return=float(returns[0]),replay=filename,
                 workspace_cost=float(cost[0]),components={k:float(v[0]) for k,v in score.components.items()},
                 workspace={k:float(v[0]) for k,v in env.workspace_metrics().items()},
-                target_surface=None,case=case,warnings=warnings,goal_observation=goal_contract,
-                task_stage=task_stage(snapshot),source_mode='current_code',exact_source_reproduction=False,
-                scoring='continuous_directional_whip_four_second_v6',checkpoint_sha256=info['sha256'],**env.provenance()))
+                case=case,warnings=warnings,source_mode='current_code',exact_source_reproduction=False,
+                scoring=cfg.reward_mode,checkpoint_sha256=info['sha256'],**env.provenance()))
         verify_contract(snapshot,request)
         if load_checkpoint(request['checkpoint'])['sha256']!=request['checkpoint_sha256']:
             raise ValueError('Source checkpoint changed during the test')

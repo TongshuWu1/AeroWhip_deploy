@@ -26,9 +26,19 @@ SCHEMA = 'offline_whip_event_review_v1'
 INPUT_SCHEMA = 'offline_whip_event_inputs_v1'
 
 
+def review_surface(initial_position_world_m):
+    """Virtual review board 1.1 m along world +X from the initial drone position.
+
+    Measurement geometry only (formerly stored in the Stage 1 task file): no
+    contact, reward or success definition. Units are metres; normal is world +X.
+    """
+    x, y = (float(v) for v in initial_position_world_m[:2])
+    return dict(center_world_m=[x+1.1, y, 2.], normal_world=[1., 0., 0.], width_m=1., height_m=.6,
+                maximum_entry_angle_deg=30., minimum_forward_speed_mps=3.)
+
+
 def snapshot_geometry(snapshot):
-    """Use the frozen source mesh and existing target description, not live defaults."""
-    from tasks.whip.stage1_configuration import StrikeSurfaceConfiguration
+    """Use the frozen source mesh and the review board, not live defaults."""
     model = snapshot['model']
     lengths = np.asarray(model['cable']['marker_interval_lengths_m'], dtype=float)
     counts = np.asarray(model['simulation']['segments_per_marker_interval'])
@@ -36,12 +46,8 @@ def snapshot_geometry(snapshot):
             or (counts < 1).any() or (counts != np.floor(counts)).any()):
         raise ValueError('Frozen mesh requires positive integer subdivisions per marker interval')
     rest = np.concatenate([np.full(int(n), length/n) for length, n in zip(lengths, counts)])
-    request = snapshot['task']['request']
-    if request[1] != 0:
-        raise ValueError('This review currently supports the existing horizontal strike direction')
     initial = tomllib.loads(snapshot['scene_text'])['initial_state']['position_world_m']
-    surface = StrikeSurfaceConfiguration(**snapshot['task']['strike_surface']).description(initial, request)
-    return rest, surface
+    return rest, review_surface(initial)
 
 
 def _extrema(values, maximum):

@@ -472,18 +472,23 @@ limitations. The simulation and fitting pipeline remains separate and unchanged.
 ```text
 python run_simulation.py
 python run_custom_real.py
-python run_training.py --stage 1
-python run_training.py --stage 1 --start
+python run_training.py
+python run_training.py --start
 python run_replay.py
-python run_replay.py --flight-view
+python run_replay.py --run runs/ppo_stage1/<run> --flight-view
+python tools/equivalence_baseline.py
 python take_processing/run_take_processing.py
 ```
 
 Opening Training without `--start` stays idle. Only the current Stage 1 recipe
 is supported. Saved replay renders recorded states without running physics; the
-policy tester simulates compatible current checkpoints. Historical checkpoints
-may require the preserved source at commit `3c9a49e`. Source loading alone is
-not a successful simulation or policy evaluation.
+policy tester simulates compatible current checkpoints from an editable initial
+drone state (Stage 1 has no target). Runs saved before the 2026-10-26
+reorganization, and historical checkpoints, require the preserved source at
+commit `375b44e` or `3c9a49e`. Source loading alone is not a successful
+simulation or policy evaluation. `tools/equivalence_baseline.py` checks that a
+refactoring leaves Stage 1 rollouts and one PPO update bitwise unchanged
+against a locally recorded reference (`--record` writes it).
 
 Offline whipping measurements use pinned saved replays and keep deformation,
 distal motion and delivery separate. Install plotting support with
