@@ -1,0 +1,139 @@
+{
+  "release_id": 423794329,
+  "assets": [
+    {
+      "name": "SHA256SUMS",
+      "bytes": 1901,
+      "sha256": "fe206e2b6104c690d31fae6c26d33b1cc637c7f3150f26f5dd129c2a2d6ab7ce",
+      "github_digest": "sha256:fe206e2b6104c690d31fae6c26d33b1cc637c7f3150f26f5dd129c2a2d6ab7ce"
+    },
+    {
+      "name": "aerowhip-data-010.tar.gz",
+      "bytes": 858121233,
+      "sha256": "d0ba9b4ef7d2bddb94cab39a4781004cfb252dff7fc374d63519b144154560a0",
+      "github_digest": "sha256:d0ba9b4ef7d2bddb94cab39a4781004cfb252dff7fc374d63519b144154560a0"
+    },
+    {
+      "name": "aerowhip-data-009.tar.gz",
+      "bytes": 850059355,
+      "sha256": "777f773e2e68c67454b90ac1c67e183eea603f9bff11bd12de321723ea5f0f17",
+      "github_digest": "sha256:777f773e2e68c67454b90ac1c67e183eea603f9bff11bd12de321723ea5f0f17"
+    },
+    {
+      "name": "aerowhip-data-015.tar.gz",
+      "bytes": 823956420,
+      "sha256": "4a7840464bbe07ef6cc073d561f970d92f280370d9dc9ddb618ac77d1ccda1bc",
+      "github_digest": "sha256:4a7840464bbe07ef6cc073d561f970d92f280370d9dc9ddb618ac77d1ccda1bc"
+    },
+    {
+      "name": "aerowhip-data-003.tar.gz",
+      "bytes": 177566009,
+      "sha256": "9372f40d5011337b033cc744527b207e780cef5d8628522bd60bea38264ebc79",
+      "github_digest": "sha256:9372f40d5011337b033cc744527b207e780cef5d8628522bd60bea38264ebc79"
+    },
+    {
+      "name": "cleanup-manifest.json",
+      "bytes": 1083614,
+      "sha256": "054b2d0a3c59967acf678ede71a0fc1ceb0779a01285a77abad6bfab7ab0d91f",
+      "github_digest": "sha256:054b2d0a3c59967acf678ede71a0fc1ceb0779a01285a77abad6bfab7ab0d91f"
+    },
+    {
+      "name": "aerowhip-data-005.tar.gz",
+      "bytes": 215693152,
+      "sha256": "474f8a3a15c42abe26993ea582f91b74e067da0e33a20b3e496c75eb45a222cd",
+      "github_digest": "sha256:474f8a3a15c42abe26993ea582f91b74e067da0e33a20b3e496c75eb45a222cd"
+    },
+    {
+      "name": "aerowhip-data-002.tar.gz",
+      "bytes": 262025401,
+      "sha256": "fffe2ea89c0bcf341564133d36a76f6e2299ddb050f6570ec136e698206c0fed",
+      "github_digest": "sha256:fffe2ea89c0bcf341564133d36a76f6e2299ddb050f6570ec136e698206c0fed"
+    },
+    {
+      "name": "aerowhip-data-006.tar.gz",
+      "bytes": 253710801,
+      "sha256": "2795c6b153d74a22b01cd14e913f6d20445cfcb55c36060b9a06613d6413430d",
+      "github_digest": "sha256:2795c6b153d74a22b01cd14e913f6d20445cfcb55c36060b9a06613d6413430d"
+    },
+    {
+      "name": "aerowhip-data-004.tar.gz",
+      "bytes": 184701943,
+      "sha256": "2d527b53860b5abd021486e7163eb39db9a1ce919b05e1ab2fa52bce38183bc5",
+      "github_digest": "sha256:2d527b53860b5abd021486e7163eb39db9a1ce919b05e1ab2fa52bce38183bc5"
+    },
+    {
+      "name": "aerowhip-data-014.tar.gz",
+      "bytes": 708906564,
+      "sha256": "7d250cb34aaba56823c47dc2e5762907e7c5986720d7772f011b4dc695be3943",
+      "github_digest": "sha256:7d250cb34aaba56823c47dc2e5762907e7c5986720d7772f011b4dc695be3943"
+    },
+    {
+      "name": "aerowhip-data-013.tar.gz",
+      "bytes": 678850464,
+      "sha256": "b6ec3519723c3fb0b6b086bff7973283da657202d5d7b823a920f25085369ed0",
+      "github_digest": "sha256:b6ec3519723c3fb0b6b086bff7973283da657202d5d7b823a920f25085369ed0"
+    },
+    {
+      "name": "aerowhip-data-016.tar.gz",
+      "bytes": 785086160,
+      "sha256": "984a128bc0f91b367a490b5f479ba4d690e144d3907fa8c4b8b2ff195259fe7c",
+      "github_digest": "sha256:984a128bc0f91b367a490b5f479ba4d690e144d3907fa8c4b8b2ff195259fe7c"
+    },
+    {
+      "name": "manifest.json",
+      "bytes": 2664649,
+      "sha256": "8584a7596c57bdec0ad56db91cc84417774551685604bf83ff3a42d5e8b28c9c",
+      "github_digest": "sha256:8584a7596c57bdec0ad56db91cc84417774551685604bf83ff3a42d5e8b28c9c"
+    },
+    {
+      "name": "aerowhip-data-001.tar.gz",
+      "bytes": 303915587,
+      "sha256": "f954979e57d8768b7afb5dd146ba13ad1f3ce487ab9c2ea714fb750ed23eaabf",
+      "github_digest": "sha256:f954979e57d8768b7afb5dd146ba13ad1f3ce487ab9c2ea714fb750ed23eaabf"
+    },
+    {
+      "name": "aerowhip-data-017.tar.gz",
+      "bytes": 751767046,
+      "sha256": "c9fae9134b3a66bac9bc52a4df2f37da58acd9109b8986bdb058c4e2c9b27fdb",
+      "github_digest": "sha256:c9fae9134b3a66bac9bc52a4df2f37da58acd9109b8986bdb058c4e2c9b27fdb"
+    },
+    {
+      "name": "old-backup-verification.json",
+      "bytes": 616,
+      "sha256": "1bb70059ceeb06e46c668d48e18e95f533592c7ea79f8ddd0e3dd6d84307a8b9",
+      "github_digest": "sha256:1bb70059ceeb06e46c668d48e18e95f533592c7ea79f8ddd0e3dd6d84307a8b9"
+    },
+    {
+      "name": "aerowhip-data-008.tar.gz",
+      "bytes": 329610592,
+      "sha256": "01f07122c8647a3124d415ddc9c93d9f55fa2c3ee79ccf9c0a3637752355520a",
+      "github_digest": "sha256:01f07122c8647a3124d415ddc9c93d9f55fa2c3ee79ccf9c0a3637752355520a"
+    },
+    {
+      "name": "aerowhip-data-007.tar.gz",
+      "bytes": 266396291,
+      "sha256": "7a59e43f408f71732310b2af8288f876e41a8dbfbe61081dedf08f27f5ddf7c2",
+      "github_digest": "sha256:7a59e43f408f71732310b2af8288f876e41a8dbfbe61081dedf08f27f5ddf7c2"
+    },
+    {
+      "name": "aerowhip-data-012.tar.gz",
+      "bytes": 553507625,
+      "sha256": "1e37639f4a4d82d9f98f99974694fcc6f1fb4a6cda08f73df1206f0caad87814",
+      "github_digest": "sha256:1e37639f4a4d82d9f98f99974694fcc6f1fb4a6cda08f73df1206f0caad87814"
+    },
+    {
+      "name": "aerowhip-data-018.tar.gz",
+      "bytes": 46463133,
+      "sha256": "e147c9cfb41a173f11bee1b9ff7023119819b843c1aff6ba0d0cca366dadfd55",
+      "github_digest": "sha256:e147c9cfb41a173f11bee1b9ff7023119819b843c1aff6ba0d0cca366dadfd55"
+    },
+    {
+      "name": "aerowhip-data-011.tar.gz",
+      "bytes": 491249634,
+      "sha256": "13ea8857e3f535c66f4652ad3e381b1035becadbde4059c55e39dff9b6187fad",
+      "github_digest": "sha256:13ea8857e3f535c66f4652ad3e381b1035becadbde4059c55e39dff9b6187fad"
+    }
+  ],
+  "verified_asset_count": 22,
+  "verified_bytes": 8545338190
+}

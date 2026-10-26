@@ -1,4 +1,4 @@
-"""One explicit stationary-target case, frozen actor, native plant, no learning."""
+"""One explicit initial-state case, frozen Stage 1 actor, native plant, no learning."""
 import argparse
 from dataclasses import replace
 from datetime import datetime
@@ -18,8 +18,7 @@ from fitting.artifacts import atomic_save
 from project_paths import ROOT, project_path, project_reference
 from simulation.configuration import load_configuration
 from simulation.state import quaternion_xyzw_to_rotation_matrix, rotation_matrix_to_quaternion_xyzw
-from tasks.whip.deterministic_evaluation import DeterministicEvaluationEnvironment
-from tasks.whip.target_sampling import configure_targets, target_surface
+from tasks.whip.sac_environment import make_environment
 from training.artifacts import EventLog, clean, read_json, save_json
 from training.configuration import digest, task_configuration, validate
 
@@ -83,23 +82,10 @@ def case_scene(scene, case):
 def case_warnings(snapshot, scene, cfg, case):
     selected, target = case_scene(scene, case)
     cfg.workspace.validate_placement(selected.initial_state.position_world_m, target)
-    warnings = []
-    if snapshot['settings'].get('target_observation') != 'initial_relative_position_v1':
-        warnings.append('This historical whip policy has NO target input: no learned goal adaptation. Target still affects scoring/termination and Stage4 hit/recovery timing.')
-    if 'target_sampler' not in snapshot['settings']:
-        warnings.append('Checkpoint uses fixed-target training; no validated varied-target adaptation.')
+    warnings = ['Current Stage 1 has NO target input or target reward. Target coordinates are display metadata only and do not affect scoring or termination.']
     fields = ('position_world_m','quaternion_body_to_world_xyzw','linear_velocity_world_mps','angular_velocity_body_radps')
     if any(not np.allclose(getattr(selected.initial_state,k),getattr(scene.initial_state,k),rtol=0,atol=1e-12) for k in fields):
         warnings.append('Initial drone state differs from the fixed training start: outside the sampled training domain.')
-    nominal = np.asarray(cfg.strike_surface.description(scene.initial_state.position_world_m,cfg.request)['center_world_m'])
-    normal = np.asarray(cfg.strike_surface.description(scene.initial_state.position_world_m,cfg.request)['normal_world'])
-    delta = target-nominal
-    side = np.array([-normal[1],normal[0],0.])
-    if 'target_sampler' in snapshot['settings']:
-        if abs(delta@normal)>1e-9 or abs(delta@side)>.2000000001 or abs(delta[2])>.2000000001:
-            warnings.append('Target is outside the archived sampler domain (same plane, lateral/vertical ±0.20 m).')
-    elif not np.allclose(target,nominal,rtol=0,atol=1e-9):
-        warnings.append('Target differs from the checkpoint fixed training target; adaptation is unverified.')
     warnings.append('One deterministic simulation case is not robustness, a moving-target test, or flight evidence.')
     return warnings
 
@@ -172,11 +158,8 @@ def prepare(checkpoint, case, *, root=RESULTS):
 
 def frozen_actor(info, env):
     from training.ppo import make_ppo_actor
-    from training.sac import Actor
     settings = info['snapshot']['settings']
-    actor = (make_ppo_actor(settings,env.actor_columns,env.action_size,**env.policy_encoder_options)
-             if settings.get('algorithm')=='ppo' else Actor(env.actor_columns,settings['hidden_units'],
-                 settings['initial_log_std'],env.action_size,**env.policy_encoder_options))
+    actor = make_ppo_actor(settings,env.actor_columns,env.action_size,**env.policy_encoder_options)
     expected = actor.state_dict()
     for name in ('encoder.columns','encoder.phase_columns','encoder.goal_columns','recovery_limits'):
         if name in expected and (name not in info['actor'] or not torch.equal(info['actor'][name],expected[name])):
@@ -221,10 +204,8 @@ def run(directory):
         cfg = task_configuration(snapshot['task'],settings,snapshot['model'],scene)
         warnings = case_warnings(snapshot,scene,cfg,case)
         scene, target = case_scene(scene,case)
-        cfg = replace(cfg,request=(*cfg.request[:2],float(target[2]),cfg.request[3]))
         emit(phase='initializing',round=info['round'],pid=os.getpid())
-        env = DeterministicEvaluationEnvironment(settings,snapshot,cfg,scene)
-        configure_targets(env,[target])
+        env = make_environment(dict(settings,parallel_environments=1),snapshot,cfg,scene)
         actor = frozen_actor(info,env)
         save_json(directory/'provenance.json',dict(protocol=PROTOCOL,pid=os.getpid(),
             executable=sys.executable,python=platform.python_version(),torch=str(torch.__version__),
@@ -244,14 +225,6 @@ def run(directory):
         else:
             returns,valid,score,cost=env.finish()
             goal_contract = None
-            if env.relative_target_input:
-                goal = env.goal_relative[0].tolist()
-                observed = env.frames[:,:,-3:][env.numerical_valid]
-                expected = env.goal_relative.expand(len(observed),3)
-                if not torch.equal(observed,expected):
-                    raise ValueError('Stationary goal input changed during the episode')
-                goal_contract = dict(relative_position_over_cable_length=goal,
-                                     fixed_at_all_valid_samples=True,world_axis_aligned=True)
             arrays=env.replay_arrays(0)
             filename='rollout.npz' if arrays is not None else None
             if arrays is not None:
@@ -260,11 +233,11 @@ def run(directory):
                 atomic_save(directory/filename,writer)
             summary=clean(dict(phase='completed',round=info['round'],protocol=PROTOCOL,
                 valid=bool(valid[0]),evaluation_return=float(returns[0]),replay=filename,
-                acceleration_cost=float(cost[0]),components={k:float(v[0]) for k,v in score.components.items()},
+                workspace_cost=float(cost[0]),components={k:float(v[0]) for k,v in score.components.items()},
                 workspace={k:float(v[0]) for k,v in env.workspace_metrics().items()},
-                target_surface=target_surface(env,0),case=case,warnings=warnings,goal_observation=goal_contract,
+                target_surface=None,case=case,warnings=warnings,goal_observation=goal_contract,
                 task_stage=task_stage(snapshot),source_mode='current_code',exact_source_reproduction=False,
-                scoring='saved_task_final_target_size',checkpoint_sha256=info['sha256'],**env.provenance()))
+                scoring='continuous_directional_whip_four_second_v6',checkpoint_sha256=info['sha256'],**env.provenance()))
         verify_contract(snapshot,request)
         if load_checkpoint(request['checkpoint'])['sha256']!=request['checkpoint_sha256']:
             raise ValueError('Source checkpoint changed during the test')

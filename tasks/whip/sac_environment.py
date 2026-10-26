@@ -16,7 +16,6 @@ import torch
 from controllers.full_state_controller.tensor_controller import GeometricController
 from simulation.tensor_model import TensorModel, ControlledState, controlled_values, state_values
 from simulation.state import quaternion_xyzw_to_rotation_matrix
-from .learned_recovery import make_scorer
 from .workspace import WorkspacePenalty
 from .iteration_graph import IterationGraphs, PhysicsReplay
 from training.configuration import action_limit_key
@@ -66,10 +65,7 @@ class Stage1Environment:
         self.seed = [v.expand(self.batch,*v.shape).clone() for v in controlled_values(seed)]
         self.stride = 100//settings['policy_rate_hz']
         self.samples = round((configuration.episode.duration_s+configuration.episode.post_hold_s)/.01)+1
-        self.time_samples = (round(configuration.recovery.whip_duration_s/.01)
-            if configuration.recovery is not None else self.samples-1)
-        self.first_hit_delivery = configuration.matching.reward_mode == 'first_hit_flexible_delivery_v2'
-        if self.first_hit_delivery: self.time_samples = 450
+        self.time_samples = self.samples-1
         self.decisions = (self.samples-1)//self.stride
         self.time = torch.arange(self.samples,device=self.device,dtype=torch.float64)*.01
         self.maximum_thrust = float(sum(m.config['actuator']['maximum_thrust_n']))
@@ -82,28 +78,13 @@ class Stage1Environment:
         self.hold = m.tensor([0.,0.,0.,yaw])
         self.delay = round(m.config['controller']['command_delay_s']/.01)
         self.frame_size = 18+6*m.n+8+self.action_size+1
-        self.event_recovery = (configuration.recovery is not None
-            and configuration.recovery.timing_mode=='after_first_geometric_hit_v1')
-        self.policy_encoder_options = dict(history_samples=451) if self.first_hit_delivery else {}
-        if settings.get('horizontal_fold_contract') or settings.get('retained_fold_delivery_contract') or settings.get('continuous_whip_contract'):
-            self.policy_encoder_options = dict(history_samples=401 if settings.get('continuous_whip_contract')=='continuous_directional_whip_four_second_v6' else 701)
-        original_frame_size = self.frame_size
+        self.policy_encoder_options = dict(history_samples=401)
         # Deployable actor inputs are unchanged. Critic-only state is stored
         # separately at policy boundaries, never appended to actor histories.
         self.actor_columns = list(range(18))
         for offset in (18,18+3*m.n):
             self.actor_columns += [offset+3*int(i)+j for i in m.marker_indices for j in range(3)]
         self.actor_columns += list(range(18+6*m.n+8,self.frame_size))
-        if self.event_recovery:
-            if original_frame_size != 96:
-                raise ValueError('Stage4 source-preserving adapter requires the registered11-node interface')
-            self.policy_encoder_options = dict(history_samples=451,phase_columns=[96,97])
-            self.frame_size += 2
-        self.relative_target_input = settings.get('target_observation') == 'initial_relative_position_v1'
-        if self.relative_target_input:
-            # Append a static task input; legacy physical/history columns stay exact.
-            self.policy_encoder_options['goal_columns'] = list(range(self.frame_size,self.frame_size+3))
-            self.frame_size += 3
         length = float(m.rest.sum())
         self.physical_scale = m.tensor([length]*3+[1.]*9+[4.]*6+
             [length]*(3*(m.n-1))+[4.]*(3*(m.n-1))+[math.pi]*(m.n-1))
@@ -115,63 +96,15 @@ class Stage1Environment:
         # Current/previous physical state, previous dt, motors/wrench, delay
         # queue, previous action, time. Angles stay unwrapped (winding retained).
         self.critic_state_size = 2*len(self.physical_scale)+1+8+4*self.delay+self.action_size+1
-        if 'target_curriculum' in settings or configuration.recovery is not None:
-            self.critic_state_size += 2  # Target dimensions, not actor/deployment observations.
-        if self.event_recovery:
-            self.critic_state_size += 2  # Observable recovery phase and elapsed time.
-        if settings.get('horizontal_fold_contract'): self.critic_state_size += 16
-        if settings.get('retained_fold_delivery_contract'):
-            from .retained_fold_delivery import FEATURE_SIZE
-            self.critic_state_size += FEATURE_SIZE
-        if settings.get('continuous_whip_contract'):
-            from .continuous_whip import FEATURE_SIZE
-            self.critic_state_size += FEATURE_SIZE + (2 if settings['continuous_whip_contract'] in ('continuous_horizontal_whip_soft_workspace_v2','continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6') else 0)
-        self.scorer = make_scorer(m.rest,self.time,configuration,initial_position=self.origin)
-        if self.relative_target_input:
-            self.goal_relative = ((self.scorer.center-self.origin)/length).float()
+        from .continuous_whip import FEATURE_SIZE
+        from .horizontal_fold_environment import HorizontalFoldMetadata
+        self.critic_state_size += FEATURE_SIZE + 2
+        self.scorer = HorizontalFoldMetadata(m.rest,self.time,configuration,initial_position=self.origin)
         self.graph = None
         self.execution_backend = 'eager_v1'
         self.reset()
         if not bool(self.active.all()):
             raise ValueError('Initial state is outside the task envelope')
-        if self.device == 'cuda' and capture:
-            conditional = _conditional_solver_enabled(conditional)
-            self.execution_backend = ('cuda_conditional_v1' if conditional
-                                      else 'cuda_host_iterations_v1')
-            if progress: progress(dict(phase='compiling', execution_backend=self.execution_backend,
-                                       message='Preparing batched C++ physics ('+self.execution_backend+')'))
-            m.compile_batched_physics()
-            # Both schedulers replay the same compiled slots and convergence
-            # masks. Never lower the simulator's20-slot hard maximum.
-            if conditional:
-                from .conditional_graph import install
-                self.conditional_slots=install(m)
-            else:
-                m._batch_implicit_iteration = IterationGraphs(m._batch_implicit_iteration)
-            self.static_state = [v.clone() for v in self.seed]
-            self.static_command = self.hold.expand(self.batch,4).clone()
-            # Conditional replay explicitly warms both mask layouts before
-            # capture; it need not run all20 already-converged slots at startup.
-            with nullcontext() if conditional else m.cuda_graph_warmup():
-                for _ in range(2):
-                    result = m.step_unchecked(ControlledState(*self.static_state),self.static_command,
-                                              self.controller,batch=True)
-                    self._result_finite(result)
-            torch.cuda.synchronize()
-            def replay_physics():
-                self.graph_output = m.step_unchecked(ControlledState(*self.static_state),
-                    self.static_command,self.controller,batch=True)
-                # Same numerical gates; the smaller graphs end before these.
-                self.graph_finite = self._result_finite(self.graph_output)
-            self.graph = PhysicsReplay(replay_physics)
-            if progress:
-                runtime = (dict(cuda_driver_api=self.conditional_slots.driver.driver_version,
-                                nvrtc_version=list(self.conditional_slots.driver.nvrtc_version))
-                           if conditional else {})
-                progress(dict(phase='ready', execution_backend=self.execution_backend,
-                              message='Physics ready ('+self.execution_backend+')', **runtime))
-        self.reset()
-
     def _observe(self, state):
         def one(*values):
             s = ControlledState(*values)
@@ -198,8 +131,6 @@ class Stage1Environment:
         self.failed = torch.zeros_like(self.active)
         self.terminal_hit = torch.zeros_like(self.active)
         self.executed_samples = torch.zeros(self.batch,device=self.device,dtype=torch.long)
-        self.recovery_start = torch.full((self.batch,),-1,device=self.device,dtype=torch.long)
-        self.recovery_hit = torch.zeros_like(self.active)
         self.workspace_breached = torch.zeros_like(self.active)
         self.history = {name: torch.zeros((self.batch,self.samples,*shape),device=self.device,dtype=torch.float64)
             for name,shape in dict(drone_positions=(3,),drone_velocities=(3,),drone_rotations=(3,3),
@@ -214,9 +145,6 @@ class Stage1Environment:
         if not bool(inside.all()): raise ValueError('Initial state is outside the workspace')
         hold = self.hold.expand(self.batch,4)
         self._record(p,v,q,cv,hold,hold,self.active,~inside)
-        if self.first_hit_delivery:
-            from .first_hit_delivery import FirstHitTracker
-            self.delivery_tracker = FirstHitTracker(q,self.model.rest,self.scorer.center)
         self._record_critic_state()
         return self.frames,self.indices()
 
@@ -233,14 +161,7 @@ class Stage1Environment:
             s.motor_thrust_n/self.maximum_thrust,s.held_wrench/self.wrench_scale,
             (self.queue/self.queue_scale).flatten(1),self.previous_action,
             physical.new_full((self.batch,1),self.index/self.time_samples)),-1).float()
-        if 'target_curriculum' in self.settings or self.configuration.recovery is not None:
-            surface = self.configuration.strike_surface
-            dimensions = features.new_tensor([surface.width_m, surface.height_m])/self.model.rest.sum()
-            features = torch.cat((features, dimensions.expand(self.batch,2)), -1)
-        if self.event_recovery:
-            features = torch.cat((features,self._recovery_phase().float()),-1)
-        if self.settings.get('horizontal_fold_contract') or self.settings.get('retained_fold_delivery_contract') or self.settings.get('continuous_whip_contract'):
-            features = torch.cat((features,self._task_critic_features()),-1)
+        features = torch.cat((features,self._task_critic_features()),-1)
         self.critic_states[:,self.decision] = features
 
     def _record(self,p,v,q,cv,command,applied,valid,violation):
@@ -256,43 +177,10 @@ class Stage1Environment:
             state.omega_body/4,((q-q[:,:1])/m.rest.sum()).flatten(1),((cv-cv[:,:1])/4).flatten(1),
             state.motor_thrust_n/self.maximum_thrust,state.held_wrench/self.wrench_scale,self.previous_action,
             torch.full((self.batch,1),i/self.time_samples,device=self.device,dtype=torch.float64)),-1).float()
-        frame = torch.cat((frame,self._recovery_phase().float()),-1) if self.event_recovery else frame
-        if self.relative_target_input:
-            frame = torch.cat((frame,self.goal_relative.expand(self.batch,3)),-1)
         self.frames[:,i] = frame
 
-    def _recovery_phase(self):
-        started = self.recovery_start>=0
-        elapsed = torch.where(started,(self.index-self.recovery_start).clamp_min(0),0)
-        return torch.stack((started.float(),elapsed.float()/(100*self.configuration.recovery.recovery_duration_s)),1)
 
-    def _advance_recovery_clock(self):
-        # Geometric crossing is observed at100Hz; commands change only at the
-        # next policy decision and retain the original actuator/controller delay.
-        from .strike import surface_events
-        i = self.index
-        pending = self.active & (self.recovery_start<0)
-        hit = surface_events(self.history['cable_positions'][:,i-1:i+1],
-            self.history['cable_velocities'][:,i-1:i+1],self.time[i-1:i+1],
-            self.scorer.center,self.scorer.direction,self.configuration.strike_surface,
-            self.scorer.speed)['geometric_hit'][:,0]
-        deadline = round(self.configuration.recovery.whip_duration_s/.01)
-        hit = pending & hit & (i<=deadline)
-        begin = hit | (pending & (i>=deadline))
-        self.recovery_start = torch.where(begin,i,self.recovery_start)
-        self.recovery_hit |= hit
-        self.frames[:,i,self.policy_encoder_options['phase_columns']] = self._recovery_phase().float()
-        self.active &= ~((self.recovery_start>=0)
-            & (i>=self.recovery_start+round(self.configuration.recovery.recovery_duration_s/.01)))
 
-    @torch.no_grad()
-    def _advance(self, applied):
-        if self.graph is None:
-            return self.model.step_unchecked(self.state,applied,self.controller,batch=True)
-        for buffer,value in zip(self.static_state,controlled_values(self.state)): buffer.copy_(value)
-        self.static_command.copy_(applied)
-        self.graph.replay()
-        return self.graph_output
 
     def _result_finite(self,result):
         values = controlled_values(result)
@@ -302,248 +190,14 @@ class Stage1Environment:
         finite &= (torch.linalg.det(r)-1).abs() <= 1e-8
         return finite
 
-    @torch.no_grad()
-    def step(self, action):
-        if self.decision >= self.decisions or not bool(self.active.any()):
-            raise RuntimeError('Episode cohort has finished; reset before stepping')
-        if action.shape != (self.batch,self.action_size) or not bool(torch.isfinite(action).all()) or bool((action.abs()>1.000001).any()):
-            raise ValueError('Expected three finite normalized '+self.action_interface+' requests in [-1,1]')
-        action = action.detach().clamp(-1,1)
-        self.actions[:,self.decision] = torch.where(self.active[:,None], action, 0.)
-        self.previous_action = torch.where(self.active[:,None], action, self.previous_action)
-        command = torch.cat((action.double()*self.action_limit,self.hold[3].expand(self.batch,1)),1)
-        active_at_start = self.active.clone()
-        for _ in range(self.stride):
-            was_active = self.active.clone()
-            if self.first_hit_delivery:
-                self.executed_samples += was_active.long()
-            applied = self.queue[:,0].clone() if self.delay else command
-            if self.delay:
-                shifted = torch.cat((self.queue[:,1:],command[:,None]),1)
-                self.queue = torch.where(was_active[:,None,None], shifted, self.queue)
-            result = self._advance(applied)
-            values = controlled_values(result)
-            finite = (self.graph_finite if self.graph is not None and result is self.graph_output
-                      else self._result_finite(result))
-            keep = was_active & finite
-            self.state = ControlledState(*(torch.where(keep.reshape(-1,*([1]*(a.ndim-1))),a,b)
-                for a,b in zip(values,controlled_values(self.state))))
-            p,v,q,cv = self._observe(self.state)
-            safe = self._envelope(p,q,self.state.rotation)
-            inside = self.configuration.workspace.contains(p[:,None],self.origin.expand(self.batch,3))[:,0]
-            violation = keep & ~inside
-            self.workspace_breached |= violation
-            self.active &= finite & safe
-            self.failed |= was_active & ~self.active
-            self.index += 1
-            self._record(p,v,q,cv,command,applied,keep,violation)
-            if self.first_hit_delivery:
-                i=self.index
-                reached=self.delivery_tracker.observe(self.history['cable_positions'][:,i-1],q,
-                    self.history['cable_velocities'][:,i-1],cv,self.active)
-                self.terminal_hit |= reached
-                self.active &= ~reached
-                if not bool(self.active.any()): break
-            if self.event_recovery:
-                self._advance_recovery_clock()
-                if not bool(self.active.any()):
-                    break
-            if self.configuration.termination in ('first_qualified_hit_v1', 'first_geometric_hit_v1'):
-                from .strike import surface_events
-                i = self.index
-                crossing = surface_events(self.history['cable_positions'][:,i-1:i+1],
-                    self.history['cable_velocities'][:,i-1:i+1], self.time[i-1:i+1],
-                    self.scorer.center, self.scorer.direction, self.configuration.strike_surface,
-                    self.scorer.speed)['geometric_hit' if self.configuration.termination == 'first_geometric_hit_v1' else 'qualified'][:,0]
-                reached = self.active & crossing
-                self.terminal_hit |= reached
-                self.active &= ~reached
-                if not bool(self.active.any()):
-                    break
-        self.lengths += active_at_start.long()
-        self.decision += 1
-        self._record_critic_state()
-        done = self.decision == self.decisions or not bool(self.active.any())
-        return self.frames,self.indices(),done
 
-    @torch.no_grad()
     def scoring_prefix(self):
-        observed = self.numerical_valid
-        hit = torch.zeros(self.batch,device=self.device,dtype=torch.bool)
-        if self.configuration.termination in ('first_qualified_hit_v1', 'first_geometric_hit_v1'):
-            from .strike import surface_events
-            h = self.history
-            events = surface_events(h['cable_positions'],h['cable_velocities'],self.time,
-                self.scorer.center,self.scorer.direction,self.configuration.strike_surface,self.scorer.speed)
-            safe = self._envelope(h['drone_positions'].flatten(0,1),
-                h['cable_positions'].flatten(0,1),h['drone_rotations'].flatten(0,1)).reshape(self.batch,self.samples)
-            prefix_safe = (observed & safe).long().cumprod(1).bool()
-            qualified = events['geometric_hit' if self.configuration.termination == 'first_geometric_hit_v1' else 'qualified'][:,:-1] & prefix_safe[:,1:]
-            hit = qualified.any(1)
-            endpoint = qualified.long().argmax(1)+1
-            observed = observed & (~hit[:,None] | (torch.arange(self.samples,device=self.device)[None] <= endpoint[:,None]))
-        return observed,hit
+        return self.numerical_valid, torch.zeros(self.batch, device=self.device, dtype=torch.bool)
 
-    @torch.no_grad()
-    def finish(self):
-        if self.decision < self.decisions and bool(self.active.any()):
-            raise RuntimeError('Do not score an interrupted cohort as completed episodes')
-        h, c = self.history,self.configuration
-        first_hit_mode = c.termination in ('first_qualified_hit_v1', 'first_geometric_hit_v1')
-        observed,hit = self.scoring_prefix()
-        terminal_samples = observed.long().sum(1) if first_hit_mode else None
-        score = self.scorer(h['cable_positions'],h['cable_velocities'],observed,
-            **({'failed': self.failed} if c.matching.reward_mode in ('directed_shape_release_v1', 'directed_unified_fold_v1', 'flexible_excitation_v1', 'directed_fold_formation_v1', 'directed_fold_release_aligned_v1', 'first_hit_flexible_delivery_v2', 'flexible_delivery_v1', 'directed_shape_delivery_v1') else {}),
-            **({'terminal_samples': terminal_samples} if first_hit_mode else {}),
-            **({'drone_positions':h['drone_positions']}
-                if c.recovery is None and c.matching.reward_mode in ('directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1') else {}),
-            **({'drone_positions':h['drone_positions'],'drone_velocities':h['drone_velocities']}
-                if c.recovery is not None else {}),
-            **({'recovery_start_samples':torch.where(self.recovery_start>=0,self.recovery_start,
-                       round(c.recovery.whip_duration_s/.01)),
-                 'recovery_hit':self.recovery_hit,'terminal_samples':observed.long().sum(1)}
-                if self.event_recovery else {}))
-        count = round(c.episode.duration_s/.01)
-        acceleration = h['drone_velocities'][:,1:count+1].diff(dim=1,prepend=h['drone_velocities'][:,:1])/.01
-        if first_hit_mode:
-            acceleration = torch.where(observed[:,1:count+1,None], acceleration, 0.)
-        cost = c.returns.acceleration_cost_weight*(acceleration/c.returns.acceleration_cost_scale_mps2).square().sum(-1).mean(-1)
-        valid = (~self.failed | hit) & score.valid if first_hit_mode else ~self.failed & score.valid
-        if not first_hit_mode and not self.event_recovery and not self.first_hit_delivery:
-            valid &= self.numerical_valid.all(-1)
-        workspace_charge = self.workspace_charges(observed)
-        workspace_cost = workspace_charge.sum(1)
-        movement_charge = None
-        soft_fold_formation = (c.matching.reward_mode == 'directed_fold_formation_v1'
-                               and self.workspace_penalty.weight > 0)
-        soft_full_horizon_guide = c.matching.reward_mode in ('directed_unified_fold_v1', 'flexible_excitation_v1', 'first_hit_flexible_delivery_v2', 'flexible_delivery_v1')
-        if 'movement_penalty' in self.settings or soft_fold_formation or soft_full_horizon_guide:
-            from .movement import MovementPenalty
-            path_settings = self.settings.get('movement_penalty', dict(mode='path_length_v1',weight_per_cable_length=1.))
-            distance,movement_charge = MovementPenalty(**path_settings).measure(
-                h['drone_positions'],observed,self.model.rest.sum())
-            if soft_fold_formation or soft_full_horizon_guide:
-                # Keep path as a diagnostic; movement inside the workspace is free.
-                movement_charge = torch.zeros_like(movement_charge)
-            accrued = movement_charge.sum(1)
-            score.components['drone_path_length_m'] = distance.sum(1)
-            score.components['movement_accrued_cost'] = accrued
-            score.components['movement_cost'] = torch.where(valid,accrued,0.)
-        time_charge = torch.zeros_like(workspace_charge)
-        if self.first_hit_delivery:
-            time_charge=(torch.arange(1,self.samples,device=self.device)[None] <= self.executed_samples[:,None]).to(torch.float64)*.001
-            score.components['time_cost']=time_charge.sum(1)
-        if c.matching.reward_mode in ('directed_hit_v1', 'geometric_hit_quality_v1'):
-            horizon = c.episode.duration_s+c.episode.post_hold_s
-            time_charge = observed[:, 1:].to(torch.float64)*(.01*c.matching.time_preference/horizon)
-            score.components['time_cost'] = time_charge.sum(1)
-        # Historical modes retain accrued cost on failure. Bounded discovery
-        # replaces the ENTIRE failed-episode return, including accrued cost.
-        returns = (torch.where(valid,score.score-cost,c.returns.failure_return)
-                   -workspace_cost-time_charge.sum(1))
-        if movement_charge is not None and not soft_full_horizon_guide:
-            # The failure outcome replaces the WHOLE return, including travel.
-            returns = torch.where(valid,returns-movement_charge.sum(1),c.returns.failure_return)
-        score.components['workspace_cost'] = workspace_cost
-        if soft_full_horizon_guide:
-            # Failure removes positive credit but never refunds accrued cost.
-            score.components['workspace_accrued_cost'] = workspace_cost
-        rational_return = (self.settings.get('stage1_return_transform') or self.settings.get('stage2_return_transform')) == 'negative_net_rational_v1'
-        if rational_return:
-            from .excitation import negative_net_rational
-            total_cost=workspace_cost+time_charge.sum(1) if self.first_hit_delivery else workspace_cost
-            raw_net = score.causal_best[:, -1]-total_cost
-            failure_cost = -negative_net_rational(-total_cost)
-            returns = torch.where(valid, negative_net_rational(raw_net),
-                                  c.returns.failure_return-failure_cost)
-            if self.first_hit_delivery:
-                inferred_hit=valid & (score.components['quality_hit_success']==1)
-                if not torch.equal(inferred_hit,self.terminal_hit & ~self.failed):
-                    raise ValueError('Online first-hit termination disagrees with offline crossing evidence')
-                timeout=valid & ~inferred_hit
-                returns=returns-2*timeout.to(returns.dtype)
-                score.components['timeout']=timeout.to(returns.dtype)
-                score.components['timeout_penalty']=2*timeout.to(returns.dtype)
-                score.components['terminal_quality_hit']=inferred_hit.to(returns.dtype)
-                score.components['executed_duration_s']=self.executed_samples.to(torch.float64)*.01
-                score.components['failure_applied_total_cost']=torch.where(valid,0.,failure_cost)
-            # Keep raw cost/guide distinct from the nonlinear episode return.
-            score.components['raw_net_delivery_return' if c.matching.reward_mode in ('flexible_delivery_v1','first_hit_flexible_delivery_v2') else 'raw_net_excitation_return'] = raw_net
-            score.components['return_compression_adjustment'] = torch.where(
-                valid, (negative_net_rational(raw_net) if self.first_hit_delivery else returns)-raw_net, total_cost-failure_cost)
-            score.components['failure_applied_total_cost' if self.first_hit_delivery else 'failure_applied_workspace_cost'] = torch.where(valid, 0., failure_cost)
-            score.components['net_episode_return'] = returns
-        if c.matching.reward_mode == 'directed_discovery_bounded_v1' or soft_fold_formation:
-            returns = torch.where(valid, returns, c.returns.failure_return)
-            score.components['workspace_accrued_cost'] = workspace_cost
-            score.components['workspace_cost'] = torch.where(valid, workspace_cost, 0.)
-        if c.recovery is not None:
-            end=(self.recovery_start.clamp_min(0) if self.event_recovery else
-                 torch.full_like(self.lengths,round(c.recovery.whip_duration_s/.01)))
-            before=torch.arange(workspace_charge.shape[1],device=self.device)[None]<end[:,None]
-            score.components['whip_workspace_cost']=torch.where(before,workspace_charge,0.).sum(1)
-            score.components['recovery_workspace_cost']=torch.where(~before,workspace_charge,0.).sum(1)
-        if first_hit_mode:
-            score.components['executed_duration_s'] = (terminal_samples-1).to(torch.float64)*.01
-            if c.termination == 'first_geometric_hit_v1':
-                score.components['terminal_geometric_hit'] = hit.to(torch.float64)
-                score.components['terminal_qualified_hit'] = score.components['strict_strike_success']
-            else:
-                score.components['terminal_qualified_hit'] = hit.to(torch.float64)
-        if not bool(torch.isfinite(returns).all()):
-            raise FloatingPointError('Nonfinite terminal reward')
-        # Redistribute the SAME undiscounted objective, not a sum of repeated
-        # event scores. Compute once per collected cohort, then store in replay.
-        # The cost denominator remains the full maneuver duration, including
-        # for short failed prefixes; the failure terminal correction overrides it.
-        charge = c.returns.acceleration_cost_weight*(
-            acceleration/c.returns.acceleration_cost_scale_mps2).square().sum(-1)/count
-        cumulative_cost = torch.cat((torch.zeros_like(charge[:, :1]), charge.cumsum(1)), 1)
-        cumulative_cost = torch.cat((cumulative_cost, cumulative_cost[:, -1:].expand(
-            -1, self.samples-cumulative_cost.shape[1])), 1)
-        running_charge = workspace_charge+time_charge
-        if movement_charge is not None:
-            running_charge = running_charge+movement_charge
-        cumulative_cost = cumulative_cost+torch.cat((torch.zeros_like(running_charge[:,:1]),running_charge.cumsum(1)),1)
-        potential = (score.causal_best-cumulative_cost)[:, ::self.stride]
-        if rational_return:
-            potential = negative_net_rational(potential)
-        rewards = potential.diff(dim=1)
-        scoring_lengths = ((terminal_samples-1+self.stride-1)//self.stride).clamp_min(1) if first_hit_mode else self.lengths
-        terminal = scoring_lengths-1
-        if bool((terminal < 0).any()):
-            raise ValueError('Completed episodes must contain a policy transition')
-        # This also claws back all earlier credit when a lane fails. Boundaries
-        # after the terminal step (including frozen lanes) are never replayed.
-        final_reward = returns-potential.gather(1, terminal[:, None])[:, 0]
-        rewards.scatter_(1, terminal[:, None], final_reward[:, None])
-        active = torch.arange(self.decisions, device=self.device)[None] < scoring_lengths[:, None]
-        rewards = rewards.masked_fill(~active, 0)
-        if (not bool(torch.isfinite(rewards).all()) or not torch.allclose(
-                rewards.sum(1), returns, rtol=1e-12, atol=1e-12)):
-            raise FloatingPointError('Redistributed rewards do not preserve episode return')
-        self.transition_rewards = rewards.float()
-        return returns.float(),valid,score,cost
 
     def workspace_charges(self, observed):
-        p,origin,c = self.history['drone_positions'],self.origin.expand(self.batch,3),self.configuration
-        if c.recovery is None:
-            charges=self.workspace_penalty.charges(p,origin,c.workspace,observed)
-            return charges*((self.samples-1)/450) if self.first_hit_delivery else charges
-        if self.event_recovery:
-            # Fixed reference denominators, never actual episode length: short
-            # hits/padded suffixes cannot dilute accrued boundary cost.
-            radial,vertical=self.workspace_penalty.distances(p,origin,c.workspace)
-            distance=(radial[:,1:].square()+vertical[:,1:].square())/self.workspace_penalty.distance_scale_m**2
-            start=torch.where(self.recovery_start>=0,self.recovery_start,
-                             round(c.recovery.whip_duration_s/.01))
-            before=torch.arange(1,self.samples,device=self.device)[None]<=start[:,None]
-            denominator=torch.where(before,c.recovery.whip_duration_s*100,c.recovery.recovery_duration_s*100)
-            return torch.where(observed[:,1:],distance*self.workspace_penalty.weight/denominator,0.)
-        end=round(c.recovery.whip_duration_s/.01)
-        # Preserve original /450 charge; normalize added /400 independently.
-        return torch.cat((self.workspace_penalty.charges(p[:,:end+1],origin,c.workspace,observed[:,:end+1]),
-            self.workspace_penalty.charges(p[:,end:],origin,c.workspace,observed[:,end:])),1)
+        return self.workspace_penalty.charges(self.history['drone_positions'],
+            self.origin.expand(self.batch,3),self.configuration.workspace,observed)
 
     def workspace_metrics(self):
         observed,_ = self.scoring_prefix()
@@ -559,13 +213,6 @@ class Stage1Environment:
             outside_duration_s=(((radial>0)|(vertical>0))&mask).sum(1)*.01,
             workspace_cost=self.workspace_charges(observed).sum(1))
 
-    def boundary_gate_cost(self):
-        if 'training_stage' not in self.settings:
-            return self.workspace_metrics()['workspace_cost']
-        # Gate uses each maneuver's EXECUTED duration, unlike the fixed-reference
-        # reward integral. Quiet padded suffixes cannot dilute containment.
-        return (self.workspace_penalty.weight/self.workspace_penalty.distance_scale_m**2
-                *self.workspace_metrics()['workspace_mean_square_excess_m2'])
 
     def replay_arrays(self, lane=0):
         # Valid numerical prefix only, including a finite envelope violation.
@@ -585,13 +232,8 @@ class Stage1Environment:
 
 
 def make_environment(settings, snapshot, configuration, scene, **kwargs):
-    if configuration.matching.reward_mode in ('continuous_horizontal_whip_v1', 'continuous_horizontal_whip_soft_workspace_v2','continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6'):
-        from .continuous_whip_environment import ContinuousWhipEnvironment
-        return ContinuousWhipEnvironment(settings,snapshot,configuration,scene,**kwargs)
-    if configuration.matching.reward_mode == 'retained_fold_delivery_v1':
-        from .retained_fold_delivery_environment import RetainedFoldDeliveryEnvironment
-        return RetainedFoldDeliveryEnvironment(settings,snapshot,configuration,scene,**kwargs)
-    if configuration.matching.reward_mode == 'horizontal_fold_outreach_v2':
-        from .horizontal_fold_environment import HorizontalFoldEnvironment
-        return HorizontalFoldEnvironment(settings,snapshot,configuration,scene,**kwargs)
-    return Stage1Environment(settings,snapshot,configuration,scene,**kwargs)
+    from .continuous_whip import SHORT_MODE
+    from .continuous_whip_environment import ContinuousWhipEnvironment
+    if configuration.matching.reward_mode != SHORT_MODE:
+        raise ValueError('Retired training task; use the current four-second Stage 1 preset')
+    return ContinuousWhipEnvironment(settings,snapshot,configuration,scene,**kwargs)

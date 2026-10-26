@@ -8,7 +8,6 @@ import numpy as np
 import torch
 from simulation.tensor_model import ControlledState,controlled_values
 from .sac_environment import Stage1Environment
-from .horizontal_fold import HorizontalFoldAttempt
 from .stage1 import Stage1Score
 
 
@@ -26,7 +25,7 @@ class HorizontalFoldEnvironment(Stage1Environment):
         # iteration acceleration, with unchanged convergence masks and limits.
         kwargs['capture']=False
         super().__init__(*args,**kwargs)
-        horizon=4 if self.configuration.matching.reward_mode=='continuous_directional_whip_four_second_v6' else 7
+        horizon=4
         if self.model.n!=11 or self.samples!=100*horizon+1 or self.decisions!=50*horizon:
             raise ValueError('Fold task requires ten links and its registered horizon')
         self.execution_backend='native_substep_guard_v1'
@@ -42,22 +41,7 @@ class HorizontalFoldEnvironment(Stage1Environment):
                 self.model._batch_implicit_iteration=IterationGraphs(self.model._batch_implicit_iteration)
                 self.execution_backend='cuda_iteration_substep_guard_v1'
 
-    def reset(self):
-        self.attempts=None
-        result=super().reset()
-        rest=self.model.rest.detach().cpu().numpy()
-        self.attempts=[HorizontalFoldAttempt(rest) for _ in range(self.batch)]
-        self.ledger=torch.zeros((self.batch,self.decisions),dtype=torch.float64,device=self.device)
-        self.terminal_times=torch.zeros(self.batch,dtype=torch.float64,device=self.device)
-        self.failure_reasons=['']*self.batch
-        self.substep_records=[]
-        self._record_critic_state()
-        return result
 
-    def _task_critic_features(self):
-        values=(np.stack([a.features() for a in self.attempts]) if self.attempts is not None
-                else np.zeros((self.batch,16),np.float32))
-        return torch.as_tensor(values,device=self.device)
 
     def _substep_observer(self,state,elapsed):
         p,v,q,cv=self._observe(state)
@@ -139,28 +123,6 @@ class HorizontalFoldEnvironment(Stage1Environment):
         self.lengths+=was_decision.long();self.decision+=1;self._record_critic_state()
         return self.frames,self.indices(),not bool(self.active.any())
 
-    @torch.no_grad()
-    def finish(self):
-        if any(a.terminal is None for a in self.attempts):raise RuntimeError('Interrupted cohort cannot be scored')
-        dtype=torch.float64
-        tensor=lambda x:torch.tensor(x,device=self.device,dtype=dtype)
-        returns=tensor([a.total for a in self.attempts]);valid=~self.failed
-        event=torch.tensor([a.terminal=='event_end' for a in self.attempts],device=self.device)
-        H=tensor([a.selected['H'] if a.selected is not None else 0. for a in self.attempts])
-        components=dict(horizontal_reach_fraction=H,qualified_outreach=tensor([a.qualified for a in self.attempts]),
-            fold_formed=tensor([a.formed for a in self.attempts]),fold_propagated=tensor([a.propagated for a in self.attempts]),
-            fold_opened=tensor([a.opened for a in self.attempts]),event_completed=event.double(),
-            timeout=tensor([a.terminal=='timeout' for a in self.attempts]),executed_duration_s=self.terminal_times,
-            time_cost=.1*self.terminal_times,workspace_cost=torch.zeros_like(returns),
-            net_episode_return=returns,event_credit=torch.where(event,5*H.square(),0.))
-        for name in ('world_outward_mps','relative_outward_mps','world_cosine','relative_cosine'):
-            components[name]=tensor([a.selected[name] if a.selected is not None else 0. for a in self.attempts])
-        indices=torch.tensor([round(a.selected['time_s']*100) if a.selected else -1 for a in self.attempts],device=self.device)
-        score=Stage1Score(components['event_credit'],valid,event,indices,components,
-            torch.zeros((self.batch,self.samples),device=self.device,dtype=dtype))
-        if not torch.allclose(self.ledger.sum(1),returns,atol=1e-12,rtol=1e-12):raise RuntimeError('Fold ledger does not telescope')
-        self.transition_rewards=self.ledger.float()
-        return returns.float(),valid,score,torch.zeros_like(returns)
 
     def workspace_metrics(self):
         values=super().workspace_metrics()
@@ -168,9 +130,6 @@ class HorizontalFoldEnvironment(Stage1Environment):
         values['executed_duration_s']=self.terminal_times.clone()
         return values
 
-    def event_records(self):
-        return [dict(terminal=a.terminal,terminal_time_s=a.time,selected=a.selected,events=a.log,
-                     qualified=a.qualified,episode_return=a.total) for a in self.attempts]
 
     def replay_arrays(self,lane=0):
         result=super().replay_arrays(lane)

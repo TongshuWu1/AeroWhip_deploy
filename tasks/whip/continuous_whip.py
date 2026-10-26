@@ -9,53 +9,54 @@ import numpy as np
 
 from .horizontal_fold import FoldGeometry
 
-MODE = 'continuous_horizontal_whip_v1'
-FEATURE_SIZE = 16
-CONTRACT = dict(version=MODE, links=10, horizon_s=7., observation_hz=100,
-    history_window_s=.1, support_fade_s=.1, travel_reference_fraction=.1,
-    soft_fold_lower_deg=90., soft_fold_upper_deg=150., coherence_reference=.8,
-    rate_weight=10., reach_power=2., alignment_power=2., failure_return=-10.,
-    time_cost_per_s=0., effort_cost=0., path_cost=0., target_reward=False,
-    failure_cancels_credit=True, per_whip_bonus=False, early_completion=False,
-    minimum_radius_fraction=1e-6, rate_integration='right_endpoint_dt_v1',
-    geometry='existing_ten_link_FoldGeometry_v1',
-    output_speed='minimum_world_radial_relative_radial_end_to_end_extension_v1')
-TRACE_FIELDS = ('fold_support', 'horizontal_reach_fraction', 'alignment',
-                'world_outward_mps', 'relative_outward_mps', 'straightening_mps',
-                'effective_outward_mps', 'reward_rate', 'accrued_credit',
-                'end_to_end_fraction', 'transport_signal', 'max_turn_rad')
-
-
-SOFT_MODE = 'continuous_horizontal_whip_soft_workspace_v2'
-SOFT_CONTRACT = dict(CONTRACT, version=SOFT_MODE, workspace_termination=False,
-    workspace_cost='10_times_fixed_horizon_mean_squared_excess_m2_v1',
-    workspace_radius_m=.55, workspace_height_lower_m=1.5, workspace_height_upper_m=2.6,
-    negative_net_transform='5x/(5-x) for x<0; identity otherwise',
-    failure_cancels_cost_and_credit=True)
-PLAIN_MODE = 'continuous_horizontal_whip_distance_v3'
-PLAIN_CONTRACT = dict(SOFT_CONTRACT, version=PLAIN_MODE,
-    negative_net_transform='identity', failure_return=None,
-    failure_cancels_credit=False, failure_cancels_cost_and_credit=False,
-    failure_cost_per_remaining_s=1., failure_preserves_prefix=True)
-FULL_MODE = 'continuous_horizontal_whip_full_horizon_v4'
-FULL_CONTRACT = dict(PLAIN_CONTRACT, version=FULL_MODE, physical_termination=False,
-    physical_violation_diagnostic=True, numerical_termination=True)
-DIRECTED_MODE = 'continuous_directional_whip_full_horizon_v5'
-DIRECTED_CONTRACT = dict(FULL_CONTRACT, version=DIRECTED_MODE,
-    output_direction_world=[1., 0., 0.],
-    reach_measure='positive_world_x_attachment_relative_extension_v1',
-    output_speed='minimum_world_x_relative_x_end_to_end_extension_v1')
 SHORT_MODE = 'continuous_directional_whip_four_second_v6'
-SHORT_CONTRACT = dict(DIRECTED_CONTRACT, version=SHORT_MODE, horizon_s=4.)
+FEATURE_SIZE = 16
+SHORT_CONTRACT = {'version': 'continuous_directional_whip_four_second_v6',
+ 'links': 10,
+ 'horizon_s': 4.0,
+ 'observation_hz': 100,
+ 'history_window_s': 0.1,
+ 'support_fade_s': 0.1,
+ 'travel_reference_fraction': 0.1,
+ 'soft_fold_lower_deg': 90.0,
+ 'soft_fold_upper_deg': 150.0,
+ 'coherence_reference': 0.8,
+ 'rate_weight': 10.0,
+ 'reach_power': 2.0,
+ 'alignment_power': 2.0,
+ 'failure_return': None,
+ 'time_cost_per_s': 0.0,
+ 'effort_cost': 0.0,
+ 'path_cost': 0.0,
+ 'target_reward': False,
+ 'failure_cancels_credit': False,
+ 'per_whip_bonus': False,
+ 'early_completion': False,
+ 'minimum_radius_fraction': 1e-06,
+ 'rate_integration': 'right_endpoint_dt_v1',
+ 'geometry': 'existing_ten_link_FoldGeometry_v1',
+ 'output_speed': 'minimum_world_x_relative_x_end_to_end_extension_v1',
+ 'workspace_termination': False,
+ 'workspace_cost': '10_times_fixed_horizon_mean_squared_excess_m2_v1',
+ 'workspace_radius_m': 0.55,
+ 'workspace_height_lower_m': 1.5,
+ 'workspace_height_upper_m': 2.6,
+ 'negative_net_transform': 'identity',
+ 'failure_cancels_cost_and_credit': False,
+ 'failure_cost_per_remaining_s': 1.0,
+ 'failure_preserves_prefix': True,
+ 'physical_termination': False,
+ 'physical_violation_diagnostic': True,
+ 'numerical_termination': True,
+ 'output_direction_world': [1.0, 0.0, 0.0],
+ 'reach_measure': 'positive_world_x_attachment_relative_extension_v1'}
+TRACE_FIELDS = ('fold_support', 'horizontal_reach_fraction', 'alignment', 'world_outward_mps', 'relative_outward_mps', 'straightening_mps', 'effective_outward_mps', 'reward_rate', 'accrued_credit', 'end_to_end_fraction', 'transport_signal', 'max_turn_rad')
 SOFT_TRACE_FIELDS = TRACE_FIELDS + ('workspace_cost', 'raw_net_return', 'net_return')
 
 
-def net_return(value):
-    return value if value >= 0 else 5.*value/(5.-value)
-
-
-def output_metrics(positions, velocities, length, *, directed_x=False):
-    """Same-sample output: legacy radial heading, or fixed world +X for v5."""
+def output_metrics(positions, velocities, length, *, directed_x=True):
+    """Same-sample world +X output; preparation remains unconstrained."""
+    if not directed_x: raise ValueError("Only world +X output is supported")
     r=positions[-1]-positions[0];relative=velocities[-1]-velocities[0]
     rho=float(np.linalg.norm(r[:2]));distance=float(np.linalg.norm(r))
     radial=np.r_[r[:2]/rho,0.] if rho>1e-6*length else np.zeros(3)
@@ -76,8 +77,8 @@ def output_metrics(positions, velocities, length, *, directed_x=False):
 
 class ContinuousWhipAttempt:
     """One full-horizon episode, without event-count or preparation bonuses."""
-    def __init__(self, rest, *, workspace_origin=None, plain_net=False, directed_x=False, horizon_s=7.):
-        if horizon_s not in (4.,7.) or (horizon_s==4. and not (directed_x and plain_net and workspace_origin is not None)):
+    def __init__(self, rest, *, workspace_origin=None, plain_net=True, directed_x=True, horizon_s=4.):
+        if horizon_s != 4. or not (directed_x and plain_net and workspace_origin is not None):
             raise ValueError('Four-second horizon requires the directed plain-workspace task')
         self.horizon_s=float(horizon_s)
         self.geometry=FoldGeometry(rest);self.L=self.geometry.L
@@ -163,21 +164,17 @@ class ContinuousWhipAttempt:
     def prefix_return(self):
         if self.workspace_origin is None:return self.accrued
         raw=self.accrued-self.cost
-        return raw if self.plain_net else net_return(raw)
+        return raw
 
     def fail(self,time,reason='physical_failure'):
         if self.terminal is not None or not self.initialized:raise RuntimeError('Episode is not active')
         if not self.time<=time<=self.horizon_s+1e-9 or reason in ('horizon','hit','event_end','timeout'):
             raise ValueError('Failure must follow the valid prefix')
-        if self.plain_net:
-            self.failure_cost=max(0.,self.horizon_s-time)
-            correction=-self.failure_cost
-            self.total=self.prefix_return()-self.failure_cost
-            entry=dict(kind=reason,time_s=time,return_value=self.total,
-                failure_cost=self.failure_cost,preserved_credit=self.accrued,preserved_workspace_cost=self.cost)
-        else:
-            correction=-10.-self.total;self.total=-10.
-            entry=dict(kind=reason,time_s=time,return_value=-10.,cancelled_credit=self.accrued)
+        self.failure_cost=max(0.,self.horizon_s-time)
+        correction=-self.failure_cost
+        self.total=self.prefix_return()-self.failure_cost
+        entry=dict(kind=reason,time_s=time,return_value=self.total,
+            failure_cost=self.failure_cost,preserved_credit=self.accrued,preserved_workspace_cost=self.cost)
         self.time=float(time);self.terminal=reason;self.log.append(entry)
         return correction
 
@@ -203,4 +200,4 @@ class ContinuousWhipAttempt:
                 fold_support_integral_s=self.support_time,positive_output_duration_s=self.output_time),
             workspace_cost=self.cost,raw_net_return=self.accrued-self.cost,failure_cost=self.failure_cost,
             output_direction_world=[1.,0.,0.] if self.directed_x else None,
-            contract=SHORT_MODE if self.horizon_s==4. else DIRECTED_MODE if self.directed_x else PLAIN_MODE if self.plain_net else MODE if self.workspace_origin is None else SOFT_MODE,qualification_note='Continuous diagnostic; binary whip success is not defined.')
+            contract=SHORT_MODE,qualification_note='Continuous diagnostic; binary whip success is not defined.')

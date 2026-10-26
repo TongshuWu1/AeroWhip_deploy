@@ -1,11 +1,17 @@
 {
-  "removed_bytes": 2859528247,
-  "removed_entries": 4845,
-  "reason": "Verified redundant old-release copies, generated Python caches and stale worker locks; unique records retained in new archive.",
-  "tests": {
-    "run": 570,
-    "skipped": 10,
-    "result": "passed",
-    "environment": "CPU only; CUDA_VISIBLE_DEVICES empty"
-  }
+  "previous_duplicate_cleanup_bytes": 2859528247,
+  "previous_duplicate_cleanup_entries": 4845,
+  "archive_verified_removed_bytes": 15028642560,
+  "archive_verified_removed_files": 10676,
+  "preserved_changed_files": [],
+  "obsolete_stop_markers_removed": 19,
+  "release": "https://github.com/TongshuWu1/AeroWhip_deploy/releases/tag/handoff-2026-10-25",
+  "local_backup": "/home/tony-5090/PycharmProjects/AeroWhip-backup-20261025",
+  "current_tests": {
+    "run": 229,
+    "passed": 227,
+    "skipped": 2,
+    "environment": "CPU only, Qt offscreen"
+  },
+  "preservation_commit": "3c9a49e"
 }

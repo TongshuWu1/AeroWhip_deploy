@@ -4,18 +4,18 @@ import torch
 from .horizontal_fold_environment import HorizontalFoldEnvironment, HorizontalFoldMetadata
 from .sac_environment import Stage1Environment
 from .stage1 import Stage1Score
-from .continuous_whip import ContinuousWhipAttempt, FEATURE_SIZE, TRACE_FIELDS, SOFT_MODE, PLAIN_MODE, FULL_MODE, DIRECTED_MODE, SHORT_MODE, SOFT_TRACE_FIELDS
+from .continuous_whip import ContinuousWhipAttempt, FEATURE_SIZE, TRACE_FIELDS, SHORT_MODE, SOFT_TRACE_FIELDS
 
 ContinuousWhipMetadata=HorizontalFoldMetadata
 
 
 class ContinuousWhipEnvironment(HorizontalFoldEnvironment):
     def __init__(self,settings,snapshot,configuration,scene,**kwargs):
-        self.soft_workspace=configuration.matching.reward_mode in (SOFT_MODE,PLAIN_MODE,FULL_MODE,DIRECTED_MODE,SHORT_MODE)
-        self.plain_net=configuration.matching.reward_mode in (PLAIN_MODE,FULL_MODE,DIRECTED_MODE,SHORT_MODE)
-        self.directed_x=configuration.matching.reward_mode in (DIRECTED_MODE,SHORT_MODE)
-        self.horizon_s=configuration.episode.duration_s
-        self.physical_termination=configuration.matching.reward_mode not in (FULL_MODE,DIRECTED_MODE,SHORT_MODE)
+        if configuration.matching.reward_mode != SHORT_MODE:
+            raise ValueError('Only the current four-second Stage 1 is supported')
+        self.soft_workspace = self.plain_net = self.directed_x = True
+        self.horizon_s = 4.
+        self.physical_termination = False
         super().__init__(settings,snapshot,configuration,scene,**kwargs)
 
     @torch.no_grad()

@@ -12,7 +12,7 @@ os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 from PySide6 import QtWidgets
 from project_paths import ROOT, project_reference
 from training.artifacts import identity, save_json
-from training.configuration import FROZEN_PRESETS, load
+from training.configuration import DEFAULT, load
 from training.ui import window as ui
 from training_history import ResumeHistory, HistoryTrainingWindow
 
@@ -21,13 +21,13 @@ def round_event(number, value=None):
     return dict(phase='round', round=number, episodes=128*number,
                 steps=128*45*number, gradient_updates=number,
                 return_mean=float(number if value is None else value),
-                valid_fraction=1., components={'mechanical': .5})
+                valid_fraction=1., components={'continuous_whip_credit': .5})
 
 
 def evaluation(number):
     return dict(phase='evaluation', round=number, evaluation_return=float(number),
                 best_return=float(number), valid=True, replay=f'round-{number:05d}.npz',
-                components={'mechanical': .5, 'strike_success': 0.})
+                components={'continuous_whip_credit': .5, 'completed_horizon': 1.})
 
 
 class HistoryFixture:
@@ -35,7 +35,7 @@ class HistoryFixture:
         self.temp = project_temporary()
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        self.snapshot = deepcopy(load(FROZEN_PRESETS[1])[1])
+        self.snapshot = deepcopy(load(DEFAULT)[1])
         self.snapshot['execution_hashes'] = {'training/ppo.py': 'synthetic'}
         self.snapshot['identity'] = identity(self.snapshot)
         self.reader = ResumeHistory()
@@ -163,7 +163,7 @@ class HistoryInterfaceTests(HistoryFixture, unittest.TestCase):
         self.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
         self.parent = self.run_folder('parent', [1, 2, 3], extra=[evaluation(3)])
         self.child = self.run_folder('child', [4], parent=self.parent, cutoff=3)
-        for name in ('PPO_RUNS', 'PPO_STAGE2_RUNS', 'PPO_STAGE3_RUNS', 'PPO_STAGE4_RUNS', 'RUNS'):
+        for name in ('PPO_RUNS',):
             replacement = self.root if name == 'PPO_RUNS' else self.root/'absent'
             patcher = patch.object(ui, name, replacement)
             patcher.start()

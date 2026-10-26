@@ -5,12 +5,12 @@ import math
 import unittest
 import numpy as np
 import torch
-from tasks.whip.continuous_whip import ContinuousWhipAttempt, output_metrics, DIRECTED_MODE
+from tasks.whip.continuous_whip import ContinuousWhipAttempt, output_metrics, SHORT_MODE
 from tasks.whip.sac_environment import make_environment
 from training.configuration import load, task_configuration
 from training.ppo import PPO
 
-PRESET='configs/learning/whip_stage1_ppo_continuous_directional_full_horizon_v5.json'
+PRESET='configs/learning/whip_stage1_ppo_continuous_directional_four_second_v6.json'
 
 
 class DirectionalTests(unittest.TestCase):
@@ -24,17 +24,16 @@ class DirectionalTests(unittest.TestCase):
         m=output_metrics(p,v,1.,directed_x=directed)
         return 10*m['horizontal_reach_fraction']**2*m['alignment']**2*m['effective_outward_mps']
 
-    def test_forward_exact_and_legacy_equal(self):
+    def test_forward_exact(self):
         p,v=self.sample()
         self.assertAlmostEqual(self.rate(p,v),12.8)
-        self.assertEqual(self.rate(p,v),self.rate(p,v,False))
 
-    def test_sideways_backwards_downward_zero_legacy_side_positive(self):
+    def test_sideways_backwards_downward_zero(self):
         for direction in ((0.,1.,0.),(-1.,0.,0.),(0.,0.,-1.)):
             p,v=self.sample(direction)
             self.assertEqual(self.rate(p,v),0.)
         p,v=self.sample((0.,1.,0.))
-        self.assertGreater(self.rate(p,v,False),0.)
+        with self.assertRaises(ValueError):self.rate(p,v,False)
 
     def test_oblique_receives_partial_credit(self):
         p,v=self.sample((math.sqrt(.5),math.sqrt(.5),0.))
@@ -58,14 +57,14 @@ class DirectionalTests(unittest.TestCase):
         # Isolate scoring from fold geometry with explicitly synthetic support.
         a._fold_support=lambda *args:(1.,1.,math.pi)
         delta=[]
-        for k in range(2,701):
+        for k in range(2,401):
             delta.append(a.observe(k*.01,p,v,drone_position=[.65,0,2]))
-        expected_q=699*.01*12.8
-        expected_c=699*10*.1**2/700
+        expected_q=399*.01*12.8
+        expected_c=399*10*.1**2/400
         self.assertAlmostEqual(a.total,expected_q-expected_c)
         self.assertAlmostEqual(sum(delta),a.total)
         self.assertEqual(a.terminal,'horizon')
-        self.assertEqual(a.record()['contract'],DIRECTED_MODE)
+        self.assertEqual(a.record()['contract'],SHORT_MODE)
 
     def env(self):
         s,snapshot,cfg,scene=load(PRESET)
@@ -77,15 +76,15 @@ class DirectionalTests(unittest.TestCase):
             kw['observer'](bad,.01)
             return bad
         e.model.step_unchecked=fixed
-        for i in range(350):
+        for i in range(200):
             _,_,done=e.step(torch.zeros(1,3))
-            self.assertEqual(done,i==349)
+            self.assertEqual(done,i==199)
         returns,valid,score,_=e.finish()
         self.assertFalse(bool(valid[0]));self.assertFalse(bool(e.failed[0]))
-        self.assertEqual(e.event_records()[0]['contract'],DIRECTED_MODE)
+        self.assertEqual(e.event_records()[0]['contract'],SHORT_MODE)
         self.assertEqual(e.event_records()[0]['output_direction_world'],[1.,0.,0.])
         torch.testing.assert_close(e.transition_rewards.sum(1),returns)
-        self.assertEqual(score.components['executed_duration_s'][0],7.)
+        self.assertEqual(score.components['executed_duration_s'][0],4.)
         self.assertEqual(score.components['failure_cost'][0],0.)
 
     def test_numerical_guard_retained(self):
@@ -96,7 +95,7 @@ class DirectionalTests(unittest.TestCase):
         e.model.step_unchecked=invalid
         _,_,done=e.step(torch.zeros(1,3));self.assertTrue(done)
         returns,_,score,_=e.finish()
-        self.assertAlmostEqual(float(score.components['failure_cost'][0]),7-1/600)
+        self.assertAlmostEqual(float(score.components['failure_cost'][0]),4-1/600)
         self.assertTrue(torch.isfinite(returns).all())
 
     def test_registered_direction_and_fresh_entropy_budget(self):

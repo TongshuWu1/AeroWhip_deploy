@@ -5,7 +5,7 @@ No saved campaign data, trained policy, or flight recording is required.
 import torch
 import tempfile
 from project_paths import ROOT, project_path
-from training.configuration import FROZEN_PRESETS, load
+from training.configuration import DEFAULT, load
 from training.ppo import PPO
 
 
@@ -29,9 +29,10 @@ def exact_state(a, b):
 class PPOFixture:
     """Reduced observation dimensions exercise the optimizer, not the plant."""
     def agent(self, device='cpu', stage=1):
-        settings = load(FROZEN_PRESETS[stage])[0]
+        settings = load(DEFAULT)[0]
+        settings['ppo'].pop('action_noise')  # Independent-noise optimizer fixture; AR1 has its own suite.
         return PPO(dict(settings, device=device, batch_size=8), [0, 1, 2], 6,
-                   device, privileged_size=5, encoder_options=dict(goal_columns=[3, 4, 5]))
+                   device, privileged_size=5)
 
     def rollout(self, agent):
         device = agent.device

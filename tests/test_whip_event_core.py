@@ -16,7 +16,7 @@ import numpy as np
 from helpers import project_temporary
 from evaluation.whip_event_review import evaluate, INPUT_SCHEMA, run_manifest, snapshot_geometry
 from evaluation.whip_measurement_examples import kinematic_controls
-from training.configuration import FROZEN_PRESETS, load
+from training.configuration import DEFAULT, load
 from viewer.replay_data import PresentationData, sha256
 
 
@@ -40,7 +40,7 @@ def delivery(ids):
 class WhipEventCoreTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.snapshot = load(FROZEN_PRESETS[1])[1]
+        cls.snapshot = load(DEFAULT)[1]
         rest, _ = snapshot_geometry(cls.snapshot)
         cls.controls = {case['name']: case for case in kinematic_controls(rest)}
         cls.wave = cls.controls['earlier_wave_later_rigid_crossing']

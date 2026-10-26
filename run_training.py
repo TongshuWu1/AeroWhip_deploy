@@ -8,15 +8,12 @@ if __name__ == '__main__':
     parser.add_argument('--start', action='store_true',
                         help='Open the Training UI and start new training with the current defaults')
     parser.add_argument('--settings', help='Optional learning-settings JSON; the run remains UI-owned')
-    parser.add_argument('--stage', type=int, choices=(1,2,3,4), help='Select stage (default: 1): acceleration compact whip, broad delivery, precision; Stage4 retains velocity recovery. No automatic campaign.')
-    source = parser.add_mutually_exclusive_group()
-    source.add_argument('--resume', help='Select a compatible exact-resume checkpoint in the visible Training UI')
-    source.add_argument('--initialize-actor', help='Fine-tune a saved PPO actor with new task/settings and a fresh critic, not resume')
+    parser.add_argument('--stage', type=int, choices=(1,), help='Current four-second +X Stage 1')
+    parser.add_argument('--resume', help='Select a compatible exact-resume checkpoint in the visible Training UI')
     args = parser.parse_args()
     if args.stage and args.settings:
         parser.error('Select --stage OR --settings, not both')
     raise SystemExit(main(auto_start=args.start,resume_checkpoint=args.resume,
-                         initialize_actor=args.initialize_actor,
                          **({'settings_path': CURRENT_PRESETS[args.stage]} if args.stage else
                             {'settings_path': args.settings} if args.settings else
                             {'settings_path': None if args.resume else CURRENT_PRESETS[1]})))

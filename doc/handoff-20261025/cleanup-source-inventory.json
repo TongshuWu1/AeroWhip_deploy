@@ -1,0 +1,1421 @@
+{
+  "base_commit": "3c9a49e",
+  "tracked_changes": [
+    {
+      "status": "M",
+      "paths": [
+        "README.md"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_curriculum.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_acceleration_discovery_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_acceleration_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_compact_v5.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_cone25_v4.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_continuous_directional_full_horizon_v5.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_continuous_horizontal_distance_v3.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_continuous_horizontal_full_horizon_v4.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_continuous_horizontal_soft_workspace_v2.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_continuous_horizontal_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_demo_outreach_radius040_80_v9.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_demo_outreach_radius040_v8.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_demo_outreach_radius055_80_v10.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_demo_outreach_v7.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_flexible_excitation_ar1_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_flexible_excitation_bounded_ar1_v2.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_flexible_excitation_rational_ar1_v3.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_fold_formation_ar1_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_fold_formation_soft_workspace_ar1_v2.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_fold_release_ar1_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_horizontal_fold_v2.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_level_outreach_v6.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_outreach_height_radius055_150_v12.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_outreach_speed_radius055_150_v11.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_shape_release_ar1_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_shape_release_path_ar1_v2.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_shape_release_path_ar1_v3.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_staged_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_unified_fold_ar1_exp_v2.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage1_ppo_unified_fold_ar1_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage2_ppo_acceleration_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage2_ppo_cone25_v4.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage2_ppo_crossing_priority_radius055_150_v10.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage2_ppo_first_hit_delivery_v2.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage2_ppo_flexible_delivery_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage2_ppo_outreach_speed_radius040_160_v7.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage2_ppo_outreach_speed_radius040_80_v6.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage2_ppo_outreach_speed_radius040_v5.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage2_ppo_outreach_speed_radius055_150_v9.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage2_ppo_outreach_speed_radius055_160_v8.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage2_ppo_retained_fold_delivery_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage2_ppo_shape_delivery_path_ar1_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage2_ppo_staged_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage3_ppo_acceleration_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage3_ppo_cone25_v4.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage3_ppo_outreach_speed_radius040_160_v6.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage3_ppo_outreach_speed_radius040_80_v5.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage3_ppo_outreach_speed_radius055_150_v8.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage3_ppo_outreach_speed_radius055_160_v7.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage3_ppo_staged_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage4_ppo_cone25_v4.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage4_ppo_outreach_speed_radius040_80_v5.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/learning/whip_stage4_ppo_outreach_speed_radius055_80_v6.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_compact_v3.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_cone25_v2.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_continuous_directional_full_horizon_v5.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_continuous_horizontal_distance_v3.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_continuous_horizontal_full_horizon_v4.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_continuous_horizontal_soft_workspace_v2.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_continuous_horizontal_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_curriculum.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_discovery_bounded_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_flexible_excitation_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_fold_formation_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_fold_release_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_horizontal_fold_v2.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_level_outreach_v4.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_outreach_height_radius055_v8.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_outreach_speed_radius040_v6.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_outreach_speed_radius055_v7.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_outreach_speed_v5.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_shape_release_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_staged_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage1_unified_fold_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage2_cone25_v2.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage2_crossing_priority_radius055_v5.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage2_first_hit_delivery_v2.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage2_flexible_delivery_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage2_outreach_speed_radius040_v3.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage2_outreach_speed_radius055_v4.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage2_retained_fold_delivery_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage2_shape_delivery_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage2_staged_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage3_cone25_v2.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage3_outreach_speed_radius040_v3.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage3_outreach_speed_radius055_v4.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage3_staged_v1.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage4_cone25_v2.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage4_outreach_speed_radius040_v3.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "configs/tasks/whip_stage4_outreach_speed_radius055_v4.json"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "doc/current_implementation.md"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "doc/handoff-20261025/README.md"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "doc/handoff-20261025/cleanup-summary.json"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "doc/handoff-20261025/stage1-contract.md"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "doc/handoff-20261025/stage1-implementation-report.md"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "doc/milestone.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "evaluation/demonstration_search.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "evaluation/motion_refinement.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "evaluation/motion_search.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "evaluation/policy_test.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "evaluation/records.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "evaluation/recovery.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "evaluation/reward_review.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "evaluation/stage1_candidate.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "evaluation/whip_candidate_review.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "evaluation/worker.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/compatibility-final.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/compatibility.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/historical-budget-amendment.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/historical-campaign-protocol.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage1/configuration.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage1/final-evaluation.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage1/final-replay.npz"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage1/historical-completion-audit.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage1/model.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage1/parent-request.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage1/parent-summary.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage1/request.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage1/resume-audit.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage1/scene.toml"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage1/settings.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage1/summary.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage1/task.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage2/configuration.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage2/final-evaluation.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage2/final-replay.npz"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage2/historical-completion-audit.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage2/model.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage2/request.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage2/scene.toml"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage2/settings.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage2/summary.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage2/task.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage3/configuration.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage3/final-evaluation.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage3/final-replay.npz"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage3/historical-completion-audit.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage3/model.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage3/request.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage3/scene.toml"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage3/settings.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage3/summary.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage3/task.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage4/configuration.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage4/final-evaluation.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage4/final-replay.npz"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage4/historical-completion-audit.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage4/model.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage4/request.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage4/scene.toml"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage4/settings.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage4/summary.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/evidence/stage4/task.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/manifest.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/manifest.sha256"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/package-check.json"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/stage1.pt"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/stage2.pt"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/stage3.pt"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "models/milestone-20261009/stage4.pt"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "run_training.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "tasks/whip/configuration.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "tasks/whip/continuous_whip.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "tasks/whip/continuous_whip_environment.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tasks/whip/deterministic_evaluation.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tasks/whip/excitation.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tasks/whip/first_hit_delivery.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tasks/whip/flexible_delivery.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tasks/whip/fold_formation.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tasks/whip/fold_release.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "tasks/whip/horizontal_fold.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "tasks/whip/horizontal_fold_environment.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tasks/whip/learned_recovery.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tasks/whip/movement.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tasks/whip/retained_fold_delivery.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tasks/whip/retained_fold_delivery_environment.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "tasks/whip/sac_environment.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tasks/whip/shape_delivery.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tasks/whip/shape_release.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "tasks/whip/stage1.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "tasks/whip/stage1_configuration.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tasks/whip/strike.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tasks/whip/target_sampling.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tasks/whip/unified_fold.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "tests/helpers.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_acceleration.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "tests/test_ar1_ppo.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "tests/test_continuous_directional.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_continuous_distance.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "tests/test_continuous_four_second.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_continuous_full_horizon.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_continuous_soft_workspace.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "tests/test_continuous_whip.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_discovery.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_excitation.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_excitation_bounded_workspace.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_excitation_integration.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_excitation_rational_return.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_execution.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "tests/test_exponential_entropy.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_first_hit_delivery.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_flexible_delivery.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_fold_curriculum.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_fold_release.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_fold_soft_workspace.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_handoff.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_horizontal_fold.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_horizontal_fold_events.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "tests/test_measurement_replay.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_movement_penalty.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_pipeline.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_progress.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_records_ui.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_retained_fold_delivery.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_retained_fold_integration.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_reward_review.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_scoring.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_shape_delivery.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_shape_release.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_stage1_candidate.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "tests/test_training_history.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_unified_fold.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "tests/test_whip_candidate_review.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "tests/test_whip_event_core.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "training/artifacts.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "training/configuration.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "training/curriculum.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "training/demonstration.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "training/plateau.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "training/ppo.py"
+      ]
+    },
+    {
+      "status": "D",
+      "paths": [
+        "training/sac.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "training/ui/window.py"
+      ]
+    },
+    {
+      "status": "M",
+      "paths": [
+        "training/worker.py"
+      ]
+    }
+  ],
+  "new_files": [
+    "doc/handoff-20261025/archive-verification.json",
+    "doc/handoff-20261025/cleanup-equivalence.json",
+    "doc/handoff-20261025/cleanup-evaluation-smoke-final.log",
+    "doc/handoff-20261025/cleanup-report.md",
+    "doc/handoff-20261025/cleanup-source-inventory.json",
+    "doc/handoff-20261025/cleanup-tests.log",
+    "doc/handoff-20261025/cleanup-verification.json",
+    "doc/handoff-20261025/cleanup-worker-smoke-final.log",
+    "doc/stage1.md",
+    "training/networks.py"
+  ]
+}

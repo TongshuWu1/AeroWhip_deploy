@@ -1,3 +1,5 @@
+> Historical pre-cleanup snapshot. For the supported implementation, see [current Stage 1](../stage1.md). Legacy-mode compatibility mentioned below was subsequently removed with approval.
+
 # Four-second Stage1 restart — detailed implementation report
 
 Date:2026-10-25. User explicitly requested4seconds,200collections,restart.

@@ -7,7 +7,7 @@ from torch import nn
 from training.ppo import PPO, ar1_distribution, squashed_log_prob, gaussian_kl
 from training.configuration import load
 from helpers import exact_state
-from test_shape_release import PRESET
+from training.configuration import DEFAULT as PRESET
 
 
 class AR1Tests(unittest.TestCase):
@@ -16,7 +16,7 @@ class AR1Tests(unittest.TestCase):
 
     def agent(self,device='cpu'):
         s=load(PRESET)[0];s.update(device=device,batch_size=8,hidden_units=16)
-        return PPO(s,[0,1,2],6,device,privileged_size=5,encoder_options=dict(goal_columns=[3,4,5]))
+        return PPO(s,[0,1,2],6,device,privileged_size=5)
 
     def rollout(self,agent):
         dev=agent.device;f=torch.randn(4,7,6,device=dev);states=torch.randn(4,4,5,device=dev)
@@ -79,7 +79,6 @@ class AR1Tests(unittest.TestCase):
         with self.assertRaises(ValueError):a.collect_action(r['frames'],i+2,r['privileged'][:,1])
         saved=deepcopy(a.state_dict());saved['interface'].pop('action_noise')
         with self.assertRaises(ValueError):a.load_state_dict(saved)
-        with self.assertRaises(ValueError):a.initialize_actor(saved)
         self.assertEqual(a.interface['action_noise']['likelihood'],'history_conditional_squashed_gaussian_v1')
 
     def check_optimizer(self,device):

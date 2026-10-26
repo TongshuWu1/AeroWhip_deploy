@@ -1,3 +1,5 @@
+> Historical pre-cleanup snapshot. For the supported implementation, see [current Stage 1](../stage1.md). Legacy-mode compatibility mentioned below was subsequently removed with approval.
+
 # Stage1 directed +X four-second v6 — approved2026-10-25
 
 User requested four seconds,200collections,restart. Fresh actor and critic;

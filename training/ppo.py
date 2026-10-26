@@ -10,23 +10,9 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from training.sac import Actor, HistoryEncoder, scalar_metrics
+from training.networks import Actor, HistoryEncoder, scalar_metrics
 
 
-def validate_stage3_actor_training(settings):
-    """Archived combined mask, retained for strict saved-learner reconstruction.
-
-    Current fixed-target Stage3 trains the full actor. Launch validation rejects
-    this retired tag for both new runs and continuation of historical training.
-    """
-    if 'stage3_actor_training' not in settings:
-        return False
-    if (settings['stage3_actor_training'] != 'combined_goal_head_v1'
-            or settings.get('algorithm') != 'ppo' or settings.get('training_stage') != 3
-            or settings.get('stage3_role') != 'precision_v1'
-            or settings.get('target_observation') != 'initial_relative_position_v1'):
-        raise ValueError('Combined goal/head training requires relative-target precision PPO Stage3')
-    return True
 
 
 def validate_ppo(c):
@@ -57,33 +43,13 @@ def validate_ppo(c):
     if c['clip_ratio'] >= 1 or c['gae_lambda'] > 1:
         raise ValueError('Require clip ratio in (0,1), GAE lambda in (0,1]')
     e = c['entropy']
-    episode_clock = set(e) == {'initial_weight', 'final_weight', 'hold_fraction', 'anneal_end_fraction'}
-    exponential = (set(e) == {'mode', 'initial_weight', 'final_weight', 'decay_episodes'}
-                   and e['mode'] == 'exponential_episodes_v1')
-    budget_exponential = (set(e) == {'mode','initial_weight','final_weight','decay_exponent'} and e['mode']=='exponential_budget_v1')
-    if not episode_clock and not exponential and not budget_exponential and set(e) != {'initial_weight', 'final_weight', 'hold_transitions', 'anneal_end_transitions'}:
-        raise ValueError('PPO entropy requires weights and one explicit episode-budget or historical transition clock')
-    for key in ('initial_weight', 'final_weight'):
-        value = e[key]
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
-            raise ValueError('Invalid PPO entropy weight')
-    if e['initial_weight'] <= e['final_weight']:
-        raise ValueError('PPO entropy schedule must decrease')
-    if exponential:
-        if type(e['decay_episodes']) is not int or e['decay_episodes'] <= 0:
-            raise ValueError('Exponential entropy requires a positive integer episode timescale')
-    elif budget_exponential:
-        if isinstance(e['decay_exponent'],bool) or not isinstance(e['decay_exponent'],(int,float)) or not math.isfinite(e['decay_exponent']) or e['decay_exponent']<=0:
-            raise ValueError('Budget exponential entropy needs a finite positive exponent')
-    elif episode_clock:
-        for key in ('hold_fraction', 'anneal_end_fraction'):
-            if isinstance(e[key], bool) or not isinstance(e[key], (int, float)) or not math.isfinite(e[key]):
-                raise ValueError('Invalid PPO entropy episode fraction')
-        if not 0 <= e['hold_fraction'] < e['anneal_end_fraction'] <= 1:
-            raise ValueError('Require 0 <= entropy hold < decay end <= 1 of training episode budget')
-    elif (type(e['hold_transitions']) is not int or type(e['anneal_end_transitions']) is not int
-          or not 0 <= e['hold_transitions'] < e['anneal_end_transitions']):
-        raise ValueError('Invalid PPO entropy transition clock')
+    if set(e) != {'mode','initial_weight','final_weight','decay_exponent'} or e['mode']!='exponential_budget_v1':
+        raise ValueError('Current PPO uses exponential_budget_v1')
+    for key in ('initial_weight','final_weight','decay_exponent'):
+        if isinstance(e[key],bool) or not isinstance(e[key],(int,float)) or not math.isfinite(e[key]) or e[key]<=0:
+            raise ValueError('Invalid entropy '+key)
+    if e['final_weight']>e['initial_weight']:
+        raise ValueError('Entropy floor must not exceed its initial weight')
 
 
 def squashed_log_prob(raw, mean, log_std):
@@ -212,87 +178,12 @@ class PPOActor(Actor):
         return raw.tanh(), raw, squashed_log_prob(raw, mean, log_std), mean, log_std
 
 
-class FrozenWhipRecoveryActor(PPOActor):
-    """Observable PD return backbone and learned correction; source whip frozen."""
-    def __init__(self, columns, hidden, log_std, action_size, *, recovery_policy,
-                 velocity_limits, **encoder_options):
-        super().__init__(columns,hidden,log_std,action_size,**encoder_options)
-        self.requires_grad_(False)
-        self.recovery_policy = dict(recovery_policy)
-        self.register_buffer('recovery_limits',torch.tensor(velocity_limits,dtype=torch.float32))
-        self.recovery_head = nn.Sequential(nn.Linear(len(columns)+2,hidden),nn.ReLU(),
-                                           nn.Linear(hidden,action_size))
-        nn.init.zeros_(self.recovery_head[-1].weight)
-        nn.init.zeros_(self.recovery_head[-1].bias)
-        self.recovery_log_std = nn.Parameter(torch.full((action_size,),recovery_policy['initial_log_std']))
-
-    def distribution(self, history, index):
-        return self._distribution(history,index)
-
-    def _distribution(self, history, index, frozen=None):
-        # `frozen` is private fixed-chunk reuse for RNG-free cohort KL only.
-        # Acting and shuffled optimizer minibatches retain the ordinary path.
-        if isinstance(history,tuple):
-            prepared = history
-            current,phase = prepared[1:3]
-            active = phase[:,:1]>.5
-            recovery_only = bool(active.all())
-        else:
-            observed = history[torch.arange(len(index),device=index.device),index]
-            phase = observed.index_select(-1,self.encoder.phase_columns)
-            active = phase[:,:1]>.5
-            # Negative indices keep the historical rolling-prefix behavior.
-            recovery_only = bool((active[:,0] & (index>=0)).all())
-            if recovery_only:
-                current = observed.index_select(-1,self.encoder.columns)
-            else:
-                prepared = self.encoder.prepare(history,index)
-                current,phase = prepared[1:3]
-        # The frozen CNN has no stateful layers or RNG. Keep its original full
-        # batch arithmetic for mixed/pre-hit inputs; skip only an unused branch.
-        if not recovery_only:
-            old_mean,old_std = (super().distribution(prepared,None)
-                               if frozen is None else frozen)
-        c = self.recovery_policy
-        position = current[:,:3]*c['cable_length_m']
-        velocity = current[:,12:15]*4
-        command = -c['position_gain_s_inv']*position-c['velocity_damping']*velocity
-        normalized = (command/self.recovery_limits).clamp(-.999,.999)
-        mean = torch.atanh(normalized)+self.recovery_head(torch.cat((current,phase),-1))
-        std = self.recovery_log_std.clamp(-5,2).expand_as(mean)
-        if recovery_only:
-            # Preserve the original materialized log-std layout for PPO callers.
-            return mean,std.contiguous()
-        return torch.where(active,mean,old_mean),torch.where(active,std,old_std)
-
-    def forward(self, history, index, deterministic=False):
-        mean,log_std = self.distribution(history,index)
-        raw = mean if deterministic else mean+log_std.exp()*torch.randn_like(mean)
-        return raw.tanh(),squashed_log_prob(raw,mean,log_std)
 
 
 def make_ppo_actor(settings, columns, action_size=3, **options):
-    combined = validate_stage3_actor_training(settings)
-    if (settings.get('target_observation') == 'initial_relative_position_v1') != ('goal_columns' in options):
-        raise ValueError('Actor factory requires the selected relative-target observation layout')
-    if 'goal_columns' in options:
-        goal_columns = options['goal_columns']
-        if (not isinstance(goal_columns,(list,tuple)) or len(goal_columns) != 3
-                or any(type(v) is not int or v < 0 for v in goal_columns)
-                or len(set(goal_columns)) != 3 or set(columns)&set(goal_columns)
-                or set(options.get('phase_columns',()))&set(goal_columns)):
-            raise ValueError('Goal observations require three distinct additional XYZ columns')
-    common = (columns,settings['hidden_units'],settings['initial_log_std'],action_size)
-    if 'stage4_recovery_policy' in settings:
-        return FrozenWhipRecoveryActor(*common,recovery_policy=settings['stage4_recovery_policy'],
-            velocity_limits=settings['velocity_limit_mps'],**options)
-    actor = PPOActor(*common,**options)
-    if combined:
-        # Reconstruct the archived mask/optimizer layout only. It is not a
-        # current training option (require_launchable rejects this contract).
-        actor.encoder.requires_grad_(False)
-        actor.encoder.goal_projection.requires_grad_(True)
-    return actor
+    if any(k in settings for k in ('stage4_recovery_policy','stage3_actor_training','target_observation')):
+        raise ValueError('Historical actor variants are retired')
+    return PPOActor(columns,settings['hidden_units'],settings['initial_log_std'],action_size,**options)
 
 
 class Value(nn.Module):
@@ -327,38 +218,11 @@ class PPO:
                 likelihood='history_conditional_squashed_gaussian_v1')
         h = settings['hidden_units']
         options = dict(encoder_options or {})
-        phase_options = {k:v for k,v in options.items() if k != 'goal_columns'}
-        goal = settings.get('target_observation')
-        if goal is not None:
-            goal_columns = list(range(frame_size-3,frame_size))
-            if (goal != 'initial_relative_position_v1' or settings.get('training_stage') not in (1,2,3,4)
-                    or options.get('goal_columns') != goal_columns
-                    or set(columns)&set(goal_columns)):
-                raise ValueError('Relative target input requires its explicit appended XYZ columns')
-            self.interface.update(target_observation=goal,goal_columns=goal_columns)
-        elif 'goal_columns' in options:
-            raise ValueError('Goal columns require explicit target_observation settings')
-        if validate_stage3_actor_training(settings):
-            self.interface['stage3_actor_training'] = settings['stage3_actor_training']
-        if phase_options:
-            if settings.get('continuous_whip_contract')=='continuous_directional_whip_four_second_v6' and phase_options==dict(history_samples=401):
-                self.interface.update(history_layout='continuous_directional_whip_401_v1',time_reference_samples=400)
-            elif settings.get('continuous_whip_contract') in ('continuous_horizontal_whip_v1', 'continuous_horizontal_whip_soft_workspace_v2','continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5') and phase_options == dict(history_samples=701):
-                self.interface.update(history_layout='continuous_horizontal_whip_701_v1',time_reference_samples=700)
-            elif settings.get('retained_fold_delivery_contract') == 'retained_fold_delivery_v1' and phase_options == dict(history_samples=701):
-                self.interface.update(history_layout='retained_fold_delivery_701_v1',time_reference_samples=700)
-            elif settings.get('horizontal_fold_contract') == 'horizontal_fold_outreach_v2' and phase_options == dict(history_samples=701):
-                self.interface.update(history_layout='horizontal_fold_701_v2',time_reference_samples=700)
-            elif 'stage2_first_hit' in settings and phase_options == dict(history_samples=451):
-                self.interface.update(history_layout='stage2_first_hit_451_rolling_v1',time_reference_samples=450)
-            elif settings.get('stage4_role') != 'learned_recovery_v1' or phase_options != dict(history_samples=451,phase_columns=[96,97]):
-                raise ValueError('Only explicit Stage4 supports versioned phase/history transfer')
-            else:
-                self.interface.update(history_layout='stage4_451_rolling_v1',phase_columns=[96,97])
-        if 'stage4_recovery_policy' in settings:
-            if not phase_options:
-                raise ValueError('Frozen whip recovery requires explicit phase/history inputs')
-            self.interface['recovery_architecture'] = 'frozen_whip_pd_residual_v1'
+        if options:
+            if (settings.get('continuous_whip_contract') != 'continuous_directional_whip_four_second_v6'
+                    or options != dict(history_samples=401)):
+                raise ValueError('Current Stage 1 requires its 401-sample history')
+            self.interface.update(history_layout='continuous_directional_whip_401_v1',time_reference_samples=400)
         self.actor = make_ppo_actor(settings,columns,action_size,**options).to(device)
         self.value = Value(columns, h, privileged_size,**options).to(device)
         self.actor_optimizer = torch.optim.Adam((p for p in self.actor.parameters() if p.requires_grad), lr=settings['learning_rate'])
@@ -368,97 +232,12 @@ class PPO:
         self.completed_episodes = self.entropy_episode_offset = 0
         self.entropy_episode_budget = settings['training_episodes']
         self._kl_inputs = None  # Ephemeral, scoped to ONE optimize call, never serialized.
-        self._kl_frozen = None  # Only the architecturally frozen Stage4 branch.
         self._kl_input_cache_limit = 512*1024*1024  # Bounded additional memory, not a learning setting.
 
-    def initialize_actor(self, saved):
-        """Explicit policy transfer, NOT resume: keep fresh value/Adam/RNG/clocks."""
-        if self.updates or self.value_updates or self.collections or self.environment_steps:
-            raise ValueError('Actor initialization requires an unused PPO learner')
-        source = dict(saved.get('interface', {}))
-        expected = dict(self.interface)
-        # Actor-only transfer can change a training mask; exact resume cannot.
-        # Stage4 freezes the complete Stage3 actor, regardless of its old mask.
-        has_source_training = 'stage3_actor_training' in source
-        source_training = source.pop('stage3_actor_training', None)
-        if has_source_training and (source_training != 'combined_goal_head_v1'
-                or source.get('target_observation') != 'initial_relative_position_v1'):
-            raise ValueError('Unknown saved Stage3 actor training contract')
-        expected.pop('stage3_actor_training', None)
-        expected.pop('recovery_architecture',None)
-        layout = expected.pop('history_layout',None)
-        if layout in ('continuous_horizontal_whip_701_v1','continuous_directional_whip_401_v1'):expected['history_layout']=layout
-        if layout == 'stage2_first_hit_451_rolling_v1':
-            expected.pop('time_reference_samples')
-            if source.get('history_layout') == layout:
-                source.pop('history_layout')
-                if source.pop('time_reference_samples',None) != 450:
-                    raise ValueError('First-hit source time coordinate changed')
-            elif 'history_layout' in source:
-                raise ValueError('First-hit transfer requires the original451sample history layout')
-        migration = layout == 'stage4_451_rolling_v1'
-        if migration:
-            expected.pop('phase_columns')
-            expected['frame_size'] -= 2
-            if 'goal_columns' in expected:
-                expected['goal_columns'] = [v-2 for v in expected['goal_columns']]
-        goal_migration = 'target_observation' in expected and 'target_observation' not in source
-        if goal_migration:
-            expected.pop('target_observation')
-            expected.pop('goal_columns')
-            expected['frame_size'] -= 3
-        keys = set(expected)-{'privileged_size'}
-        if set(source) != set(expected) or any(source[k] != expected[k] for k in keys):
-            raise ValueError('Actor observation/distribution interface differs from the selected checkpoint')
-        weights = saved.get('actor', {})
-        if not weights or any(not bool(torch.isfinite(v).all()) for v in weights.values()):
-            raise ValueError('Actor initialization requires finite saved weights')
-        if 'target_observation' in source and (not isinstance(weights.get('encoder.goal_columns'),torch.Tensor)
-                or not torch.equal(weights['encoder.goal_columns'].cpu(),torch.tensor(source['goal_columns']))):
-            raise ValueError('Saved actor goal columns disagree with its interface')
-        offset = saved.get('environment_steps', -1)
-        inherited = saved.get('entropy_step_offset', 0)
-        if type(offset) is not int or offset < 0 or type(inherited) is not int or inherited < 0:
-            raise ValueError('Invalid source exploration clock')
-        if self.settings['ppo'].get('transfer_entropy_clock', 'inherit') == 'inherit':
-            if saved.get('entropy_clock', 'transitions_v1') != self.entropy_clock:
-                raise ValueError('Cannot inherit entropy clocks across units; choose stage_local actor transfer')
-            self.entropy_step_offset = offset+inherited
-            if self.entropy_clock == 'completed_episodes_v1':
-                count, previous, budget = (saved.get(k) for k in
-                    ('completed_episodes', 'entropy_episode_offset', 'entropy_episode_budget'))
-                if any(type(v) is not int or v < 0 for v in (count, previous)) or type(budget) is not int or budget <= 0:
-                    raise ValueError('Invalid source episode exploration clock')
-                self.entropy_episode_offset = count+previous
-                self.entropy_episode_budget = budget
-        if migration or goal_migration:
-            additions = ({'encoder.phase_columns','encoder.phase_projection.weight'} if migration else set())
-            if goal_migration:
-                additions |= {'encoder.goal_columns','encoder.goal_projection.weight'}
-            if isinstance(self.actor,FrozenWhipRecoveryActor):
-                additions |= {'recovery_limits','recovery_log_std'} | {
-                    k for k in self.actor.state_dict() if k.startswith('recovery_head.')}
-            if set(self.actor.state_dict())-set(weights) != additions or set(weights)-set(self.actor.state_dict()):
-                raise ValueError('Unexpected versioned actor input migration fields')
-            copied = self.actor.state_dict()
-            goal_columns = copied.get('encoder.goal_columns')
-            copied.update(weights)
-            if goal_columns is not None:
-                # Stage4 phase insertion moves appended goal columns, not their weights.
-                copied['encoder.goal_columns'] = goal_columns
-            if migration and bool(copied['encoder.phase_projection.weight'].count_nonzero()):
-                raise ValueError('Stage4 phase adapter must initialize to zero')
-            if goal_migration and bool(copied['encoder.goal_projection.weight'].count_nonzero()):
-                raise ValueError('Relative target adapter must initialize to zero')
-            self.actor.load_state_dict(copied,strict=True)
-        else:
-            self.actor.load_state_dict(weights, strict=True)
 
     @property
     def entropy_clock(self):
-        return ('completed_episodes_v1' if ('hold_fraction' in self.settings['ppo']['entropy']
-                or self.settings['ppo']['entropy'].get('mode') in ('exponential_episodes_v1','exponential_budget_v1'))
-                else 'transitions_v1')
+        return 'completed_episodes_v1'
 
     def set_completed_episodes(self, episodes):
         # Completed cohorts only; failures count, evaluation/discarded prefixes do not.
@@ -473,23 +252,9 @@ class PPO:
 
     @property
     def entropy_weight(self):
-        e = self.settings['ppo']['entropy']
-        if e.get('mode') == 'exponential_budget_v1':
-            progress=(self.completed_episodes+self.entropy_episode_offset)/self.entropy_episode_budget
-            return e['final_weight']+(e['initial_weight']-e['final_weight'])*math.exp(-e['decay_exponent']*progress)
-        if e.get('mode') == 'exponential_episodes_v1':
-            # Absolute completed-episode clock: lane count and budget extensions
-            # must not reset or stretch the approved decay timescale.
-            elapsed = self.completed_episodes+self.entropy_episode_offset
-            return e['final_weight']+(e['initial_weight']-e['final_weight'])*math.exp(-elapsed/e['decay_episodes'])
-        if self.entropy_clock == 'completed_episodes_v1':
-            progress = (self.completed_episodes+self.entropy_episode_offset)/self.entropy_episode_budget
-            f = min(1., max(0., (progress-e['hold_fraction']) /
-                               (e['anneal_end_fraction']-e['hold_fraction'])))
-        else:
-            f = min(1., max(0., (self.environment_steps+self.entropy_step_offset-e['hold_transitions']) /
-                               (e['anneal_end_transitions']-e['hold_transitions'])))
-        return e['initial_weight']+(e['final_weight']-e['initial_weight'])*f
+        e=self.settings['ppo']['entropy']
+        progress=(self.completed_episodes+self.entropy_episode_offset)/self.entropy_episode_budget
+        return e['final_weight']+(e['initial_weight']-e['final_weight'])*math.exp(-e['decay_exponent']*progress)
 
     def conditional_distribution(self, history, index, previous_raw=None, previous_index=None):
         mean, log_std = self.actor.distribution(history,index)
@@ -533,7 +298,6 @@ class PPO:
                 result = self._optimize(rollout, progress)
         finally:
             self._kl_inputs = None  # Also release on a rejected/nonfinite/exception path.
-            self._kl_frozen = None
         self.collections += 1
         return result
 
@@ -571,36 +335,17 @@ class PPO:
             # marginals must be recomputed for this conditional distribution.
             return None
         batches=[];used=0
-        frozen_actor=isinstance(self.actor,FrozenWhipRecoveryActor)
-        self._kl_frozen=[] if frozen_actor else None
         for begin in range(0,len(episode),self.settings['batch_size']):
             b=episode[begin:begin+self.settings['batch_size']]
             t=step[begin:begin+self.settings['batch_size']]
             frame_shape=r['frames'].shape
             needed=len(b)*(frame_shape[1]*(len(self.interface['actor_columns'])+1)+len(self.interface['actor_columns']))*r['frames'].element_size()
-            if 'goal_columns' in self.interface:
-                needed += len(b)*(len(self.interface['goal_columns'])+len(self.interface.get('phase_columns',()))) * r['frames'].element_size()
-            frozen_bytes=(len(b)*2*self.interface['action_size']*r['frames'].element_size()
-                          if frozen_actor else 0)
             keep_prefix=(len(batches)==begin//self.settings['batch_size']
-                         and used+needed+frozen_bytes<=self._kl_input_cache_limit)
-            # A frozen distribution is tiny compared with a451-sample prefix.
-            # Overflow prefixes still use the ORIGINAL gather/prepare path;
-            # their frozen outputs may independently fit the same memory cap.
-            if not keep_prefix and (not frozen_actor or used+frozen_bytes>self._kl_input_cache_limit):
-                break
+                         and used+needed<=self._kl_input_cache_limit)
+            if not keep_prefix:break
             prepared=self.actor.encoder.prepare(r['frames'][b],t*r['stride'])
             if keep_prefix:
                 batches.append(prepared);used+=sum(x.numel()*x.element_size() for x in prepared)
-            if frozen_actor:
-                # Same chunk/order/convolution shape and optimizer cuDNN flags.
-                # No row compaction; recovery parameters still recompute each
-                # trial. The optimizer cannot change these frozen whip weights.
-                frozen=(None if bool((prepared[2][:,:1]>.5).all()) else
-                        PPOActor.distribution(self.actor,prepared,None))
-                self._kl_frozen.append(frozen)
-                if frozen is not None:
-                    used+=sum(x.numel()*x.element_size() for x in frozen)
         return batches
 
     @torch.no_grad()
@@ -617,11 +362,7 @@ class PPO:
             t = step[begin:begin+self.settings['batch_size']]
             chunk=begin//self.settings['batch_size']
             history=(self._kl_inputs[chunk] if self._kl_inputs is not None and chunk<len(self._kl_inputs) else r['frames'][b])
-            frozen=(self._kl_frozen[chunk] if self._kl_inputs is not None and self._kl_frozen is not None
-                    and chunk<len(self._kl_frozen) else None)
             mean, log_std = (self.rollout_distribution(r,b,t) if self.noise_rho is not None else
-                            self.actor._distribution(history,t*r['stride'],frozen)
-                            if frozen is not None else
                             self.actor.distribution(history,t*r['stride']))
             divergence.append(gaussian_kl(r['mean'][b,t].double(), r['log_std'][b,t].double(),
                 mean.double(), log_std.double()))

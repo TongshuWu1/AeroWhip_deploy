@@ -22,7 +22,7 @@ from training.configuration import digest
 RUNS = ROOT/'runs/ppo_stage1'
 RESULTS = ROOT/'runs/sac_evaluation'
 PPO_RESULTS = ROOT/'runs/ppo_evaluation'
-STAGE_ROOTS = (RUNS, ROOT/'runs/ppo_stage2', ROOT/'runs/ppo_stage3', ROOT/'runs/ppo_stage4', ROOT/'runs/sac_stage1', PPO_RESULTS, RESULTS)
+STAGE_ROOTS = (RUNS, PPO_RESULTS)
 
 
 def task_stage(snapshot):
@@ -298,10 +298,8 @@ def selections(directory):
 
 
 def prepare(checkpoint, *, root=None, mode='exact_source', recovery_target=None):
-    if recovery_target not in (None,'current','final'):
-        raise ValueError('Recovery target must be explicitly current or final')
-    if recovery_target is not None and mode != 'current_code':
-        raise ValueError('Strike/return is a new protocol; select current-code evaluation')
+    if recovery_target is not None:
+        raise ValueError('Historical recovery evaluation is retired')
     checkpoint = project_path(checkpoint)
     info = load_checkpoint(checkpoint)
     snapshot = info['snapshot']
@@ -324,11 +322,6 @@ def prepare(checkpoint, *, root=None, mode='exact_source', recovery_target=None)
                 reference = dict(path=project_reference(replay), sha256=sha256(replay), event=event)
     request = dict(checkpoint=project_reference(checkpoint), checkpoint_sha256=info['sha256'],
                    round=info['round'], reference=reference, **contract)
-    if recovery_target is not None:
-        from dataclasses import asdict
-        from evaluation.recovery import RecoverySettings
-        request.update(protocol='strike_scripted_return_v1', recovery_target=recovery_target,
-                       recovery_settings=asdict(RecoverySettings()))
     save_json(path/'request.json', request)
     return path
 

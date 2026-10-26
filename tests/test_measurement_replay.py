@@ -7,7 +7,7 @@ import unittest
 import numpy as np
 
 from helpers import project_temporary
-from training.configuration import FROZEN_PRESETS, load
+from training.configuration import DEFAULT, load
 from viewer.replay_data import PresentationData, sha256
 
 
@@ -16,7 +16,7 @@ class MeasurementReplayTests(unittest.TestCase):
         self.temp = project_temporary()
         self.addCleanup(self.temp.cleanup)
         self.directory = Path(self.temp.name)
-        self.snapshot = load(FROZEN_PRESETS[1])[1]
+        self.snapshot = load(DEFAULT)[1]
         self.snapshot_path = self.directory/'configuration.json'
         self.snapshot_path.write_text(json.dumps(self.snapshot))
         (self.directory/'scene.toml').write_text(self.snapshot['scene_text'])

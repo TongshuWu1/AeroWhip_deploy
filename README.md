@@ -1,6 +1,6 @@
 # AeroWhip
 
-Drone-cable simulation, recorded-data fitting, and four-stage fixed-target PPO
+Drone-cable simulation, recorded-data fitting, and current Stage 1 PPO
 training. C++ implements the motor-driven physical plant; Python implements
 controllers, tasks, learning, data processing, and the desktop UI.
 
@@ -10,15 +10,14 @@ the viewer uses the host GPU, and training uses the separate CUDA batch path.
 Real-flight cable estimation, learned-policy deployment, and firmware controller
 equivalence remain unimplemented or unverified.
 
-The historical completed Stage1-4 checkpoint chain remains in
-[models/milestone-20261009](models/milestone-20261009), with its original settings
-and observations. See [current implementation](doc/current_implementation.md) for
-active configurations, retained evidence, and implemented versus proposed work.
+Read [the current Stage 1 specification](doc/stage1.md) for its exact reward,
+fold measurement, termination and exploration. Historical stages and models are
+recoverable from Git commit `3c9a49e`; their training code is retired.
 
 ## Current handoff — 2026-10-25
 
 Training is stopped. The active Stage1 preset is the **four-second, fixed +X experiment**,
-with64environments and200collections. Its latest run completed zero collections;
+with 64 environments and 200 collections. Its latest run completed zero collections;
 there is no newly trained policy to resume. See [other-computer setup and data restoration](doc/handoff-20261025/README.md).
 
 ## Setup
@@ -34,9 +33,10 @@ The two source projects use this checkout layout for automatic discovery:
 
 Keep these directory names when cloning. `AEROWHIP_ROOT` can override the
 AeroWhip path for the Docker launchers. The repositories include source,
-configuration, trajectory CSVs and packaged model artifacts. Recordings, training
-runs and retained test evidence are stored in the historical GitHub release
-`backup-2026-10-16`, with archives, per-file manifests and SHA-256 checksums.
+configuration and trajectory CSVs. Recordings, training
+runs and retained test evidence are stored separately in GitHub releases:
+`handoff-2026-10-25` for the current handoff and `backup-2026-10-16` for older
+recordings, with per-file manifests and SHA-256 checksums.
 They are not downloaded by `git clone`; restore them separately below to use
 historical local evidence links. Virtual environments and build caches remain
 local. Recreate dependencies using the setup instructions.
@@ -444,40 +444,13 @@ Wi-Fi. [OptiTrack streaming documentation](https://docs.optitrack.com/v3.2/motiv
 
 ## Current pipeline
 
-| Stage | Learning objective |
-|---|---|
-| 1 | Directed whip mechanics and cable unfolding |
-| 2 | Delivery toward one fixed 1.0 x 0.6 m target |
-| 3 | Full-actor precision learning at the same target; size curriculum ends at 0.1 x 0.1 m |
-| 4 | Frozen Stage3 whip, internal return controller, learned recovery residual and cable settling |
+One supported training task: **four-second +X fold transport and opening**,
+64 parallel episodes, 200 collections. Return is continuous fold/output credit
+minus uncapped squared-distance workspace cost. There is no target-hit reward,
+physical-envelope early stop, effort/path cost, or automatic next stage.
 
-The Stage1 launcher default is the experimental
-[distance-sensitive flexible-excitation v3](configs/learning/whip_stage1_ppo_flexible_excitation_rational_ar1_v3.json):
-128 lanes,120 collections (15,360 episodes), fresh random actor/critic,
-exponentially decaying entropy, and an uncapped outside-only quadratic workspace
-cost C. For excitation Q, valid return is F(Q−C), where F(x)=x for x≥0 and
-5x/(5−x) otherwise. Failures return−10+F(−C accrued). Negative net scores
-are compressed; distance cost has no per-sample cap. Excitation is a guide,
-not a whipping-success label, and containment still requires review.
-The preceding presets and runs remain preserved. Stage2/3
-launcher defaults remain the retained acceleration presets, and Stage4 remains
-cone25v4; those are not automatic successors of this new Stage1. No automatic
-Stage2 handoff is enabled. See the maintained implementation record for current
-launch status, checks and limitations.
-
-The paused outreach/height experiment uses explicit settings rather than those
-launcher defaults. Its Stage1
-[v12 settings](configs/learning/whip_stage1_ppo_outreach_height_radius055_150_v12.json)
-and planned Stage2/3 continuations each specify 150 collections. Select an
-experimental recipe with `--settings`; do not assume `--stage` selects it. See
-[the maintained stage record](doc/current_implementation.md#four-stages-and-scientific-criteria)
-for initialization, reward definitions, and current experiment status.
-
-All current stages use
-`goal = (target_world - drone_initial_world) / cable_length` in world axes.
-Training uses one fixed nominal target and fixed initial conditions. The
-retired multi-target sampler and partial Stage3 training mask are not active.
-A correction network learned between attempts is not implemented.
+The [Stage 1 specification](doc/stage1.md) describes the exact formulas and
+limitations. The simulation and fitting pipeline remains separate and unchanged.
 
 ## Entry points
 
@@ -486,21 +459,16 @@ python run_simulation.py
 python run_custom_real.py
 python run_training.py --stage 1
 python run_training.py --stage 1 --start
-python run_training.py --stage 2 --initialize-actor runs/ppo_stage1/NEW_STAGE1_RUN/latest.pt --start
 python run_replay.py
 python run_replay.py --flight-view
 python take_processing/run_take_processing.py
-python validate_stages.py --output validation.json
 ```
 
-Replace `NEW_STAGE1_RUN` with a completed compatible run. Use the same explicit
-handoff for Stages3 and4. Opening Training without `--start` stays idle.
-Saved replay renders recorded states without running physics. The Training UI
-also provides a manual saved-policy simulation tester. Replay and policy-source
-browsers discover the four packaged milestone stages without archived run folders.
-The tester displays source-compatibility failures and disables fresh simulation
-for incompatible checkpoints; source loading is not a successful simulation.
-A changed target is a diagnostic, not demonstrated adaptation.
+Opening Training without `--start` stays idle. Only the current Stage 1 recipe
+is supported. Saved replay renders recorded states without running physics; the
+policy tester simulates compatible current checkpoints. Historical checkpoints
+may require the preserved source at commit `3c9a49e`. Source loading alone is
+not a successful simulation or policy evaluation.
 
 Offline whipping measurements use pinned saved replays and keep deformation,
 distal motion and delivery separate. Install plotting support with
@@ -515,7 +483,7 @@ The review writes synchronized plots, `review.md`, `events.csv`, full measuremen
 traces and `report.json`. `--case` and optional `--event` are zero-based. Candidate
 intervals remain unreviewed; they do not change rewards, training outcomes or
 curriculum. The manifest format and retained example bundle are described in
-[the implementation record](doc/current_implementation.md#offline-whipping-event-measurements--implemented-2026-10-22).
+[the preserved measurement documentation](https://github.com/TongshuWu1/AeroWhip_deploy/blob/3c9a49e/doc/current_implementation.md#offline-whipping-event-measurements--implemented-2026-10-22).
 
 Shared physical settings are in `configs/simulation.json`; initial conditions
 are in `configs/scenes/default.toml`. Physical refitting starts with
@@ -537,34 +505,10 @@ not rewritten. These are application checks, not an operating-system sandbox.
 The ROS launcher explicitly accepts external Crazyswarm YAML paths as bridge
 configuration; its scene, model, and output paths remain project-contained.
 
-## Milestone evidence and recovery
+## Historical code and evidence
 
-The selected completed chain used 80/80/120/60 collections. It predates the
-current relative-goal observation addition, so its saved interfaces remain as
-recorded. Its final actors load for CPU synthetic inference and saved replay.
-The latest containment/UI changes affect files covered by the physical-source
-guard, although no physics equations or numerical settings changed. That strict
-guard intentionally blocks fresh plant evaluation/actor transfer of these old
-checkpoints; rebuilding on another OS also changes registered binary hashes.
-Linux checkpoint reevaluation needs a separately validated compatibility path,
-not a silent hash bypass. Exact historical resume is not supported by this cleanup.
-Later experimental recipes remain separate from the packaged historical chain;
-no new Stage1-4 chain or flight-ready policy has been promoted.
-
-[The model manifest](models/milestone-20261009/manifest.json) records hashes,
-initialization links, settings, summaries, and essential saved evaluations.
-Nominal precision/recovery results do not establish workspace containment,
-varied-target robustness, or flight readiness. The small current-pipeline
-regression suite is self-contained and has no archived run-fixture dependency.
-Retained Linux connection checks cover the actual repeated CSV script, native
-command reconstruction, the GPU viewer, and YAML startup/Reset. Their artifacts
-and scope are linked from [current implementation](doc/current_implementation.md);
-they are simulation evidence, not a physical fit, policy result, or real-flight
-validation. Updating this README does not rerun those checks.
-
-Development runs, old tests, and original documentation are recoverable in the
-external archive `AeroWhip-development-archive-20261009`; its location and
-preservation evidence are in [milestone verification](doc/milestone.json).
-Git history is preserved.
-Training and its continuation remain paused for simulation work; no README
-command has been executed as part of this documentation update.
+Retired presets, Stage 1–4 models and old reward/replay implementations remain in
+[commit 3c9a49e](https://github.com/TongshuWu1/AeroWhip_deploy/tree/3c9a49e).
+Use a separate checkout to investigate them; they are not current training choices.
+The [handoff guide](doc/handoff-20261025/README.md) links the experiment archives.
+No old result or current software test establishes physical-flight readiness.

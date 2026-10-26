@@ -1,0 +1,150 @@
+{
+  "tests": {
+    "run": 229,
+    "passed": 227,
+    "skipped": 2,
+    "result": "passed",
+    "skips": "Two CUDA-only cases: CUDA deliberately hidden",
+    "log": "cleanup-tests.log"
+  },
+  "native_equivalence": {
+    "arrays": 28,
+    "bit_identical": true,
+    "lanes": 2,
+    "duration_s": 0.4,
+    "evidence": "cleanup-equivalence.json"
+  },
+  "worker": {
+    "summary": {
+      "phase": "completed",
+      "round": 1,
+      "episodes": 2,
+      "steps": 400,
+      "training_stage": 1,
+      "evaluation_steps": 200,
+      "gradient_updates": 10,
+      "best_return": -0.3985418677330017,
+      "reward_scale": 1,
+      "scaled_best_return": -0.3985418677330017,
+      "best_replay": "round-00001.npz",
+      "latest_checkpoint": "latest.pt",
+      "elapsed_s": 82.97147287799999,
+      "value_gradient_updates": 10
+    },
+    "lanes": 2,
+    "device": "cpu",
+    "purpose": "execution/accounting/checkpoint integration, not policy evaluation"
+  },
+  "frozen_replay": {
+    "arrays_exact": true,
+    "metrics_exact": true,
+    "summary": {
+      "phase": "completed",
+      "round": 1,
+      "evaluation_return": -0.3985418677330017,
+      "valid": true,
+      "replay": "rollout.npz",
+      "workspace_cost": 0.3985418666723949,
+      "workspace": {
+        "boundary_breached": 1.0,
+        "executed_duration_s": 4.0,
+        "workspace_mean_square_excess_m2": 0.039854186667239486,
+        "max_radial_violation_m": 0.6516225299950629,
+        "max_vertical_violation_m": 0.0,
+        "outside_duration_s": 1.2300000190734863,
+        "workspace_cost": 0.3985418666723949
+      },
+      "components": {
+        "continuous_whip_credit": 0.0,
+        "peak_reward_rate": 0.0,
+        "fold_support_integral_s": 0.0,
+        "positive_output_duration_s": 0.0,
+        "horizontal_reach_fraction": 0.0,
+        "completed_horizon": 1.0,
+        "failure": 0.0,
+        "executed_duration_s": 4.0,
+        "failure_adjustment": 0.0,
+        "failure_cost": 0.0,
+        "return_transform_adjustment": 0.0,
+        "net_episode_return": -0.3985418666723949,
+        "time_cost": 0.0,
+        "workspace_cost": 0.3985418666723949,
+        "world_outward_mps": 0.0,
+        "relative_outward_mps": 0.0,
+        "straightening_mps": 0.0,
+        "alignment": 0.0,
+        "fold_support": 0.0,
+        "physical_violation": 0.0,
+        "numerically_valid": 1.0,
+        "minimum_cable_height_m": 0.8424660182483101,
+        "maximum_tilt_deg": 1.0993843626836224
+      },
+      "evaluation_backend": "native_tensor_substep_guard_v1",
+      "reward_mode": "continuous_directional_whip_four_second_v6",
+      "evaluation_environments": 1,
+      "evaluation_policy_lanes": 2,
+      "unique_initial_states": 1,
+      "observation": "First sampled violation: cylinder radius at 2.78 s.",
+      "source_mode": "exact_source",
+      "exact_source_reproduction": true,
+      "task_stage": 1,
+      "scoring": "continuous_directional_whip_four_second_v6",
+      "termination": "continuous_whip_horizon_v1",
+      "comparison": {
+        "status": "Compared",
+        "arrays_exact": true,
+        "metrics_exact": true,
+        "differences": {
+          "numerically_valid": true,
+          "requested_wrench": 0.0,
+          "terminal_time_s": 0.0,
+          "command": 0.0,
+          "workspace_violation": 0.0,
+          "physical_violation": true,
+          "drone_velocities": 0.0,
+          "drone_rotations": 0.0,
+          "command_units": true,
+          "continuous_whip_diagnostics": 0.0,
+          "applied_command": 0.0,
+          "drone_angular_velocities": 0.0,
+          "cable_positions": 0.0,
+          "policy_rate_hz": true,
+          "cable_marker_indices": true,
+          "task_valid": true,
+          "fold_event_json": true,
+          "time_s": 0.0,
+          "motor_thrust_n": 0.0,
+          "drone_positions": 0.0,
+          "action_interface": true,
+          "continuous_whip_fields": true,
+          "cable_velocities": 0.0,
+          "acceleration_limit_mps2": 0.0,
+          "state_valid": true,
+          "cable_material_angles_rad": 0.0
+        },
+        "reference_sha256": "bedb28d89cb322bd66ee952c9e4baa3f1aa2c746602d3cbf8ad8d391f0dcf527",
+        "interpretation": "Exact-source deterministic comparison"
+      },
+      "elapsed_s": 29.379895932999716
+    }
+  },
+  "resume_preparation": {
+    "passed": true,
+    "completed_episodes": 2,
+    "new_total_budget": 4,
+    "identity_preserved": true,
+    "worker_not_launched": true
+  },
+  "ui": {
+    "offscreen_entry_point": "opened and exited without training",
+    "settings_dialog": "constructed; inactive matching/mechanics/target controls absent"
+  },
+  "physical_source_diff_empty": true,
+  "production_training_started": false,
+  "limitations": [
+    "No CUDA campaign or GPU performance comparison",
+    "No independent policy-success validation",
+    "No other-computer installation",
+    "No real-flight validation"
+  ]
+}

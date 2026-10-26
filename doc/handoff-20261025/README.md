@@ -27,9 +27,12 @@ has not been tested. See the main README for Windows build instructions.
 
 ## Restore historical runs and evidence only when needed
 
-The source commit contains all configurations,task/learning/evaluation/UI code,
-tests and historical packaged Stage1–4models. Large runs and `tmp` evidence are
-separate release assets, not part of `git clone`:
+The current checkout contains one supported Stage 1 training implementation.
+Retired rewards, presets, SAC, stage transitions and bundled historical models
+were removed with approval. They remain available at source-preservation commit
+`3c9a49e`. Use a separate checkout of that commit for historical code/model work;
+old checkpoints are not guaranteed to work with the pruned code.
+Large runs and `tmp` evidence are separate release assets, not part of `git clone`:
 
 [Download the handoff data release](https://github.com/TongshuWu1/AeroWhip_deploy/releases/tag/handoff-2026-10-25).
 
@@ -56,19 +59,20 @@ this is not a comprehensive security audit.
 
 ## Current task and verification
 
-Read [the contract](stage1-contract.md) and [implementation report](stage1-implementation-report.md).
-The +Xreward rate and workspace cost are experimental. Physical violations remain
+Read [the current Stage 1 specification](../stage1.md) and
+[the detailed cleanup report](cleanup-report.md). The dated contract and original
+implementation report in this directory are preserved historical snapshots.
+The +X reward and workspace cost remain experimental. Physical violations remain
 diagnostics; no contact model or validated whipping-success threshold was added.
-Full duration is not proof of physical validity. None of these failed/unfinished
-training experiments is promoted by this backup.
+Full duration is not proof of physical validity. No failed or unfinished experiment
+is promoted by this backup.
 
-The handoff test run initially found20stale-fixture/default failures/errors. Original
-log retained. Legacy acceleration/reward-review fixtures now explicitly select their
-intended historical presets, rather than the mutable default. Path tests assert the
-current default; the v4handoff test reconstructs its original128lane budget rather
-than silently using its later64lane continuation preset. No scientific tolerances
-or acceptance criteria were weakened. The subsequent CPU-only suite passed:
-**570tests,10skipped**. CUDA-specific cases were not exercised in that check.
+Before pruning, the historical suite passed 570 tests with 10 skips; its original
+logs remain here. After retiring obsolete features and their dedicated tests,
+the current CPU-only suite ran 229 tests: 227 passed, 2 skipped. These are different
+suite scopes, not a claim of equivalent coverage. Current counterexamples and
+numerical tolerances were preserved. See the cleanup report for integration and
+equivalence evidence, including their limits.
 
 Exact checkpoint continuation is source/binary-hash guarded and may be unavailable
 on another OS/build; those guards were not bypassed. In particular the default
@@ -77,9 +81,14 @@ checkpoint. Since v6has0learning updates, the recommended path is a fresh run.
 
 ## Cleanup
 
-Removed2.66GiB of old-release-verified duplicate downloads/snapshots,caches and
-stale locks. One snapshot file differing from the old manifest was preserved.
-Historical run/evidence folders are archived before removal from the local working
-checkout. The latest stopped v6run and its implementation evidence remain local.
-Release manifest/checksums retain the original paths for restoration. Generated
-build/virtualenv/native binaries remain ignored and are not pushed into Git history.
+Removed 2.66 GiB of verified duplicate downloads/snapshots, caches and stale locks.
+Then removed 10,676 archived files (14.00 GiB) from old local `runs/` and `tmp/`
+folders only after matching every file to its archive manifest and verifying all
+22 GitHub assets by SHA-256 and byte count. No changed file was deleted.
+The latest stopped v6 run and its implementation evidence remain local, as do
+source recordings and reusable simulation/fitting/deployment tools. A local copy
+of the compressed archives remains outside the checkout.
+
+The release contains 18 independent archive parts and four manifests/checksum
+files (8,545,338,190 bytes in total). Build products, environments and native
+binaries remain ignored; rebuild them on the new computer.
