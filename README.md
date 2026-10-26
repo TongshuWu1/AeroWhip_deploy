@@ -353,12 +353,19 @@ and the raw cloud independently in Displays. Missing/ambiguous nodes have no
 rendered replacement or bridging link; stale reconstruction is hidden. The
 tracking overlay does not correct the cable simulation or supply a controller.
 
-The existing `/pointCloud` topic mixes loose and rigid-body markers and discards
-NatNet IDs and visibility flags. Accordingly this first implementation records
-the mixed XYZ cloud, not a certified unlabeled-only stream or persistent Motive
-IDs. It requires a verified capture publisher and exact matching cloud/pose
-header timestamps. Source and transformed XYZ arrays, original point indices,
-assignment/null decisions and confidence are retained in `connection.jsonl`
+The patched open OptiTrack backend preserves the mixed `/pointCloud` XYZ rows
+and adds aligned `natnet_id`, `natnet_flags` and `natnet_source` fields. Cable
+association accepts observed, unassociated passive labeled markers and excludes
+asset markers, occluded/model-solved points and deprecated unclassified duplicate
+rows. IDs filter membership; they do not define persistent cable identity.
+All raw points remain recorded. Missing metadata shows an explicit unavailable/
+rebuild diagnostic rather than associating the mixed cloud. Backends without
+this metadata cannot supply this tracker. Rebuild the Crazyswarm Docker image
+before recreating a container; the current development container was rebuilt.
+
+Tracking requires a verified capture publisher and exact matching cloud/pose
+header timestamps. Source and transformed XYZ arrays, marker metadata, original
+and excluded point indices, assignment/null decisions and confidence are retained in `connection.jsonl`
 under the printed output directory. These are ROS receipt timestamps; upstream
 and DDS losses cannot be reconstructed. No synchronized camera-exposure record
 or physical tracking accuracy is claimed.
@@ -392,8 +399,16 @@ stack, use `--attach --track-cable --robot cf_2 --domain 43` for a default
 capture-only stack (or its selected domain), with the previously
 documented attach shutdown behavior.
 
+Capture-only initially shows the measured drone and **blue accepted cable
+estimates**. Raw gray candidates, the green simulated cable and its tip trail
+start hidden. Use **Displays** to show them for comparison. Missing or ambiguous
+markers remain gaps; accepted identities are estimates, not certified ground truth.
+
 The recording contains measured drone poses, the mixed raw candidate cloud,
-estimated marker identities/confidence, and the simulated cable as displayed.
+estimated marker identities/confidence, and simulated cable geometry, including
+layers hidden in the live view.
+New capture events retain aligned marker membership/visibility metadata. Older
+recordings remain playable but cannot recover metadata discarded at capture.
 Missing markers, stale samples and errors are retained. Record/Stop does not
 reinitialize either the tracker or the cable simulation. **Blue** remains the
 estimated cable and **green** remains simulated; neither is a validated ground

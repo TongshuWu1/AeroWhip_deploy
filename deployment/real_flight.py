@@ -10,7 +10,7 @@ from time import perf_counter
 import numpy as np
 
 from deployment.ros_bridge import vector
-from deployment.ros_real_bridge import PacketReader
+from deployment.ros_real_bridge import PacketReader, cable_candidate_mask
 from simulation.state import DroneState, quaternion_xyzw_to_rotation_matrix
 from viewer.display_state import CableDisplay, CableTrackingDisplay, DisplayFrame, Provenance, RobotDisplay
 from viewer.sources import DisplayFeed
@@ -233,11 +233,18 @@ class RealFlightFeed(DisplayFeed):
             vector(data['quaternion_xyzw'], 4))@self.configuration.platform.attachment_offset_body_m
         points = np.asarray(packet['points_world_m'], dtype=float).reshape(-1, 3)
         try:
-            result = self.tracker.observe(float(packet['time_s']), root, points)
+            eligible = np.asarray(cable_candidate_mask(packet.get('point_metadata'), len(points)), dtype=bool)
+            candidates = points.copy()
+            candidates[~eligible] = np.nan
+            result = self.tracker.observe(float(packet['time_s']), root, candidates)
         except ValueError as exc:
+            self.tracking_status = str(exc)
+            self.tracking_display = None
             self.reconstruction = dict(status=str(exc), stamp_ns=packet['stamp_ns'])
             return
-        self.reconstruction = dict(result, stamp_ns=packet['stamp_ns'], generation=generation, robot=data['name'])
+        self.reconstruction = dict(result, stamp_ns=packet['stamp_ns'], generation=generation, robot=data['name'],
+            excluded_point_indices=np.flatnonzero(~eligible).tolist(),
+            candidate_filter='Observed unassociated passive NatNet labeled markers; raw points retained')
         observed = np.array([p is not None for p in result['positions_world_m']])
         positions = np.array([p if p is not None else [0., 0., 0.] for p in result['positions_world_m']])
         self.tracking_status = f'{result["observed_count"]}/{result["marker_count"]} · {result["status"]}'

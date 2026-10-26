@@ -7,7 +7,7 @@ import numpy as np
 
 from deployment.cable_tracking import CableTracker, TrackingSettings
 from deployment.real_flight import RealFlightFeed
-from deployment.ros_real_bridge import cloud_xyz
+from deployment.ros_real_bridge import cloud_xyz, cloud_marker_metadata, cable_candidate_mask
 from simulation.configuration import load_configuration
 
 
@@ -151,6 +151,39 @@ class CableTrackingTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'layout'):
                 cloud_xyz(message)
 
+    def test_marker_metadata_respects_rows_padding_endianness_and_rejects_partial_fields(self):
+        for endian in ('<', '>'):
+            fields = [SimpleNamespace(name=name, offset=offset, datatype=datatype, count=1)
+                for name, offset, datatype in (('x',0,7),('y',4,7),('z',8,7),
+                    ('natnet_id',12,6),('natnet_flags',16,4),('natnet_source',18,2))]
+            rows = [(65537, 0x0a, 3), (0xf1234567, 0x12, 3)]
+            data = b''.join(struct.pack(endian+'fffIHBx', 1., 2., 3., *row)+bytes(4) for row in rows)
+            message = SimpleNamespace(width=1, height=2, fields=fields, point_step=20,
+                row_step=24, is_bigendian=endian=='>', data=data)
+            metadata = cloud_marker_metadata(message)
+            self.assertEqual(metadata, dict(natnet_id=[65537,0xf1234567],
+                natnet_flags=[0x0a,0x12],natnet_source=[3,3]))
+            self.assertEqual(cable_candidate_mask(metadata,2),[False,True])
+            self.assertEqual(cloud_xyz(message),[[1.,2.,3.],[1.,2.,3.]])
+            message.fields = fields[:3]
+            self.assertIsNone(cloud_marker_metadata(message))
+            message.fields = fields[:4]
+            with self.assertRaisesRegex(ValueError,'metadata'):
+                cloud_marker_metadata(message)
+
+    def test_membership_filter_rejects_assets_occluded_models_and_legacy_duplicates(self):
+        metadata = dict(natnet_id=[65537,1,2,3,4,0xf1234567,6,7,65538,8],
+            natnet_flags=[0x0a,0x12,0x13,0x14,0x32,0x12,0,0,0,0],
+            natnet_source=[3,3,3,3,3,3,0,1,2,2])
+        self.assertEqual(cable_candidate_mask(metadata,10),
+            [False,True,False,False,False,True,False,False,False,True])
+        with self.assertRaisesRegex(ValueError,'rebuild'):
+            cable_candidate_mask(None,10)
+        for invalid in (dict(metadata,natnet_id=[1]),dict(metadata,natnet_flags=[True]*10),
+                dict(metadata,natnet_source=[4]*10)):
+            with self.assertRaisesRegex(ValueError,'metadata'):
+                cable_candidate_mask(invalid,10)
+
     def test_feed_exact_matching_timestamps_and_generation(self):
         config = load_configuration('configs/scenes/default.toml')
         feed = RealFlightFeed(config, [dict(name='cf_2', provenance='Measured')], 'mocap', 'test',
@@ -160,7 +193,8 @@ class CableTrackingTests(unittest.TestCase):
             position_world_m=(self.root-config.platform.attachment_offset_body_m).tolist(),
             quaternion_xyzw=[0., 0., 0., 1.])
         cloud = dict(kind='markers', session='test', frame_id='mocap', generation=0,
-            time_s=1., stamp_ns=pose['stamp_ns'], robots=[pose], points_world_m=self.points.tolist())
+            time_s=1., stamp_ns=pose['stamp_ns'], robots=[pose], points_world_m=self.points.tolist(),
+            point_metadata=dict(natnet_id=list(range(10)),natnet_flags=[0x12]*10,natnet_source=[3]*10))
         feed.receive(cloud)
         state = dict(kind='state', session='test', frame_id='mocap', generation=0,
             sequence=1, time_s=1.01, capture_type='optitrack', robots=[pose])
@@ -176,6 +210,32 @@ class CableTrackingTests(unittest.TestCase):
         self.assertTrue(feed.tracker.initialized)
         feed.receive(dict(state, generation=1, sequence=2, time_s=.11, robots=[]))
         self.assertTrue(feed.tracker.initialized)  # First marker precedes new heartbeat.
+
+    def test_feed_excludes_body_points_before_history_and_preserves_raw_indices(self):
+        config = load_configuration('configs/scenes/default.toml')
+        feed = RealFlightFeed(config,[dict(name='cf_2',provenance='Measured')],
+            'mocap','test',tracking_settings=self.settings)
+        self.addCleanup(feed.close)
+        pose = dict(name='cf_2',stamp_ns=1,time_s=1.,
+            position_world_m=(self.root-config.platform.attachment_offset_body_m).tolist(),
+            quaternion_xyzw=[0.,0.,0.,1.])
+        # An asset point exactly at a cable prior must be excluded, including
+        # its deprecated duplicate. The real cable observation remains eligible.
+        cloud = np.vstack((self.points[0],self.points[0],self.points))
+        packet = dict(kind='markers',session='test',frame_id='mocap',generation=0,
+            time_s=1.,stamp_ns=1,robots=[pose],points_world_m=cloud.tolist(),
+            point_metadata=dict(natnet_id=[65537,0]+list(range(10)),
+                natnet_flags=[0x0a,0]+[0x12]*10,natnet_source=[3,0]+[3]*10))
+        feed.receive(packet)
+        self.assertEqual(feed.reconstruction['point_indices'],list(range(2,12)))
+        self.assertEqual(feed.reconstruction['excluded_point_indices'],[0,1])
+        np.testing.assert_array_equal(feed.tracking_display.raw_points_world_m,cloud)
+        np.testing.assert_array_equal(feed.tracker.positions,self.points)
+        # Missing membership must clear the display rather than silently
+        # associating the mixed cloud or reusing the previous blue estimates.
+        feed.receive(dict(packet,time_s=1.01,point_metadata=None))
+        self.assertIsNone(feed.tracking_display)
+        self.assertIn('membership unavailable',feed.tracking_status)
 
 
 if __name__ == '__main__':

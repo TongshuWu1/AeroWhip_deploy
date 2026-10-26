@@ -14,8 +14,8 @@ MAX_PACKET_BYTES = 1048576
 def cloud_xyz(message, maximum=2048):
     """Decode organized/padded XYZ32 clouds without relying on sensor_msgs_py.
 
-    The current upstream topic has no IDs or visibility flags. Preserve input
-    ordering; a nonfinite coordinate is represented as null in JSON evidence.
+    Preserve input ordering; a nonfinite coordinate is null in JSON evidence.
+    Optional NatNet fields are decoded separately by cloud_marker_metadata.
     """
     if message.width*message.height > maximum:
         raise ValueError(f'Point cloud exceeds {maximum} points; no assignments made')
@@ -33,6 +33,52 @@ def cloud_xyz(message, maximum=2048):
              (struct.unpack_from(fmt, message.data, row*message.row_step+col*message.point_step+offset)[0]
               for offset in offsets)]
             for row in range(message.height) for col in range(message.width)]
+
+
+def cloud_marker_metadata(message):
+    """Decode the patched capture node's aligned NatNet fields, if present."""
+    fields = {field.name: field for field in message.fields}
+    layout = (('natnet_id', 6, 'I', 4), ('natnet_flags', 4, 'H', 2),
+              ('natnet_source', 2, 'B', 1))
+    if not any(name in fields for name, *_ in layout):
+        return None
+    if (message.width*message.height > 2048
+            or message.row_step < message.width*message.point_step
+            or len(message.data) < message.row_step*message.height):
+        raise ValueError('Invalid marker-metadata cloud layout/capacity')
+    result = {}
+    for name, datatype, fmt, size in layout:
+        field = fields.get(name)
+        if (field is None or field.datatype != datatype or field.count != 1
+                or field.offset < 0 or field.offset+size > message.point_step):
+            raise ValueError('Incomplete or invalid NatNet marker metadata')
+        result[name] = [struct.unpack_from(('>' if message.is_bigendian else '<')+fmt,
+            message.data, row*message.row_step+col*message.point_step+field.offset)[0]
+            for row in range(message.height) for col in range(message.width)]
+    return result
+
+
+def cable_candidate_mask(metadata, count):
+    """Observed, unassociated passive markers only; never infer cable ID here.
+
+    Deprecated OtherMarkers can duplicate asset markers and have no membership,
+    so remain recorded but ineligible. Modern PointCloud IDs can use all 32 bits;
+    only legacy IDs encode asset membership in their high word.
+    """
+    if metadata is None:
+        raise ValueError('Marker membership unavailable; rebuild the OptiTrack node with the marker-metadata patch')
+    if not isinstance(metadata, dict):
+        raise ValueError('Invalid NatNet marker metadata')
+    for name, maximum in (('natnet_id', 0xffffffff), ('natnet_flags', 0xffff), ('natnet_source', 3)):
+        values = metadata.get(name)
+        if (not isinstance(values, list) or len(values) != count
+                or any(type(v) is not int or not 0 <= v <= maximum for v in values)):
+            raise ValueError('Invalid or unaligned NatNet marker metadata: '+name)
+    return [
+        (source == 3 and bool(flags & 0x10) and not flags & 0x2d)
+        or (source == 2 and marker_id >> 16 == 0 and not flags & 0x05)
+        for marker_id, flags, source in zip(metadata['natnet_id'],
+            metadata['natnet_flags'], metadata['natnet_source'])]
 
 
 def encode(packet):
@@ -269,6 +315,7 @@ def main():
                 if frame != args.capture_frame or not 0 < stamp_ns <= self.get_clock().now().nanoseconds:
                     raise ValueError('Point-cloud frame/timestamp mismatch')
                 raw = cloud_xyz(message)
+                metadata = cloud_marker_metadata(message)
                 transformed = raw
                 if frame != args.frame:
                     transform = self.buffer.lookup_transform(args.frame, frame, Time.from_msg(message.header.stamp))
@@ -284,7 +331,8 @@ def main():
                         transformed.append([point.x, point.y, point.z])
                 self.pending_clouds[stamp_ns] = dict(raw_points_capture_m=raw,
                     points_world_m=transformed, capture_frame=frame,
-                    point_ids=None, source='Mixed NatNet OtherMarkers + LabeledMarkers XYZ; IDs/flags unavailable')
+                    point_metadata=metadata,
+                    source='Mixed NatNet OtherMarkers + LabeledMarkers; aligned metadata when supported')
                 self.issues.pop('point_cloud', None)
                 self.flush_clouds(stamp_ns)
             except Exception as exc:

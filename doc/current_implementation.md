@@ -1,6 +1,6 @@
 # Current implementation
 
-Last reviewed: 2026-10-25.
+Last reviewed: 2026-10-26.
 
 ## Active training and handoff
 
@@ -890,3 +890,7 @@ Stage 1 contract, shared simulation and data tools. Replaced contradictory histo
 training descriptions with `stage1.md`; original notes remain in Git. Detailed deletion,
 verification and archive accounting is in [cleanup report](handoff-20261025/cleanup-report.md).
 Software and short numerical checks are not learned-policy or real-flight validation.
+
+## Dated change note — 2026-10-26 branch consolidation
+
+Merged commit 546188e (rigid-body marker exclusion, tag capture-update-2026-10-16) into main; the develop branch was removed. Live Motive validation, partial initialization and simulated-cable failure behavior remain pending. The detailed 2026-10-16 note is in commit 546188e.
