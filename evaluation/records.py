@@ -1,4 +1,4 @@
-"""Discover current Stage 1 PPO runs and verify checkpoints used for evaluation."""
+"""Discover current PPO runs and verify checkpoints used for evaluation."""
 import hashlib
 import io
 import os
@@ -8,11 +8,9 @@ import subprocess
 
 import torch
 
-from project_paths import ROOT, project_path
-from training.artifacts import execution_hashes, identity, read_json
-from training.configuration import checkpoint_schema, run_schema
-
-RUNS = ROOT/'runs/ppo_stage1'
+from project_paths import project_path
+from experiment import Experiment, RUN_SCHEMA, identity
+from training.artifacts import CHECKPOINT_SCHEMA, RUNS, execution_hashes, read_json
 
 
 def discover_runs(root=RUNS):
@@ -25,8 +23,7 @@ def discover_runs(root=RUNS):
         if not path.is_dir() or not (path/'configuration.json').exists():
             continue
         try:
-            snapshot = read_json(path/'configuration.json')
-            if snapshot.get('schema') == run_schema(snapshot['settings']):
+            if read_json(path/'configuration.json').get('schema') == RUN_SCHEMA:
                 result.append(path)
         except (OSError, ValueError, KeyError) as exc:
             warnings.append(f'{path.name}: {exc}')
@@ -67,14 +64,13 @@ def load_checkpoint(path):
     digest_value = hashlib.sha256(payload).hexdigest()
     saved = torch.load(io.BytesIO(payload), map_location='cpu', weights_only=True)
     snapshot = saved.get('snapshot', {})
-    if saved.get('schema') != checkpoint_schema(snapshot.get('settings', {})):
-        raise ValueError('Select a current Stage 1 PPO checkpoint')
-    if snapshot.get('schema') != run_schema(snapshot['settings']):
-        raise ValueError('Checkpoint schema and action interface differ')
+    if saved.get('schema') != CHECKPOINT_SCHEMA or snapshot.get('schema') != RUN_SCHEMA:
+        raise ValueError('Select a current PPO checkpoint')
+    environment = snapshot['experiment']['environment']
     interface = saved['agent'].get('interface', {})
-    for key in ('action_interface', 'acceleration_limit_mps2', 'policy_rate_hz'):
-        if interface.get(key) != snapshot['settings'].get(key):
-            raise ValueError('Acceleration checkpoint control interface differs: '+key)
+    for key in ('acceleration_limit_mps2', 'policy_rate_hz'):
+        if interface.get(key) != environment[key]:
+            raise ValueError('Checkpoint control interface differs from its experiment: '+key)
     if identity(snapshot) != saved['identity'] or snapshot.get('identity') != saved['identity']:
         raise ValueError('Checkpoint configuration identity is inconsistent')
     return dict(snapshot=snapshot, round=saved['round'], actor=saved['agent']['actor'], sha256=digest_value)
@@ -104,8 +100,7 @@ def evaluation_contract(snapshot, mode):
         physical = [k for k in changed if k.split('/')[0] in ('simulation', 'controllers', 'native')]
         if physical:
             raise ValueError('Current-code reevaluation requires unchanged physical execution: '+', '.join(physical))
-        from training.configuration import validate
-        validate(snapshot['settings'])  # No silent settings/schema migration.
+        Experiment.from_dict(snapshot['experiment'])  # No silent settings/schema migration.
     return dict(source_mode=mode, execution_hashes=current,
                 source_execution_hashes=snapshot['execution_hashes'], changed_files=changed,
                 evaluator_hashes=evaluator_hashes(), exact_source_reproduction=(mode == 'exact_source'))

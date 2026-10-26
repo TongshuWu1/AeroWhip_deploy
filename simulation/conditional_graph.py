@@ -1,4 +1,4 @@
-"""Task-only isolated GPU loop around the unchanged compiled Picard slot."""
+"""GPU-controlled Picard loop around the unchanged compiled slot, for batched environments."""
 import torch
 from types import MethodType
 from .conditional_driver import Driver
@@ -59,7 +59,7 @@ class ConditionalSlots:
 
 
 def install(model,driver=None):
-    """Replace only this task-owned model instance's iteration scheduling."""
+    """Replace only this model instance's iteration scheduling."""
     m=model
     if not m.rest.is_cuda or not m.batched:
         raise ValueError("Conditional task replay needs a CUDA batched model")

@@ -25,7 +25,7 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
             'QWidget#testerControls QDoubleSpinBox, QWidget#testerControls QLineEdit, '
             'QWidget#testerControls QComboBox {background:white;color:#213547;padding:4px;} '
             'QWidget#testerControls QPushButton {background:white;color:#213547;padding:7px;border:1px solid #ccd8e2;}')
-        self.info=self.scene=self.cfg=self.directory=None
+        self.info=self.scene=self.experiment=self.directory=None
         self.closing=False
         self.process=QtCore.QProcess(self)
         self.process.setWorkingDirectory(str(ROOT))
@@ -120,13 +120,13 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
     def load_source(self,path):
         try:
             path=project_path(path)
-            info,scene,cfg=checkpoint_context(path)
-            self.info,self.scene,self.cfg=info,scene,cfg
+            info,scene,experiment=checkpoint_context(path)
+            self.info,self.scene,self.experiment=info,scene,experiment
             self.checkpoint.setText(str(path.resolve()))
             self.runs.blockSignals(True)
             self.runs.setCurrentIndex(self.runs.findData(str(path.resolve())))
             self.runs.blockSignals(False)
-            self.source.setText(f'Stage 1 · checkpoint iteration {info["round"]}')
+            self.source.setText(f'{experiment.task.name} · checkpoint iteration {info["round"]}')
             self.set_case_inputs(initial_case(scene))
             self.update_warnings()
         except Exception as exc:
@@ -152,7 +152,7 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
     def update_warnings(self):
         if self.info is None: return
         try:
-            warnings=case_warnings(self.scene,self.cfg,self.case())
+            warnings=case_warnings(self.scene,self.experiment,self.case())
             evaluation_contract(self.info['snapshot'], 'current_code')
             self.warning.setText('\n\n'.join(warnings))
             self.test.setEnabled(self.process.state()==QtCore.QProcess.ProcessState.NotRunning)

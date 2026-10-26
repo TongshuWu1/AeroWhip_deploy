@@ -45,7 +45,7 @@ class PresentationData:
     def load_measurement(cls, report_path, case_index=0, event_index=None):
         """Display a pinned offline review without rescoring or changing saved outcomes."""
         from simulation.configuration import load_configuration
-        from training.configuration import task_configuration
+        from experiment import from_snapshot
         from viewer.replay import StateReplay
         report_path = project_path(report_path)
         report = json.loads(report_path.read_text())
@@ -76,7 +76,7 @@ class PresentationData:
             data = cls.load(replay_path.parent, replay_path.name)
         else:
             scene = load_configuration(scene_path)
-            config = task_configuration(snapshot['task'], snapshot['settings'], snapshot['model'], scene)
+            config = from_snapshot(snapshot, scene)
             with np.load(replay_path, allow_pickle=False) as archive:
                 replay = StateReplay(dict(archive))
             # Detached diagnostics have no recorded training outcome to infer.
@@ -118,7 +118,7 @@ class PresentationData:
     @classmethod
     def load(cls, directory, filename=None, event=None):
         from simulation.configuration import load_configuration
-        from training.configuration import task_configuration
+        from experiment import from_snapshot
         from viewer.replay import StateReplay
         directory = project_path(directory)
         rows = read_events(directory)
@@ -144,13 +144,13 @@ class PresentationData:
         case_path = contained_child(directory, 'case.json')
         if event.get('protocol') == 'initial_state_policy_test_v1':
             from evaluation.policy_test import case_scene
-            from training.configuration import digest
+            from experiment import digest
             case = json.loads(case_path.read_text())
             request = json.loads(contained_child(directory, 'request.json').read_text())
             if event.get('case') != case or request.get('case_sha256') != digest(case):
                 raise ValueError('Saved test case differs from its frozen request/result')
             scene = case_scene(scene,case)
-        config = task_configuration(snapshot['task'], snapshot['settings'], snapshot['model'], scene)
+        config = from_snapshot(snapshot, scene)
         with np.load(contained_child(directory, filename), allow_pickle=False) as data:
             replay = StateReplay(dict(data))
         hashes = {name: sha256(contained_child(directory, name)) for name in
@@ -161,7 +161,7 @@ class PresentationData:
     @property
     def output_direction(self):
         """Task output direction in world axes, for live tip-velocity display."""
-        return self.config.output_direction_world
+        return self.config.task.output_direction_world
 
     def evidence(self):
         return dict(run=str(self.directory), replay=self.filename,

@@ -82,8 +82,8 @@ class WhipDiagnosticsData:
                 raise ValueError('This recording has no saved cable positions/velocities.')
             time, positions, velocities = [np.asarray(archive[key], dtype=float) for key in required]
             record, notices = {}, []
-            if 'fold_event_json' in archive:
-                value = archive['fold_event_json'].item()
+            if 'task_record_json' in archive:
+                value = archive['task_record_json'].item()
                 record = json.loads(value)
                 if not isinstance(record, dict):
                     raise ValueError('Expected an individual saved fold record.')
@@ -95,9 +95,9 @@ class WhipDiagnosticsData:
             validity = bool(archive['task_valid'].item()) if 'task_valid' in archive else None
             valid_frames = np.asarray(archive['state_valid'], bool) if 'state_valid' in archive else None
             continuous={}
-            if 'continuous_whip_diagnostics' in archive and 'continuous_whip_fields' in archive:
-                values=np.asarray(archive['continuous_whip_diagnostics'],float)
-                fields=archive['continuous_whip_fields'].tolist()
+            if 'task_trace' in archive and 'task_trace_fields' in archive:
+                values=np.asarray(archive['task_trace'],float)
+                fields=archive['task_trace_fields'].tolist()
                 if values.shape!=(len(time),len(fields)):
                     raise ValueError('Continuous reward trace does not match saved frames.')
                 continuous={str(key):values[:,i] for i,key in enumerate(fields)}
@@ -148,7 +148,7 @@ class WhipDiagnosticsData:
                           np.sum(tangents[:, :-1] * tangents[:, 1:], axis=2))
         density, grid, regions = None, None, [[] for _ in time]
         if len(rest) == 10:
-            from tasks.whip.horizontal_fold import FoldGeometry
+            from tasks.whip.fold_geometry import FoldGeometry
             geometry = FoldGeometry(rest)
             density = turn @ geometry.kernel
             grid = geometry.grid.copy()
@@ -166,7 +166,7 @@ class WhipDiagnosticsData:
         return cls(path, time, positions, rel, velocities, rv, rest,
                    reach/rest.sum(), rel[:, -1, 2], ws, rs, uw, ur, wc, rc,
                    np.degrees(turn), density, grid, regions, record, events,
-                   snapshot.get('task', {}).get('reward', 'unknown'), validity, notices,continuous)
+                   snapshot.get('experiment', {}).get('task', {}).get('name', 'unknown'), validity, notices,continuous)
 
     def phase(self, index):
         past = [e for e in self.events if e['time_s'] <= self.time[index]+1e-9]

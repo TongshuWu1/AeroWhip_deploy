@@ -18,13 +18,19 @@ dependencies = [
 [project.optional-dependencies]
 build = ["pybind11==3.0.1"]
 review = ["matplotlib>=3.8"]
+dev = ["pytest>=8"]
 
 [tool.setuptools]
-py-modules = ["project_paths", "model_catalog"]
+py-modules = ["project_paths", "experiment", "training_history"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["simulation*", "viewer*", "trajectories*", "controllers*", "take_processing*", "fitting*", "tasks*", "training*", "evaluation*"]
+include = ["simulation*", "viewer*", "trajectories*", "controllers*", "take_processing*", "fitting*", "envs*", "tasks*", "training*", "evaluation*", "deployment*"]
 
 [tool.setuptools.package-data]
 viewer = ["assets/drone/*.stl"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-p no:cacheprovider"

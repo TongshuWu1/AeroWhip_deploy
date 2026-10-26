@@ -4,14 +4,16 @@ Last reviewed: 2026-10-26. Implemented experiment, **not a validated whipping cl
 
 ## What is running, and what it should learn
 
-Training is stopped. The latest production run, `runs/ppo_stage1/20261025-215750-176045`,
+Training is stopped. The latest production run, `runs/ppo_stage1/20261025-215750-176045` (old format),
 stopped during its first collection: **zero completed collections, zero completed episodes,
 zero optimizer updates**. Its checkpoint is an initialization, not a trained result.
 
 The only supported training recipe is the experiment file
 [`configs/experiments/stage1_fold_x_v6.json`](../configs/experiments/stage1_fold_x_v6.json).
-It holds the run, control and PPO settings and an inline `task` section; every number
-below is read from that file (typed by [tasks/whip/configuration.py](../tasks/whip/configuration.py)).
+It has `run`, `environment`, `task` and `ppo` sections; every number below is read from that
+file. Horizon, action limits, workspace and validity limits are `environment.*`
+([envs/configuration.py](../envs/configuration.py)); reward weights are `task.*`
+([tasks/whip/configuration.py](../tasks/whip/configuration.py)).
 The values shown here are the file's current values, not constants in code.
 It asks the drone to generate a coherently moving fold and associated outward cable opening
 in **world +X**. Sideways/backward preparation is allowed. It does not ask the tip to hit a target.
@@ -122,9 +124,8 @@ The 11-sample window, 90°/150° turn limits, 0.8 coherence, 0.1 L travel and 10
 `task.alignment_power`. The Gaussian bandwidth and 1,001-point grid belong to the fixed
 fold-measurement geometry and are not task settings.
 
-Sources: [fold geometry](../tasks/whip/horizontal_fold.py),
-[region extraction](../tasks/whip/fold_geometry.py),
-[continuous reward](../tasks/whip/continuous_whip.py).
+Sources: [fold geometry](../tasks/whip/fold_geometry.py),
+[fold-transport reward](../tasks/whip/fold_transport.py).
 
 ## Workspace cost
 
@@ -137,8 +138,8 @@ vertical_excess = max(0, 1.5 m − drone_z) + max(0, drone_z − 2.6 m)
 C = sum(10 × (radial_excess² + vertical_excess²) / 400)
 ```
 
-The radius and heights are `task.workspace`, the factor 10 is `task.workspace_cost_weight`,
-and 400 is the number of 10 ms steps in `task.duration_s`.
+The radius and heights are `environment.workspace`, the factor 10 is `task.workspace_cost_weight`,
+and 400 is the number of 10 ms steps in `environment.duration_s`.
 
 `C` is an uncapped fixed-horizon average squared-distance cost. A constant 0.1 m radial
 excess for all four seconds costs 0.1; a constant 1 m excess costs 10. There is no saturated

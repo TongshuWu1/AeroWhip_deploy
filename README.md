@@ -51,9 +51,9 @@ On Linux, with a C++17 compiler available:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e ".[build]"
+python -m pip install -e ".[build,dev]"
 python build_engine.py
-python validate_stages.py
+python -m pytest
 ```
 
 On Windows, with MSVC and a Windows SDK available:
@@ -61,9 +61,9 @@ On Windows, with MSVC and a Windows SDK available:
 ```powershell
 py -3.12 -m venv .venv
 .venv\Scripts\Activate.ps1
-python -m pip install -e ".[build]"
+python -m pip install -e ".[build,dev]"
 python build_engine.py
-python validate_stages.py
+python -m pytest
 ```
 
 CUDA training also requires a compatible Torch/CUDA/Triton installation. The
@@ -475,7 +475,7 @@ python run_custom_real.py
 python run_training.py
 python run_training.py --start
 python run_replay.py
-python run_replay.py --run runs/ppo_stage1/<run> --flight-view
+python run_replay.py --run runs/ppo/<run> --flight-view
 python tools/equivalence_baseline.py
 python take_processing/run_take_processing.py
 ```

@@ -8,10 +8,11 @@ import numpy as np
 import torch
 
 from fitting.artifacts import atomic_save
-from project_paths import ROOT, project_path, project_reference, contained_child
-from training.configuration import digest, load, checkpoint_schema, episode_budget, experiment, validate
+from project_paths import ROOT, project_path, project_reference
+from experiment import Experiment, identity, load
 
-PPO_RUNS = ROOT/'runs/ppo_stage1'
+RUNS = ROOT/'runs/ppo'
+CHECKPOINT_SCHEMA = 'aerowhip_ppo_checkpoint_v1'
 
 
 def clean(value):
@@ -32,47 +33,38 @@ def read_json(path):
 
 def execution_hashes():
     paths = []
-    for directory in ('simulation','controllers','tasks','training','native'):
+    for directory in ('simulation','controllers','envs','tasks','training','native'):
         for suffix in ('*.py','*.cpp','*.h','*.hpp','*.inc','*.pyd','*.so'):
             paths.extend((ROOT/directory).rglob(suffix))
+    paths.append(ROOT/'experiment.py')
     return {p.relative_to(ROOT).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
             for p in sorted(set(paths)) if not any(x in p.parts for x in ('build','__pycache__'))}
 
 
-def identity(snapshot):
-    # Only the total budget can change when resuming an experiment.
-    snapshot = dict(snapshot,settings=dict(snapshot['settings']))
-    snapshot.pop('identity',None)
-    snapshot['settings'].pop('training_episodes')
-    return digest(snapshot)
+def create_run(raw, resume=None, *, root=None):
+    """Freeze a new run folder from an experiment dict.
 
-
-def create_run(settings, resume=None, *, task=None, root=None):
-    """Freeze a new run folder. A fresh run needs its task section; a resume reuses the checkpoint's."""
+    A fresh run validates and snapshots raw. An exact resume reuses the checkpoint's
+    snapshot and takes only run.training_episodes (the extended budget) from raw.
+    """
     parent = None
     if resume:
         parent = project_path(resume)
         saved = torch.load(parent,map_location='cpu',weights_only=True)
-        if settings.get('action_interface') != saved['snapshot']['settings'].get('action_interface'):
-            raise ValueError('Exact resume cannot change the policy action interface')
-        if saved.get('schema') != checkpoint_schema(saved['snapshot']['settings']):
-            raise ValueError('Resume requires a current learner checkpoint. '
-                             'Historical checkpoint compatibility is retired; start a new run.')
+        if saved.get('schema') != CHECKPOINT_SCHEMA:
+            raise ValueError('Resume requires a current learner checkpoint; start a new run.')
         snapshot = saved['snapshot']
         if snapshot['execution_hashes'] != execution_hashes():
             raise ValueError('Implementation changed since this checkpoint; exact continuation is not supported')
-        snapshot['settings']['training_episodes'] = settings['training_episodes']
-        validate(snapshot['settings'])
-        if episode_budget(snapshot['settings']) <= saved['episodes']:
+        snapshot['experiment']['run']['training_episodes'] = raw['run']['training_episodes']
+        Experiment.from_dict(snapshot['experiment'])
+        if raw['run']['training_episodes'] <= saved['episodes']:
             raise ValueError('The total training budget must exceed the saved episodes')
     else:
-        if task is None:
-            raise ValueError('A new run needs its task section')
-        _,snapshot,_,_ = load(experiment(settings,task))
+        _,snapshot,_ = load(raw)
         snapshot['execution_hashes'] = execution_hashes()
     snapshot['identity'] = identity(snapshot)
-    root = project_path(PPO_RUNS if root is None else root)
-    # identity must not recursively include itself in subsequent comparisons.
+    root = project_path(RUNS if root is None else root)
     path = root/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     path.mkdir(parents=True,exist_ok=False)
     save_json(path/'configuration.json',snapshot)

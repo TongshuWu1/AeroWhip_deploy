@@ -1,12 +1,12 @@
-"""Visible Stage 1 PPO orchestration; manual and automatic start share one handler."""
+"""Training window: configure, start, resume and monitor PPO runs; manual and automatic start share one handler."""
 from copy import deepcopy
 from pathlib import Path
 import sys
 from PySide6 import QtCore, QtWidgets
 
 from project_paths import ROOT, project_path
-from training.configuration import DEFAULT, experiment, load
-from training.artifacts import PPO_RUNS, create_run, read_json, save_json, events
+from experiment import DEFAULT, load
+from training.artifacts import RUNS, create_run, read_json, save_json, events
 from training.ui.plots import MetricPlot
 from training.ui.preview import EvaluationPreview
 from training.ui.whip_diagnostics import WhippingDiagnostics
@@ -21,27 +21,22 @@ def unchanged(control, value):
 
 
 class SettingsDialog(QtWidgets.QDialog):
-    def __init__(self, settings, task, parent=None, *, read_only=False):
+    def __init__(self, experiment, parent=None, *, read_only=False):
         super().__init__(parent)
         self.setWindowTitle('Configure training experiment'); self.resize(820,780)
-        self.settings,self.task = deepcopy(settings),deepcopy(task)
+        self.experiment = deepcopy(experiment)
         self.fields = []; self.controls = {}
         layout = QtWidgets.QVBoxLayout(self)
         note = QtWidgets.QLabel('Read-only saved configuration. Active runs and exact resumes cannot be retuned.' if read_only else
             'Changes apply to the next experiment only. Active runs are frozen. Resume keeps the saved configuration; changing reward or task creates a new experiment.')
         note.setWordWrap(True); layout.addWidget(note)
         tabs = QtWidgets.QTabWidget(); layout.addWidget(tabs)
-        used=set()
-        def subset(keys):
-            used.update(keys)
-            return {k:self.settings[k] for k in keys if k in self.settings}
-        groups = [
-            ('Run & compute', subset(('device','seed','parallel_environments','evaluation_environments','training_episodes','evaluation_interval_episodes','policy_rate_hz','acceleration_limit_mps2'))),
-            ('Learner & exploration', subset(('learning_rate','batch_size','hidden_units','initial_log_std','discount','reward_scale','ppo'))),
-            ('Task & reward', self.task),
-            ('Configuration sources', {k:v for k,v in self.settings.items() if k not in used})]
-        # Top-level learner keys are shown through copies; edits write back to settings.
-        learning_owners={id(groups[i][1]):self.settings for i in (0,1,3)}
+        e=self.experiment
+        sources={k:e[k] for k in ('model','scene')}
+        groups = [('Run & compute', e['run']), ('Environment', e['environment']), ('Task & reward', e['task']),
+                  ('Learner & exploration', e['ppo']), ('Configuration sources', sources)]
+        # Sources are shown through a copy; their edits write back to the experiment.
+        owners={id(sources):e}
         for name,values in groups:
             scroll = QtWidgets.QScrollArea(); scroll.setWidgetResizable(True)
             contents = QtWidgets.QWidget(); form = QtWidgets.QFormLayout(contents)
@@ -50,13 +45,12 @@ class SettingsDialog(QtWidgets.QDialog):
             def add(mapping,form,prefix=''):
                 for key,value in mapping.items():
                     path=prefix+key
-                    owner=learning_owners.get(id(mapping),mapping)
+                    owner=owners.get(id(mapping),mapping)
                     label = {
                         'training_episodes': 'Training episodes',
                         'parallel_environments': 'Collection environments',
-                        'evaluation_environments': 'Evaluation actor lanes (one physical case)',
+                        'evaluation_actor_batch': 'Evaluation actor batch (one physical case)',
                         'evaluation_interval_episodes': 'Evaluation interval (episodes)',
-                        'batch_size': 'Optimizer minibatch size',
                         'initial_weight': 'Initial entropy bonus weight',
                         'final_weight': 'Final entropy bonus weight',
                         'learning_rate': 'Learning rate', 'batch_size': 'Minibatch transitions',
@@ -69,12 +63,12 @@ class SettingsDialog(QtWidgets.QDialog):
                     }.get(key, key.replace('_',' ').capitalize())
                     help_text = {
                         'parallel_environments':'Episodes simulated together in each collection. More lanes require more memory; speed is not guaranteed to improve.',
-                        'evaluation_environments':'Actor batch layout only. Deterministic evaluation runs one native physical lane from a fixed initial condition, not independent trials.',
+                        'evaluation_actor_batch':'Actor batch layout only. Deterministic evaluation runs one native physical lane from a fixed initial condition, not independent trials.',
                         'training_episodes':'Total episode budget including earlier completed episodes when resuming; not an iteration count.',
                         'evaluation_interval_episodes':'Evaluation happens when this cumulative episode boundary is crossed, plus first and final collections.',
                         'reward_scale':'Multiplies task returns for optimization. It does not change physical units.',
                         'workspace_cost_weight':'Outside-only soft cost weight. Zero inside/on the workspace; no action filter or enforced confinement.',
-                        'reward':'Frozen reward version. Changing reward settings creates a new experiment; old checkpoints retain their original objective.',
+                        'name':'Registered task (reward definition). Changing task settings creates a new experiment; old checkpoints retain their original objective.',
                         'target_kl':'With the enabled post-update safeguard, trial actor updates are checked against cohort-mean KL; not a pointwise action guarantee.',
                         'initial_weight':'PPO entropy bonus coefficient, not a guaranteed achieved entropy.',
                     }.get(key,'Stored configuration key: '+path)
@@ -110,7 +104,7 @@ class SettingsDialog(QtWidgets.QDialog):
                         form.addRow(label,control); self.fields.append((owner,key,control.currentText))
                     else:
                         control=QtWidgets.QLineEdit(str(value))
-                        if key in ('task','model','scene','action_interface','version'): control.setReadOnly(True)
+                        if key in ('model','scene','name'): control.setReadOnly(True)
                         form.addRow(label,control); self.fields.append((owner,key,control.text))
                     control.setToolTip(help_text); self.controls[path]=control
             add(values,form)
@@ -126,7 +120,7 @@ class SettingsDialog(QtWidgets.QDialog):
     def accept(self):
         try:
             for mapping,key,getter in self.fields: mapping[key]=getter()
-            load(experiment(self.settings,self.task))
+            load(self.experiment)
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self,'Invalid settings',str(exc)); return
         super().accept()
@@ -136,8 +130,8 @@ class TrainingWindow(QtWidgets.QMainWindow):
     def __init__(self, settings_path=DEFAULT):
         super().__init__()
         self.setWindowTitle('Training'); self.resize(1320,960)
-        self.settings,self.snapshot,_,_ = load(settings_path)
-        self.task = self.snapshot['task']
+        _,snapshot,_ = load(settings_path)
+        self.experiment = snapshot['experiment']
         self.config_path=project_path(settings_path); self.current_run=None; self.process=None; self.resume_path=None
         self.replays=[]; self.close_pending=False; self.last_event_count=-1
         central=QtWidgets.QWidget(objectName='trainingPage'); self.setCentralWidget(central)
@@ -267,45 +261,44 @@ class TrainingWindow(QtWidgets.QMainWindow):
         from viewer.replay_browser import ReplayBrowser
         window=ReplayBrowser(self.runs.currentData()); self.replays.append(window); window.show()
 
-    def sync_budget_control(self, settings=None):
-        settings = self.settings if settings is None else settings
+    def sync_budget_control(self, experiment=None):
+        experiment = self.experiment if experiment is None else experiment
         self.rounds.setPrefix('Training episodes  ')
-        self.rounds.setValue(settings['training_episodes'])
+        self.rounds.setValue(experiment['run']['training_episodes'])
 
     def update_description(self):
-        s,t=self.settings,self.task
-        w,f=t['workspace'],t['fold']
-        self.setup_toggle.setText(f"Training setup · Stage 1 · PPO · {s['device'].upper()} · {s['parallel_environments']} lanes")
+        r,v,t,ppo=(self.experiment[k] for k in ('run','environment','task','ppo'))
+        w,f,e=v['workspace'],t['fold'],ppo['entropy']
+        self.setup_toggle.setText(f"Training setup · PPO · {r['device'].upper()} · {r['parallel_environments']} lanes")
         self.setWindowTitle(f"Training — PPO — {self.config_path.stem}")
-        e=s['ppo']['entropy']
         self.config_label.setText(
-            f"Stage 1 ({t['reward']}): continuous fold transport and outward opening toward world +X. No target-hit reward.\n"
-            f"{s['parallel_environments']} training lanes · {s['training_episodes']} episodes · {t['duration_s']:g} s horizon · 10 links · {s['policy_rate_hz']} Hz acceleration actions.\n"
+            f"Task {t['name']}: continuous fold transport and outward opening toward world +X. No target-hit reward.\n"
+            f"{r['parallel_environments']} training lanes · {r['training_episodes']} episodes · {v['duration_s']:g} s horizon · 10 links · {v['policy_rate_hz']} Hz acceleration actions.\n"
             f"Return Q − C. Q = integral of {t['rate_weight']:g} × fold support × forward reach^{t['reach_power']:g} × alignment^{t['alignment_power']:g} × outward speed / cable length.\n"
             f"C = {t['workspace_cost_weight']:g} × fixed-horizon mean of squared workspace excess in metres. Radius {w['radius_m']:g} m; world height {w['height_lower_world_m']:g}–{w['height_upper_world_m']:g} m.\n"
             f"Fold support: turn {f['turn_lower_deg']:g}–{f['turn_upper_deg']:g}°, coherence {f['coherence_reference']:g}, {1000*f['history_window_s']:g} ms window.\n"
-            f"Tilt >{t['maximum_tilt_deg']:g}° or cable height <{t['minimum_cable_height_m']:g} m is recorded as invalid but continues. Numerical corruption aborts and costs {t['failure_cost_per_remaining_s']:g} per remaining second.\n"
-            f"Entropy coefficient = {e['final_weight']:g} + {e['initial_weight']-e['final_weight']:g} exp(−{e['decay_exponent']:g} n/N), original episode budget retained on resume. AR(1) correlation {1000*s['ppo']['action_noise']['correlation_time_s']:g} ms.\n"
-            f"Acceleration limits {s['acceleration_limit_mps2']} m/s² excluding gravity; zero action does not brake or hold position.\n"
+            f"Tilt >{v['maximum_tilt_deg']:g}° or cable height <{v['minimum_cable_height_m']:g} m is recorded as invalid but continues. Numerical corruption aborts and costs {t['failure_cost_per_remaining_s']:g} per remaining second.\n"
+            f"Entropy coefficient = {e['final_weight']:g} + {e['initial_weight']-e['final_weight']:g} exp(−{e['decay_exponent']:g} n/N), original episode budget retained on resume. AR(1) correlation {1000*ppo['action_noise_correlation_s']:g} ms.\n"
+            f"Acceleration limits {v['acceleration_limit_mps2']} m/s² excluding gravity; zero action does not brake or hold position.\n"
             "Deterministic evaluation is one fixed physical case; the saved actor batch layout is not independent trials.\n"
             "Continuous score is an experimental guide, not a validated binary whipping-success definition.")
 
     def edit_settings(self):
         if self.process is not None or self.mode.currentIndex()==1:
-            SettingsDialog(self.settings,self.task,self,read_only=True).exec()
+            SettingsDialog(self.experiment,self,read_only=True).exec()
             return
-        self.settings['training_episodes']=self.rounds.value()
-        dialog=SettingsDialog(self.settings,self.task,self)
+        self.experiment['run']['training_episodes']=self.rounds.value()
+        dialog=SettingsDialog(self.experiment,self)
         if dialog.exec():
-            self.settings,self.task=dialog.settings,dialog.task
+            self.experiment=dialog.experiment
             self.sync_budget_control(); self.update_description()
 
     def open_settings(self):
         filename,_=QtWidgets.QFileDialog.getOpenFileName(self,'Training settings',str(DEFAULT.parent),'JSON (*.json)')
         if filename:
             try:
-                settings,snapshot,_,_=load(filename)
-                self.settings,self.snapshot,self.task=settings,snapshot,snapshot['task']; self.config_path=project_path(filename)
+                _,snapshot,_=load(filename)
+                self.experiment=snapshot['experiment']; self.config_path=project_path(filename)
                 self.sync_budget_control(); self.update_description()
             except Exception as exc: self.error(exc)
 
@@ -314,8 +307,8 @@ class TrainingWindow(QtWidgets.QMainWindow):
         if not filename: return False
         try:
             path=project_path(filename)
-            self.settings['training_episodes']=self.rounds.value()
-            save_json(path,experiment(self.settings,self.task)); self.config_path=path
+            self.experiment['run']['training_episodes']=self.rounds.value()
+            save_json(path,self.experiment); self.config_path=path
             return True
         except Exception as exc: self.error(exc); return False
 
@@ -329,16 +322,15 @@ class TrainingWindow(QtWidgets.QMainWindow):
             self.checkpoint_label.setText('New policy'); self.sync_budget_control(); self.update_description()
 
     def choose_checkpoint(self):
-        path,_=QtWidgets.QFileDialog.getOpenFileName(self,'Select learner checkpoint',str(PPO_RUNS),'Checkpoint (*.pt)')
+        path,_=QtWidgets.QFileDialog.getOpenFileName(self,'Select learner checkpoint',str(RUNS),'Checkpoint (*.pt)')
         if path:
             try:
                 path=project_path(path)
                 import torch
                 saved = torch.load(path,map_location='cpu',weights_only=True)
-                settings = saved['snapshot']['settings']
-                self.settings=deepcopy(settings);self.task=deepcopy(saved['snapshot']['task'])
+                self.experiment=deepcopy(saved['snapshot']['experiment'])
                 self.update_description()
-                self.sync_budget_control(settings)
+                self.sync_budget_control()
                 self.resume_path=Path(path); self.checkpoint_label.setText(self.resume_path.parent.name+' / '+self.resume_path.name)
                 self.config_label.setText('Resume uses the checkpoint’s saved task, model and learner settings. Only the total training budget changes.')
             except Exception as exc: self.error(exc)
@@ -347,13 +339,13 @@ class TrainingWindow(QtWidgets.QMainWindow):
         if self.process is not None: return
         try:
             if self.mode.currentIndex()==1 and self.resume_path is None: raise ValueError('Choose a learner checkpoint first')
-            settings=deepcopy(self.settings)
-            settings['training_episodes']=self.rounds.value()
+            experiment=deepcopy(self.experiment)
+            experiment['run']['training_episodes']=self.rounds.value()
             # Unsaved UI edits are frozen into this run, never written into defaults.
-            directory=create_run(settings,self.resume_path,task=self.task)
+            directory=create_run(experiment,self.resume_path)
             self.current_run=directory; self.last_event_count=-1
             frozen=read_json(directory/'configuration.json')
-            self.settings,self.task=deepcopy(frozen['settings']),deepcopy(frozen['task'])
+            self.experiment=deepcopy(frozen['experiment'])
             self.process=QtCore.QProcess(self); self.process.setWorkingDirectory(str(ROOT))
             self.process.setProcessChannelMode(QtCore.QProcess.ProcessChannelMode.MergedChannels)
             self.process.readyReadStandardOutput.connect(self.read_output)
@@ -382,7 +374,7 @@ class TrainingWindow(QtWidgets.QMainWindow):
 
     def approve_motion(self):
         self.show_text_details('No automatic curriculum',
-            'Current Stage 1 has one fixed reward and does not advance automatically.')
+            'Each experiment has one fixed reward and does not advance to another task automatically.')
 
     def read_output(self):
         if self.process:
@@ -405,10 +397,10 @@ class TrainingWindow(QtWidgets.QMainWindow):
     def refresh_runs(self,selected=None):
         current=selected or self.runs.currentData()
         self.runs.blockSignals(True); self.runs.clear()
-        paths=[p for root in (PPO_RUNS,) if root.exists()
+        paths=[p for root in (RUNS,) if root.exists()
                for p in root.iterdir() if p.is_dir() and (p/'configuration.json').exists()]
         for path in sorted(paths,key=lambda p:p.name,reverse=True):
-            self.runs.addItem('PPO Stage 1 · '+path.name,path)
+            self.runs.addItem('PPO · '+path.name,path)
         # Qt's QVariant lookup does not compare separately created Path objects
         # by value. Keep Path data for replay callers, but select in Python.
         index=next((i for i in range(self.runs.count()) if self.runs.itemData(i)==current),-1)
@@ -453,10 +445,10 @@ class TrainingWindow(QtWidgets.QMainWindow):
         self.last_event_count=len(history)
         # Always use the selected run's immutable units, not today's UI preset.
         selected_snapshot=read_json(directory/'configuration.json')
-        selected_settings=selected_snapshot['settings']
-        self.update_overview(directory,history,selected_settings)
+        selected=selected_snapshot['experiment']
+        self.update_overview(directory,history,selected)
         self.whip_diagnostics.set_run(directory,history)
-        scale=selected_settings.get('reward_scale',1.0)
+        scale=selected['ppo']['reward_scale']
         self.loss_plot.title='PPO losses (last minibatch)'
         self.return_plot.title=f'Episode return (reward ×{scale:g})'
         self.reward_plot.title=f'Event reward components (×{scale:g})'
@@ -505,11 +497,11 @@ class TrainingWindow(QtWidgets.QMainWindow):
                 text='—' if value is None else (f'{value:.4g}' if isinstance(value,float) else str(value))
                 self.evaluations.setItem(i,j,QtWidgets.QTableWidgetItem(text))
 
-    def update_overview(self,directory,history,settings):
+    def update_overview(self,directory,history,experiment):
         episodes=next((e['episodes'] for e in reversed(history) if 'episodes' in e),0)
-        budget=settings['training_episodes']
+        budget=experiment['run']['training_episodes']
         self.budget_progress.setValue(min(1000,round(1000*episodes/budget)))
-        self.budget_progress.setFormat(f'Stage 1 · {episodes:,} / {budget:,} training episodes · {100*episodes/budget:.1f}%')
+        self.budget_progress.setFormat(f'{episodes:,} / {budget:,} training episodes · {100*episodes/budget:.1f}%')
         if self.process is None:
             phase=history[-1]['phase'] if history else 'no events'
             self.live_detail.setText(f'Viewing saved run: {directory.name} · {phase.replace("_"," ")} · no worker owned by this window')
@@ -521,17 +513,17 @@ class TrainingWindow(QtWidgets.QMainWindow):
             self.latest_summary.setText('No saved evaluation yet · training progress is shown above')
             return
         def number(value): return '—' if value is None else f'{value:.5g}'
-        c=latest.get('components',{}); ws=latest.get('workspace',{})
-        raw=latest.get('evaluation_return'); scale=settings.get('reward_scale',1.)
+        c=latest.get('components',{})
+        raw=latest.get('evaluation_return')
         if 'continuous_whip_credit' in c:
             outcome=('Full horizon completed' if latest.get('valid') else 'INVALID physical envelope · full horizon completed') if c.get('completed_horizon')==1 else 'INVALID numerical abort / saved prefix'
             self.latest_result.setText(
-                f"Stage1 · collection {latest['round']} · {outcome}\nReturn: {number(raw)}\n"
+                f"Collection {latest['round']} · {outcome}\nReturn: {number(raw)}\n"
                 f"Accrued output: {number(c['continuous_whip_credit'])}\nWorkspace cost: {number(c.get('workspace_cost'))}\nFailure correction: {number(c.get('failure_adjustment'))}\n"
                 f"Peak reward rate: {number(c.get('peak_reward_rate'))}\nFold support: {number(c.get('fold_support_integral_s'))} s\n"
                 f"Positive output duration: {number(c.get('positive_output_duration_s'))} s\n"
                 "No target or binary whip success gate. See Whipping diagnostics for recorded rate and fold support.")
-            self.latest_summary.setText(f"Stage1 · collection {latest['round']} · {outcome} · return {number(raw)} · continuous score is not success")
+            self.latest_summary.setText(f"Collection {latest['round']} · {outcome} · return {number(raw)} · continuous score is not success")
             return
         self.latest_result.setText('No current continuous-reward measurements in this evaluation. Historical task support is retired.')
         self.latest_summary.setText('Unsupported historical evaluation')
@@ -562,37 +554,37 @@ class TrainingWindow(QtWidgets.QMainWindow):
         self.timer.stop(); self.whip_diagnostics.pause(); self.preview.dispose(); super().closeEvent(event)
 
 
-def configure_resume(window, checkpoint, saved, requested_settings=None):
-    """Restore saved configuration, accepting only an explicit budget override.
+def configure_resume(window, checkpoint, saved, requested=None):
+    """Restore the saved experiment, accepting only an explicit episode-budget override.
 
     Execution/identity checks still occur in create_run before dispatch. No
     checkpoint, optimizer, RNG or original entropy budget is changed here.
     """
-    settings=deepcopy(saved['snapshot']['settings'])
-    if requested_settings is not None:
-        requested=deepcopy(requested_settings)
-        budget=requested.pop('training_episodes')
-        original=deepcopy(settings); original.pop('training_episodes')
+    experiment=deepcopy(saved['snapshot']['experiment'])
+    if requested is not None:
+        requested=deepcopy(requested)
+        budget=requested['run'].pop('training_episodes')
+        original=deepcopy(experiment); original['run'].pop('training_episodes')
         if requested != original:
-            raise ValueError('Exact resume settings may change ONLY training_episodes; reward/source changes require a fresh experiment')
-        settings['training_episodes']=budget
-    window.settings=settings;window.task=deepcopy(saved['snapshot']['task'])
+            raise ValueError('Exact resume may change ONLY run.training_episodes; other changes require a fresh experiment')
+        experiment['run']['training_episodes']=budget
+    window.experiment=experiment
     window.mode.setCurrentIndex(1)
     window.resume_path=checkpoint
-    window.sync_budget_control(settings)
+    window.sync_budget_control()
     window.update_description()
     window.checkpoint_label.setText(str(checkpoint))
 
 
 def main(*, auto_start=False, settings_path=None, resume_checkpoint=None):
     app=QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
-    requested_settings=load(settings_path)[0] if settings_path is not None else None
+    requested=load(settings_path)[1]['experiment'] if settings_path is not None else None
     window=TrainingWindow(settings_path or DEFAULT); window.show()
     if resume_checkpoint is not None:
         import torch
         checkpoint=project_path(resume_checkpoint)
         saved=torch.load(checkpoint,map_location='cpu',weights_only=True)
-        configure_resume(window,checkpoint,saved,requested_settings)
+        configure_resume(window,checkpoint,saved,requested)
     if auto_start:
         # Enter the GUI event loop first. Never launch a detached headless worker.
         QtCore.QTimer.singleShot(0, lambda: window.start() if window.isVisible() else None)

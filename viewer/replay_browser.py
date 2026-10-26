@@ -5,11 +5,12 @@ from pathlib import Path
 import numpy as np
 from PySide6 import QtCore, QtGui, QtWidgets
 from project_paths import ROOT, project_path
+from training.artifacts import RUNS
 from viewer.replay_data import PresentationData, read_events
 
 
 def discover_runs(root=ROOT):
-    folder = project_path(root) / 'runs' / 'ppo_stage1'
+    folder = project_path(root) / RUNS.relative_to(ROOT)
     runs = [directory for directory in folder.iterdir()
             if directory.is_dir() and (directory / 'configuration.json').exists()] if folder.exists() else []
     return sorted(runs, key=lambda p: p.name, reverse=True)

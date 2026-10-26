@@ -1,18 +1,20 @@
-"""Small synthetic fixtures shared by the current pipeline checks.
-
-No saved campaign data, trained policy, or flight recording is required.
-"""
-import torch
+"""Shared synthetic fixtures. No saved campaign data, trained policy or flight recording."""
+from dataclasses import replace
 import tempfile
+
+import torch
+
+from experiment import DEFAULT, load
 from project_paths import ROOT, project_path
-from training.configuration import DEFAULT, load
 from training.ppo import PPO
 
-# Typed Stage 1 task settings from the default experiment file.
-TASK = load(DEFAULT)[2]
+# The default experiment file, parsed once.
+EXPERIMENT, SNAPSHOT, SCENE = load(DEFAULT)
+TASK, ENVIRONMENT = EXPERIMENT.task, EXPERIMENT.environment
 
 
 def project_temporary():
+    """Temporary folder inside the project (file tools only accept project paths)."""
     directory = project_path(ROOT/'tmp')
     directory.mkdir(exist_ok=True)
     return tempfile.TemporaryDirectory(prefix='test-', dir=directory)
@@ -29,13 +31,17 @@ def exact_state(a, b):
     return a == b
 
 
+def small_agent(device='cpu', **changes):
+    """PPO on 3 synthetic actor columns and 5 critic inputs: exercises the optimizer, not the plant."""
+    return PPO(replace(EXPERIMENT.ppo, **changes), columns=[0, 1, 2], frame_size=6, privileged_size=5,
+               device=device, policy_rate_hz=ENVIRONMENT.policy_rate_hz,
+               entropy_episode_budget=EXPERIMENT.run.training_episodes)
+
+
 class PPOFixture:
-    """Reduced observation dimensions exercise the optimizer, not the plant."""
-    def agent(self, device='cpu', stage=1):
-        settings = load(DEFAULT)[0]
-        settings['ppo'].pop('action_noise')  # Independent-noise optimizer fixture; AR1 has its own suite.
-        return PPO(dict(settings, device=device, batch_size=8), [0, 1, 2], 6,
-                   device, privileged_size=5)
+    """Independent-noise optimizer fixture; AR(1) noise has its own tests."""
+    def agent(self, device='cpu'):
+        return small_agent(device, batch_size=8, action_noise_correlation_s=None)
 
     def rollout(self, agent):
         device = agent.device
@@ -53,13 +59,3 @@ class PPOFixture:
                     raw=raw, logp=logp, mean=mean, log_std=log_std, values=values,
                     rewards=torch.tensor([[.1,.2,.3],[.4,-1,0],[0,0,1],[.3,0,0]], device=device),
                     lengths=torch.tensor([3,2,3,1], device=device))
-
-
-def wave(rest, time):
-    """Traveling cable bend: a scoring fixture, not a physical trajectory."""
-    material = rest.cumsum(0)-rest/2
-    angle = -2.5*torch.exp(-.5*((material[None]-(-.4+2*time[:, None]))/.11)**2)
-    edges = rest[None, :, None]*torch.stack((angle.sin(), torch.zeros_like(angle), -angle.cos()), -1)
-    p = torch.cat((torch.zeros((len(time), 1, 3), dtype=rest.dtype), edges.cumsum(1)), 1)
-    p[..., 2] += 2
-    return p[None], torch.gradient(p, spacing=(.01,), dim=(0,))[0][None]

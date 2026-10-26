@@ -1,7 +1,7 @@
 """Open visible Training; optionally start fresh or resume a compatible checkpoint."""
 import argparse
 from training_history import main
-from training.configuration import DEFAULT
+from experiment import DEFAULT
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)

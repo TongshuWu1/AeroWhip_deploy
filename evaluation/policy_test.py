@@ -1,4 +1,4 @@
-"""One explicit initial-state case, frozen Stage 1 actor, native plant, no learning."""
+"""One explicit initial-state case, frozen actor, native plant, no learning."""
 import argparse
 from dataclasses import replace
 from datetime import datetime
@@ -18,9 +18,9 @@ from fitting.artifacts import atomic_save
 from project_paths import ROOT, project_path, project_reference
 from simulation.configuration import load_configuration
 from simulation.state import quaternion_xyzw_to_rotation_matrix, rotation_matrix_to_quaternion_xyzw
-from tasks.whip.environment import make_environment
+from envs.environment import make_environment
+from experiment import digest, from_snapshot
 from training.artifacts import EventLog, clean, read_json, save_json
-from training.configuration import digest, task_configuration, validate
 
 RESULTS = ROOT/'runs/policy_tests'
 PROTOCOL = 'initial_state_policy_test_v1'
@@ -76,12 +76,12 @@ def case_scene(scene, case):
     return replace(scene,initial_state=initial)
 
 
-def case_warnings(scene, cfg, case):
+def case_warnings(scene, experiment, case):
     selected = case_scene(scene, case)
     position = selected.initial_state.position_world_m
-    if not cfg.workspace.contains(torch.as_tensor(position)[None,None],torch.as_tensor(position)[None])[0,0]:
+    if not experiment.environment.workspace.contains(torch.as_tensor(position)[None,None],torch.as_tensor(position)[None])[0,0]:
         raise ValueError('Initial tracking position is outside the cylindrical workspace')
-    warnings = ['Current Stage 1 has no target: it scores +X fold transport only.']
+    warnings = [f'Task {experiment.task.name} has no target: it scores +X fold transport only.']
     fields = ('position_world_m','quaternion_body_to_world_xyzw','linear_velocity_world_mps','angular_velocity_body_radps')
     if any(not np.allclose(getattr(selected.initial_state,k),getattr(scene.initial_state,k),rtol=0,atol=1e-12) for k in fields):
         warnings.append('Initial drone state differs from the fixed training start: outside the sampled training domain.')
@@ -131,17 +131,16 @@ def checkpoint_context(checkpoint):
         path = Path(temp)/'scene.toml'
         path.write_text(snapshot['scene_text'],encoding='utf-8')
         scene = load_configuration(path)
-    cfg = task_configuration(snapshot['task'],snapshot['settings'],snapshot['model'],scene)
-    return info, scene, cfg
+    return info, scene, from_snapshot(snapshot, scene)
 
 
 def prepare(checkpoint, case, *, root=RESULTS):
     checkpoint = project_path(checkpoint)
-    info, scene, cfg = checkpoint_context(checkpoint)
+    info, scene, experiment = checkpoint_context(checkpoint)
     snapshot = info['snapshot']
     contract = evaluation_contract(snapshot,'current_code')
     require_idle()
-    warnings = case_warnings(scene,cfg,case)
+    warnings = case_warnings(scene,experiment,case)
     path = project_path(root)/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     path.mkdir(parents=True,exist_ok=False)
     save_json(path/'configuration.json',snapshot)
@@ -153,10 +152,9 @@ def prepare(checkpoint, case, *, root=RESULTS):
     return path
 
 
-def frozen_actor(info, env):
+def frozen_actor(info, env, experiment):
     from training.ppo import make_ppo_actor
-    settings = info['snapshot']['settings']
-    actor = make_ppo_actor(settings,env.actor_columns,env.action_size,**env.policy_encoder_options)
+    actor = make_ppo_actor(experiment.ppo,env.actor_columns,env.action_size,history_samples=env.samples)
     expected = actor.state_dict()
     if 'encoder.columns' not in info['actor'] or not torch.equal(info['actor']['encoder.columns'],expected['encoder.columns']):
         raise ValueError('Checkpoint observation interface differs: encoder.columns')
@@ -192,20 +190,20 @@ def run(directory):
         if (directory/'scene.toml').read_text(encoding='utf-8') != snapshot['scene_text']:
             raise ValueError('Saved source scene changed')
         contract = verify_contract(snapshot,request)
-        settings = snapshot['settings']; validate(settings)
-        if settings['device']=='cuda' and not torch.cuda.is_available():
+        scene = load_configuration(directory/'scene.toml')
+        experiment = from_snapshot(snapshot,scene)
+        device = experiment.run.device
+        if device=='cuda' and not torch.cuda.is_available():
             raise RuntimeError('Checkpoint CUDA device is unavailable; no silent CPU fallback')
         torch.set_num_threads(min(8,os.cpu_count() or 1))
-        scene = load_configuration(directory/'scene.toml')
-        cfg = task_configuration(snapshot['task'],settings,snapshot['model'],scene)
-        warnings = case_warnings(scene,cfg,case)
+        warnings = case_warnings(scene,experiment,case)
         scene = case_scene(scene,case)
         emit(phase='initializing',round=info['round'],pid=os.getpid())
-        env = make_environment(dict(settings,parallel_environments=1),snapshot,cfg,scene)
-        actor = frozen_actor(info,env)
+        env = make_environment(experiment,snapshot,scene,lanes=1)
+        actor = frozen_actor(info,env,experiment)
         save_json(directory/'provenance.json',dict(protocol=PROTOCOL,pid=os.getpid(),
             executable=sys.executable,python=platform.python_version(),torch=str(torch.__version__),
-            device=settings['device'],gpu=torch.cuda.get_device_name() if settings['device']=='cuda' else None,
+            device=device,gpu=torch.cuda.get_device_name() if device=='cuda' else None,
             checkpoint_sha256=info['sha256'],source_identity=snapshot['identity'],case=case,
             deterministic=True,optimizer_updates=0,**contract,**env.provenance()))
         env.reset(); done=False; last=perf_counter()
@@ -219,7 +217,7 @@ def run(directory):
         if not done:
             summary=dict(phase='cancelled',round=info['round'],message='Incomplete episode was not scored',replay=None)
         else:
-            returns,valid,score,cost=env.finish()
+            returns,valid,components=env.finish()
             arrays=env.replay_arrays(0)
             filename='rollout.npz' if arrays is not None else None
             if arrays is not None:
@@ -228,10 +226,10 @@ def run(directory):
                 atomic_save(directory/filename,writer)
             summary=clean(dict(phase='completed',round=info['round'],protocol=PROTOCOL,
                 valid=bool(valid[0]),evaluation_return=float(returns[0]),replay=filename,
-                workspace_cost=float(cost[0]),components={k:float(v[0]) for k,v in score.components.items()},
+                components={k:float(v[0]) for k,v in components.items()},
                 workspace={k:float(v[0]) for k,v in env.workspace_metrics().items()},
                 case=case,warnings=warnings,source_mode='current_code',exact_source_reproduction=False,
-                scoring=cfg.reward,checkpoint_sha256=info['sha256'],**env.provenance()))
+                scoring=experiment.task.name,checkpoint_sha256=info['sha256'],**env.provenance()))
         verify_contract(snapshot,request)
         if load_checkpoint(request['checkpoint'])['sha256']!=request['checkpoint_sha256']:
             raise ValueError('Source checkpoint changed during the test')

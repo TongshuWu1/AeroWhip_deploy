@@ -1,4 +1,4 @@
-"""Record or check the Stage 1 refactoring equivalence baseline.
+"""Record or check the refactoring equivalence baseline for the default experiment.
 
 Runs the current Stage 1 environment with fixed open-loop actions, then one
 seeded PPO collection and update, and compares every produced tensor exactly
@@ -18,12 +18,16 @@ sys.path.insert(0, str(ROOT))
 
 import torch
 
-from training.configuration import load
-from tasks.whip.environment import make_environment
-from training.ppo import PPO
+from envs.environment import make_environment
+from experiment import load
+from training.worker import make_agent
 
 REFERENCE = ROOT/'tests/data/stage1_equivalence_reference.pt'
 LANES = 4
+# Result components deliberately removed after the reference was recorded: always zero
+# (time_cost, return_transform_adjustment) or the negated failure_cost (failure_adjustment).
+REMOVED = {f'env/{device}/component/{name}' for device in ('cpu', 'cuda')
+           for name in ('time_cost', 'return_transform_adjustment', 'failure_adjustment')}
 
 
 def open_loop_actions(decisions):
@@ -40,30 +44,28 @@ def open_loop_actions(decisions):
 
 
 def environment_outputs(device):
-    settings, snapshot, configuration, scene = load()
-    settings = dict(settings, device=device, parallel_environments=LANES)
-    env = make_environment(settings, snapshot, configuration, scene, capture=device == 'cuda')
+    experiment, snapshot, scene = load()
+    env = make_environment(experiment, snapshot, scene, lanes=LANES, device=device, capture=device == 'cuda')
     env.reset()
     actions = open_loop_actions(env.decisions).to(env.device)
     done = False
     while not done:
         _, _, done = env.step(actions[:, env.decision])
-    returns, valid, score, cost = env.finish()
+    returns, valid, components = env.finish()
     out = {f'history/{k}': v for k, v in env.history.items()}
-    out.update({f'component/{k}': v for k, v in score.components.items()})
+    out.update({f'component/{k}': v for k, v in components.items()})
     out.update(frames=env.frames, critic_states=env.critic_states, ledger=env.ledger,
                transition_rewards=env.transition_rewards, returns=returns, valid=valid,
-               workspace_cost=cost, numerical_valid=env.numerical_valid, lengths=env.lengths)
+               workspace_cost=components['workspace_cost'], numerical_valid=env.numerical_valid,
+               lengths=env.lengths)
     return out
 
 
 def ppo_outputs():
-    settings, snapshot, configuration, scene = load()
-    settings = dict(settings, device='cpu', parallel_environments=LANES)
-    torch.manual_seed(settings['seed'])
-    env = make_environment(settings, snapshot, configuration, scene, capture=False)
-    agent = PPO(settings, env.actor_columns, env.frame_size, env.device, env.action_size,
-                privileged_size=env.critic_state_size, encoder_options=env.policy_encoder_options)
+    experiment, snapshot, scene = load()
+    torch.manual_seed(experiment.run.seed)
+    env = make_environment(experiment, snapshot, scene, lanes=LANES, device='cpu', capture=False)
+    agent = make_agent(experiment, env)
     env.reset()
     shape = (env.batch, env.decisions)
     rollout = dict(collection=1, stride=env.stride, frames=env.frames, privileged=env.critic_states,
@@ -128,7 +130,7 @@ def main():
         torch.save(current, REFERENCE)
         print(f'Recorded {len(current)} tensors ({", ".join(devices)}) to {REFERENCE.relative_to(ROOT)}')
         return
-    reference = torch.load(REFERENCE, weights_only=True)
+    reference = {k: v for k, v in torch.load(REFERENCE, weights_only=True).items() if k not in REMOVED}
     if args.cpu_only:
         reference = {k: v for k, v in reference.items() if not k.startswith('env/cuda/')}
     problems = compare(reference, current)

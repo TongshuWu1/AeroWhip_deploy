@@ -95,7 +95,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.data, self.replay = data, data.replay
         review = data.measurement_event
         self.measurement_candidate = review['event'] if review is not None else None
-        self.setWindowTitle(f'AeroWhip Replay · Stage 1 · {data.directory.name}')
+        self.setWindowTitle(f'AeroWhip Replay · {data.directory.name}')
         self.resize(1440, 940)
         self.setMinimumSize(0, 0)
         self.setStyleSheet(STYLE)
@@ -106,7 +106,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         layout.setSpacing(10)
         title_row = QtWidgets.QHBoxLayout()
         heading = QtWidgets.QVBoxLayout()
-        heading.addWidget(label('Stage 1 · Cable-tip motion', 'heading'))
+        heading.addWidget(label('Cable-tip motion', 'heading'))
         heading.addWidget(label(f"{data.event.get('phase', 'Saved states').replace('_', ' ')} · collection {data.event.get('round', '—')} · {data.filename}", 'subtle'))
         title_row.addLayout(heading, 1)
         for text, callback in (('3D view', self.overview_camera), ('Details', self.show_details)):
@@ -131,7 +131,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.viewer.create_plotter(self.replay.state, plotter=self.plotter)
         self.viewer._toggle_world_axes()
         self.plotter.add_axes(interactive=False, color='#344958', line_width=2)
-        add_cylinder_boundary(self.plotter, **data.config.workspace.description(data.scene.initial_state.position_world_m))
+        add_cylinder_boundary(self.plotter, **data.config.environment.workspace.description(data.scene.initial_state.position_world_m))
         candidate = self.measurement_candidate
         if candidate is not None:
             positions = self.replay.arrays['cable_positions'][:, -1]

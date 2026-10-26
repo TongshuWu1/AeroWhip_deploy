@@ -1,4 +1,4 @@
-"""Cylindrical drone workspace for task cost and metrics; no wall forces or state correction."""
+"""Cylindrical drone operating region for task costs and metrics; no wall forces or state correction."""
 
 from dataclasses import dataclass
 import math

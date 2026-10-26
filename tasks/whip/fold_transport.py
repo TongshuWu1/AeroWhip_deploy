@@ -1,4 +1,5 @@
-"""Continuous experimental fold-transport/straightening reward, without attempts.
+"""Fold-transport task: continuous reward for a bend travelling toward the tip while
+the tip moves outward along world +X (specification: doc/stage1.md).
 
 Material-region IDs associate measured bends, not policy attempts or whip counts.
 All windows are causal. The score is kinematic, not energy or validated causality.
@@ -7,8 +8,9 @@ from collections import deque
 import math
 import numpy as np
 
-from .configuration import OBSERVATION_PERIOD_S
-from .horizontal_fold import FoldGeometry
+from envs.configuration import OBSERVATION_PERIOD_S
+from envs.task import Task
+from .fold_geometry import FoldGeometry
 
 FEATURE_SIZE = 18  # Critic task features, including workspace cost and net return.
 _OUTPUT_FIELDS = ('fold_support', 'horizontal_reach_fraction', 'alignment', 'world_outward_mps', 'relative_outward_mps', 'straightening_mps', 'effective_outward_mps', 'reward_rate', 'accrued_credit', 'end_to_end_fraction', 'transport_signal', 'max_turn_rad')
@@ -33,15 +35,16 @@ def output_metrics(positions, velocities, length):
         end_to_end_fraction=float(distance/length))
 
 
-class ContinuousWhipAttempt:
-    """One full-horizon episode, without event-count or preparation bonuses.
+class FoldTransportEpisode:
+    """One lane's full-horizon episode, without event-count or preparation bonuses.
 
-    All task constants come from a Stage1TaskConfig (tasks/whip/configuration.py).
+    Reward constants come from FoldTransportConfig; horizon and workspace from the
+    EnvironmentConfig.
     """
-    def __init__(self, rest, config, *, workspace_origin):
-        self.config=config
+    def __init__(self, rest, config, environment, *, workspace_origin):
+        self.config,self.environment=config,environment
         self.dt=OBSERVATION_PERIOD_S
-        self.horizon_s=config.duration_s
+        self.horizon_s=environment.duration_s
         self.steps=round(self.horizon_s/self.dt)
         fold=config.fold
         self.window=round(fold.history_window_s/self.dt)+1
@@ -100,7 +103,7 @@ class ContinuousWhipAttempt:
         tracking=np.asarray(drone_position,float)
         if tracking.shape!=(3,) or not np.isfinite(tracking).all():
             raise ValueError('Soft workspace cost requires finite drone tracking-point XYZ')
-        c,w=self.config,self.config.workspace
+        c,w=self.config,self.environment.workspace
         radial=max(0.,float(np.linalg.norm(tracking[:2]-self.workspace_origin[:2]))-w.radius_m)
         vertical=max(0.,w.height_lower_world_m-tracking[2])+max(0.,tracking[2]-w.height_upper_world_m)
         # Fixed-horizon mean of the weighted squared excess, integrated at right endpoints.
@@ -158,4 +161,64 @@ class ContinuousWhipAttempt:
                 fold_support_integral_s=self.support_time,positive_output_duration_s=self.output_time),
             workspace_cost=self.cost,raw_net_return=self.accrued-self.cost,failure_cost=self.failure_cost,
             output_direction_world=list(self.config.output_direction_world),
-            contract=self.config.reward,qualification_note='Continuous diagnostic; binary whip success is not defined.')
+            contract=self.config.name,qualification_note='Continuous diagnostic; binary whip success is not defined.')
+
+
+class FoldTransportTask(Task):
+    """Batch of FoldTransportEpisode lanes behind the environment's Task interface."""
+    critic_feature_size = FEATURE_SIZE
+    trace_fields = TRACE_FIELDS
+    score_component = 'continuous_whip_credit'
+
+    def __init__(self, config, environment, rest):
+        self.config, self.environment = config, environment
+        self.name = config.name
+        self.rest = np.asarray(rest, float)
+        self.episodes = None
+
+    def reset(self, observation):
+        self.episodes = [FoldTransportEpisode(self.rest, self.config, self.environment, workspace_origin=o)
+                         for o in observation['workspace_origin']]
+        for lane, episode in enumerate(self.episodes):
+            episode.initialize(observation['cable_positions'][lane], observation['cable_velocities'][lane])
+
+    def observe(self, lane, time_s, observation):
+        return self.episodes[lane].observe(time_s, observation['cable_positions'], observation['cable_velocities'],
+                                           drone_position=observation['drone_positions'])
+
+    def fail(self, lane, time_s):
+        return self.episodes[lane].fail(time_s, 'numerical_failure')
+
+    def done(self, lane):
+        return self.episodes[lane].terminal is not None
+
+    def end_time(self, lane):
+        return self.episodes[lane].time
+
+    def episode_return(self, lane):
+        return self.episodes[lane].total
+
+    def critic_features(self):
+        return np.stack([e.features() for e in self.episodes])
+
+    def components(self):
+        e = self.episodes
+        selected = lambda key: [x.selected[key] if x.selected else 0. for x in e]
+        result = dict(continuous_whip_credit=[x.accrued for x in e],
+            peak_reward_rate=[x.peak_rate for x in e],
+            fold_support_integral_s=[x.support_time for x in e],
+            positive_output_duration_s=[x.output_time for x in e],
+            horizontal_reach_fraction=selected('horizontal_reach_fraction'),
+            completed_horizon=[x.terminal == 'horizon' for x in e],
+            failure_cost=[x.failure_cost for x in e],
+            workspace_cost=[x.cost for x in e])
+        for key in ('world_outward_mps', 'relative_outward_mps', 'straightening_mps', 'alignment', 'fold_support'):
+            result[key] = selected(key)
+        return result
+
+    def record(self, lane):
+        return self.episodes[lane].record()
+
+    def trace(self, lane):
+        return np.asarray(self.episodes[lane].trace)
+

@@ -27,11 +27,15 @@ release and describe their original experiments, not a new verification.
 
 ## Pipeline boundaries
 
-- `simulation/` and `native/`: reusable coupled drone/cable physical model.
+- `simulation/` and `native/`: reusable coupled drone/cable physical model (including the
+  CUDA solver-graph helpers).
 - `controllers/`: flight control, separate from the physical plant.
-- `tasks/whip/`: current Stage 1 geometry, reward, observation and environment adapter
-  ([environment.py](../tasks/whip/environment.py) is the single environment class).
-- `training/`: PPO, snapshots, cooperative worker and desktop UI.
+- `envs/`: the generic batched environment ([environment.py](../envs/environment.py)): plant
+  stepping, command delay, history, validity limits and the `Task` interface ([task.py](../envs/task.py)).
+- `tasks/`: reward definitions behind that interface, selected by name in the experiment file;
+  `tasks/whip/` holds the fold-transport task and its fold geometry.
+- [experiment.py](../experiment.py): experiment files (`run`, `environment`, `task`, `ppo` sections).
+- `training/`: PPO, run snapshots, the training worker and desktop UI; independent of the task.
 - `evaluation/`: saved-motion measurements, checkpoint evaluation and review tools.
 - `fitting/` and `take_processing/`: measured-data preparation and physical model fitting.
 - `viewer/`: simulation, saved-motion and recorded-flight display.
@@ -113,7 +117,7 @@ and older Linux Torch CUDA builds default to host-controlled replay.
 `AEROWHIP_CONDITIONAL_SOLVER=0` selects the host path; `1` selects the conditional
 path and requires a CUDA driver API12.8+ and working NVRTC. An explicit task
 constructor choice takes precedence over this environment variable. The
-[conditional driver](../tasks/whip/conditional_driver.py) loads the Windows driver
+[conditional driver](../simulation/conditional_driver.py) loads the Windows driver
 or Linux `libcuda.so.1`, and locates NVRTC in Torch/NVIDIA package libraries or
 the Linux system library search. Backend failures propagate rather than silently
 changing the solver. The same compiled Picard slot, first-converged endpoint
@@ -1004,4 +1008,33 @@ Not checked: the GUIs beyond offscreen construction; no training or flight was r
 Checked: the equivalence check reproduces all 154 reference tensors exactly (CPU and CUDA
 rollouts, one seeded PPO update); 231 unit tests pass, including new rejection tests for
 invalid task and run values. No training, simulation campaign or flight was run.
+
+## Dated change note — 2026-10-26 reorganization phase 3 (layering)
+
+- Experiment files now have sections `model`, `scene`, `run`, `environment`, `task`, `ppo`
+  ([experiment.py](../experiment.py)); each section is a typed dataclass next to its consumer.
+  Horizon, policy rate, acceleration limits, workspace and the tilt/cable-height limits moved
+  from the task to `environment`; the task section holds reward settings only and is selected
+  by `task.name` through the registry in [tasks/__init__.py](../tasks/__init__.py).
+- [envs/environment.py](../envs/environment.py) (`PlantEnvironment`) is task-independent:
+  it calls a `Task` ([envs/task.py](../envs/task.py)) at every 100 Hz sample and on numerical
+  failure. The fold-transport reward is `FoldTransportTask` in
+  [tasks/whip/fold_transport.py](../tasks/whip/fold_transport.py). Fold geometry is one module.
+- PPO, the worker, checkpoints and run folders are task-independent (`runs/ppo/`, checkpoint
+  schema `aerowhip_ppo_checkpoint_v1`, run snapshots `aerowhip_run_v1` with an `experiment`
+  entry). Replay files store the task trace as `task_trace`/`task_trace_fields`/`task_record_json`.
+- Result components `time_cost` and `return_transform_adjustment` (always zero) and
+  `failure_adjustment` (equal to −`failure_cost`) were removed.
+- CUDA solver-graph helpers moved from `tasks/whip/` to `simulation/` with one entry point,
+  `simulation.iteration_graph.accelerate`.
+- Tests were reduced to a core science suite run with pytest (74 test functions, 90 cases):
+  new exact physics checks (free fall, zero-command hover equilibrium, momentum conservation of
+  a bending cable), reward counterexamples and accounting, environment validity and failure
+  handling, experiment validation, PPO mathematics and restart, whip-measurement invariances and
+  take checks. UI-widget, ROS-mock and file-plumbing tests were removed.
+
+Checked: the equivalence check reproduces all 148 remaining reference tensors exactly (CPU and
+CUDA rollouts, one seeded PPO update); the pytest suite passes; the GUIs construct offscreen and
+the settings dialog round-trips the experiment unchanged; a two-lane CPU training run completed
+one collection, one PPO update and one evaluation. Runs saved before this change do not load.
 

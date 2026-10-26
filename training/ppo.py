@@ -15,41 +15,6 @@ from training.networks import Actor, HistoryEncoder, scalar_metrics
 
 
 
-def validate_ppo(c):
-    keys = {'epochs', 'clip_ratio', 'gae_lambda', 'value_loss_weight',
-            'max_grad_norm', 'target_kl', 'entropy'}
-    if set(c)-{'post_step_kl', 'action_noise'} != keys or type(c['epochs']) is not int or c['epochs'] < 1:
-        raise ValueError('PPO requires explicit epochs, clipping, GAE, value/gradient/KL and entropy settings')
-    noise = c.get('action_noise')
-    if 'action_noise' in c and (not isinstance(noise, dict)
-            or set(noise) != {'mode','correlation_time_s'} or noise['mode'] != 'ar1_v1'
-            or isinstance(noise['correlation_time_s'],bool)
-            or not isinstance(noise['correlation_time_s'],(int,float))
-            or not math.isfinite(noise['correlation_time_s']) or noise['correlation_time_s'] <= 0):
-        raise ValueError('AR1 noise requires a version and positive correlation time in seconds')
-    guard = c.get('post_step_kl')
-    if guard is not None:
-        if (not isinstance(guard, dict) or set(guard) != {'maximum_trials'}
-                or type(guard['maximum_trials']) is not int or not 1 <= guard['maximum_trials'] <= 12):
-            raise ValueError('Post-step KL requires 1 to 12 bounded Adam trials')
-    elif 'post_step_kl' in c:
-        raise ValueError('Omit post_step_kl to retain the historical update rule')
-    for key in keys-{'epochs', 'entropy'}:
-        value = c[key]
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
-            raise ValueError('Invalid PPO '+key)
-    if c['clip_ratio'] >= 1 or c['gae_lambda'] > 1:
-        raise ValueError('Require clip ratio in (0,1), GAE lambda in (0,1]')
-    e = c['entropy']
-    if set(e) != {'mode','initial_weight','final_weight','decay_exponent'} or e['mode']!='exponential_budget_v1':
-        raise ValueError('Current PPO uses exponential_budget_v1')
-    for key in ('initial_weight','final_weight','decay_exponent'):
-        if isinstance(e[key],bool) or not isinstance(e[key],(int,float)) or not math.isfinite(e[key]) or e[key]<=0:
-            raise ValueError('Invalid entropy '+key)
-    if e['final_weight']>e['initial_weight']:
-        raise ValueError('Entropy floor must not exceed its initial weight')
-
-
 def squashed_log_prob(raw, mean, log_std):
     # Store raw samples; never recover them with atanh(saturated float actions).
     return (-.5*((raw-mean)/log_std.exp()).square()-log_std-.5*math.log(2*math.pi)
@@ -178,8 +143,8 @@ class PPOActor(Actor):
 
 
 
-def make_ppo_actor(settings, columns, action_size=3, **options):
-    return PPOActor(columns,settings['hidden_units'],settings['initial_log_std'],action_size,**options)
+def make_ppo_actor(config, columns, action_size=3, **options):
+    return PPOActor(columns,config.hidden_units,config.initial_log_std,action_size,**options)
 
 
 class Value(nn.Module):
@@ -195,39 +160,35 @@ class Value(nn.Module):
 
 
 class PPO:
-    def __init__(self, settings, columns, frame_size, device, action_size=3, *, privileged_size, encoder_options=None):
-        validate_ppo(settings['ppo'])
+    def __init__(self, config, *, columns, frame_size, privileged_size, device, policy_rate_hz,
+                 entropy_episode_budget, action_size=3, history_samples=None, interface=None):
+        """config: PPOConfig. columns select actor inputs from each history frame; the value
+        model additionally receives privileged_size critic inputs. interface records the
+        environment's action convention in checkpoints (e.g. action limits)."""
         if privileged_size <= 0:
             raise ValueError('Asymmetric PPO needs explicit privileged value inputs')
-        self.settings, self.device = settings, device
+        self.config, self.device = config, device
         self.interface = dict(schema='ppo_history_state_v1', frame_size=frame_size,
             actor_columns=list(columns), privileged_size=privileged_size, action_size=action_size,
-            hidden_units=settings['hidden_units'], optimizer_convolution='deterministic_cudnn_v1')
-        if settings.get('action_interface') == 'acceleration_direct_v1':
-            self.interface.update(action_interface='acceleration_direct_v1',
-                acceleration_limit_mps2=list(settings['acceleration_limit_mps2']),
-                policy_rate_hz=settings['policy_rate_hz'])
-        noise = settings['ppo'].get('action_noise')
-        self.noise_rho = None if noise is None else math.exp(-1/(settings['policy_rate_hz']*noise['correlation_time_s']))
-        if noise is not None:
-            self.interface['action_noise'] = dict(noise, rho=self.noise_rho,
+            hidden_units=config.hidden_units, optimizer_convolution='deterministic_cudnn_v1',
+            policy_rate_hz=policy_rate_hz, **(interface or {}))
+        correlation = config.action_noise_correlation_s
+        self.noise_rho = None if correlation is None else math.exp(-1/(policy_rate_hz*correlation))
+        if correlation is not None:
+            self.interface['action_noise'] = dict(mode='ar1_v1', correlation_time_s=correlation, rho=self.noise_rho,
                 likelihood='history_conditional_squashed_gaussian_v1')
-        h = settings['hidden_units']
-        options = dict(encoder_options or {})
-        if set(options)-{'history_samples'}:
-            raise ValueError('Unknown history encoder options')
-        if 'history_samples' in options:
-            self.interface.update(history_samples=options['history_samples'])
-        self.actor = make_ppo_actor(settings,columns,action_size,**options).to(device)
-        self.value = Value(columns, h, privileged_size,**options).to(device)
-        self.actor_optimizer = torch.optim.Adam((p for p in self.actor.parameters() if p.requires_grad), lr=settings['learning_rate'])
-        self.value_optimizer = torch.optim.Adam(self.value.parameters(), lr=settings['learning_rate'])
+        options = {} if history_samples is None else dict(history_samples=history_samples)
+        if history_samples is not None:
+            self.interface.update(history_samples=history_samples)
+        self.actor = make_ppo_actor(config,columns,action_size,**options).to(device)
+        self.value = Value(columns, config.hidden_units, privileged_size,**options).to(device)
+        self.actor_optimizer = torch.optim.Adam((p for p in self.actor.parameters() if p.requires_grad), lr=config.learning_rate)
+        self.value_optimizer = torch.optim.Adam(self.value.parameters(), lr=config.learning_rate)
         self.updates = self.value_updates = self.environment_steps = self.collections = 0
         self.completed_episodes = 0
-        self.entropy_episode_budget = settings['training_episodes']
+        self.entropy_episode_budget = entropy_episode_budget
         self._kl_inputs = None  # Ephemeral, scoped to ONE optimize call, never serialized.
         self._kl_input_cache_limit = 512*1024*1024  # Bounded additional memory, not a learning setting.
-
 
     @property
     def entropy_clock(self):
@@ -246,9 +207,9 @@ class PPO:
 
     @property
     def entropy_weight(self):
-        e=self.settings['ppo']['entropy']
+        e=self.config.entropy
         progress=self.completed_episodes/self.entropy_episode_budget
-        return e['final_weight']+(e['initial_weight']-e['final_weight'])*math.exp(-e['decay_exponent']*progress)
+        return e.final_weight+(e.initial_weight-e.final_weight)*math.exp(-e.decay_exponent*progress)
 
     def conditional_distribution(self, history, index, previous_raw=None, previous_index=None):
         mean, log_std = self.actor.distribution(history,index)
@@ -303,9 +264,9 @@ class PPO:
         Value metrics use the same frozen, scaled GAE targets throughout a pass.
         """
         divergence, predictions = [], []
-        for begin in range(0, len(episode), self.settings['batch_size']):
-            b = episode[begin:begin+self.settings['batch_size']]
-            t = step[begin:begin+self.settings['batch_size']]
+        for begin in range(0, len(episode), self.config.batch_size):
+            b = episode[begin:begin+self.config.batch_size]
+            t = step[begin:begin+self.config.batch_size]
             history, index = r['frames'][b], t*r['stride']
             mean, log_std = self.rollout_distribution(r,b,t)
             divergence.append(gaussian_kl(r['mean'][b,t], r['log_std'][b,t], mean, log_std))
@@ -329,12 +290,12 @@ class PPO:
             # marginals must be recomputed for this conditional distribution.
             return None
         batches=[];used=0
-        for begin in range(0,len(episode),self.settings['batch_size']):
-            b=episode[begin:begin+self.settings['batch_size']]
-            t=step[begin:begin+self.settings['batch_size']]
+        for begin in range(0,len(episode),self.config.batch_size):
+            b=episode[begin:begin+self.config.batch_size]
+            t=step[begin:begin+self.config.batch_size]
             frame_shape=r['frames'].shape
             needed=len(b)*(frame_shape[1]*(len(self.interface['actor_columns'])+1)+len(self.interface['actor_columns']))*r['frames'].element_size()
-            keep_prefix=(len(batches)==begin//self.settings['batch_size']
+            keep_prefix=(len(batches)==begin//self.config.batch_size
                          and used+needed<=self._kl_input_cache_limit)
             if not keep_prefix:break
             prepared=self.actor.encoder.prepare(r['frames'][b],t*r['stride'])
@@ -351,10 +312,10 @@ class PPO:
         This sampled-cohort MEAN does not bound every state or future policies.
         """
         divergence = []
-        for begin in range(0, len(episode), self.settings['batch_size']):
-            b = episode[begin:begin+self.settings['batch_size']]
-            t = step[begin:begin+self.settings['batch_size']]
-            chunk=begin//self.settings['batch_size']
+        for begin in range(0, len(episode), self.config.batch_size):
+            b = episode[begin:begin+self.config.batch_size]
+            t = step[begin:begin+self.config.batch_size]
+            chunk=begin//self.config.batch_size
             history=(self._kl_inputs[chunk] if self._kl_inputs is not None and chunk<len(self._kl_inputs) else r['frames'][b])
             mean, log_std = (self.rollout_distribution(r,b,t) if self.noise_rho is not None else
                             self.actor.distribution(history,t*r['stride']))
@@ -363,7 +324,7 @@ class PPO:
         return float(torch.cat(divergence).mean())
 
     def _optimize(self, r, progress):
-        c = self.settings['ppo']
+        c = self.config
         raw, logp, values = r['raw'], r['logp'], r['values']
         if (raw.shape[:2] != values.shape or logp.shape != values.shape
                 or r['mean'].shape != raw.shape or r['log_std'].shape != raw.shape
@@ -372,8 +333,8 @@ class PPO:
         if any(not bool(torch.isfinite(r[k]).all()) for k in
                ('raw', 'logp', 'values', 'mean', 'log_std', 'frames', 'privileged')):
             raise ValueError('Nonfinite PPO rollout data')
-        adv, target, valid = advantages(r['rewards']*self.settings.get('reward_scale', 1.),
-                                        values, r['lengths'], self.settings['discount'], c['gae_lambda'])
+        adv, target, valid = advantages(r['rewards']*c.reward_scale,
+                                        values, r['lengths'], c.discount, c.gae_lambda)
         episode, step = valid.nonzero(as_tuple=True)
         flat_adv = adv[episode, step]
         normalized = (flat_adv-flat_adv.mean())/flat_adv.std(unbiased=False).clamp_min(1e-8)
@@ -383,7 +344,7 @@ class PPO:
         applied = value_applied = actor_epochs_started = 0
         stopped_kl = False
         stop_kl = None
-        guard = c.get('post_step_kl')
+        guard = c.post_step_kl_trials
         if guard is not None:
             self._kl_inputs = self.prepare_kl_inputs(r,episode,step)
         trial_count = backtracked = rejected = 0
@@ -392,10 +353,10 @@ class PPO:
         trial_records = []
         # Update whole current collection before responding to cooperative stop.
         # A checkpoint never contains a half-consumed PPO rollout/epoch cursor.
-        for epoch in range(c['epochs']):
+        for epoch in range(c.epochs):
             order = torch.randperm(len(episode), device=episode.device)
-            for begin in range(0, len(order), self.settings['batch_size']):
-                j = order[begin:begin+self.settings['batch_size']]
+            for begin in range(0, len(order), self.config.batch_size):
+                j = order[begin:begin+self.config.batch_size]
                 b, t = episode[j], step[j]
                 history, index = r['frames'][b], t*r['stride']
                 if not stopped_kl:
@@ -404,11 +365,11 @@ class PPO:
                     kl = gaussian_kl(r['mean'][b, t], r['log_std'][b, t], mean, std_log).mean()
                     if not bool(torch.isfinite(kl)):
                         raise FloatingPointError('Nonfinite PPO KL')
-                    if float(kl.detach()) > c['target_kl']:
+                    if float(kl.detach()) > c.target_kl:
                         stopped_kl, stop_kl = True, float(kl.detach())
                     else:
                         current_logp = squashed_log_prob(raw[b, t], mean, std_log)
-                        policy_loss, ratio = clipped_loss(current_logp, logp[b, t], normalized[j], c['clip_ratio'])
+                        policy_loss, ratio = clipped_loss(current_logp, logp[b, t], normalized[j], c.clip_ratio)
                         # Fresh sample estimates BOUNDED distribution entropy.
                         entropy_raw = mean+std_log.exp()*torch.randn_like(mean)
                         entropy = -squashed_log_prob(entropy_raw, mean, std_log).mean()
@@ -417,14 +378,14 @@ class PPO:
                             raise FloatingPointError('Nonfinite PPO actor loss/ratio')
                         self.actor_optimizer.zero_grad(set_to_none=True)
                         actor_loss.backward()
-                        actor_norm = nn.utils.clip_grad_norm_(self.actor.parameters(), c['max_grad_norm'], error_if_nonfinite=True)
+                        actor_norm = nn.utils.clip_grad_norm_(self.actor.parameters(), c.max_grad_norm, error_if_nonfinite=True)
                         accepted = True
                         if guard is None:
                             self.actor_optimizer.step()
                         else:
                             outcome = bounded_actor_step(self.actor.parameters(), self.actor_optimizer,
                                 lambda: self.cohort_policy_kl(r, episode, step),
-                                c['target_kl'], guard['maximum_trials'])
+                                c.target_kl, guard)
                             trial_records.append(dict(accepted_update_index=self.updates+1, **outcome))
                             trial_count += len(outcome['trials'])
                             accepted = outcome['accepted']
@@ -440,7 +401,7 @@ class PPO:
                             self.updates += 1
                             applied += 1
                         metrics.update(actor_loss=actor_loss.detach(), entropy=entropy.detach(),
-                            approx_kl=kl.detach(), clip_fraction=((ratio-1).abs() > c['clip_ratio']).float().mean().detach(),
+                            approx_kl=kl.detach(), clip_fraction=((ratio-1).abs() > c.clip_ratio).float().mean().detach(),
                             actor_grad_norm=actor_norm.detach())
                 # Actor/value parameters and optimizers are DISJOINT. An actor
                 # KL stop must not truncate fitting the independent value model.
@@ -449,8 +410,8 @@ class PPO:
                 if not bool(torch.isfinite(value_loss)):
                     raise FloatingPointError('Nonfinite PPO value loss')
                 self.value_optimizer.zero_grad(set_to_none=True)
-                (c['value_loss_weight']*value_loss).backward()
-                value_norm = nn.utils.clip_grad_norm_(self.value.parameters(), c['max_grad_norm'], error_if_nonfinite=True)
+                (c.value_loss_weight*value_loss).backward()
+                value_norm = nn.utils.clip_grad_norm_(self.value.parameters(), c.max_grad_norm, error_if_nonfinite=True)
                 self.value_optimizer.step()
                 self.value_updates += 1
                 value_applied += 1
