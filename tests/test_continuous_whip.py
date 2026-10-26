@@ -11,6 +11,7 @@ import unittest
 
 import numpy as np
 
+from helpers import TASK
 from tasks.whip.continuous_whip import (
     ContinuousWhipAttempt, FEATURE_SIZE, TRACE_FIELDS, output_metrics,
 )
@@ -37,7 +38,7 @@ def region(center, *, ident=1, angle=150., coherence=.8, flags=(), unresolved=Fa
 
 class Harness:
     def __init__(self, rows=None, p=None, v=None):
-        self.attempt = ContinuousWhipAttempt(REST, workspace_origin=np.array([0.,0.,2.]))
+        self.attempt = ContinuousWhipAttempt(REST, TASK, workspace_origin=np.array([0.,0.,2.]))
         self.n = 0
         self.rewards = []
         self.rows = [region(.1)] if rows is None else rows
@@ -204,7 +205,7 @@ class ContinuousWhipTests(unittest.TestCase):
 
     def test_time_and_finite_input_guards(self):
         p, v = state()
-        a = ContinuousWhipAttempt(REST, workspace_origin=np.array([0.,0.,2.]))
+        a = ContinuousWhipAttempt(REST, TASK, workspace_origin=np.array([0.,0.,2.]))
         with self.assertRaises(RuntimeError):
             a.observe(.01, p, v)
         a.initialize(p, v)

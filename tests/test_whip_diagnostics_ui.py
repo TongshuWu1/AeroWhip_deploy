@@ -21,7 +21,7 @@ class DiagnosticsTests(unittest.TestCase):
         self.widgets=[]
         self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name)
         self.rest=np.full(10,.1)
-        (self.root/'configuration.json').write_text(json.dumps({'model':{'cable':{'marker_interval_lengths_m':self.rest.tolist()}},'task':{'continuous_whip':{'version':'fixture'}}}))
+        (self.root/'configuration.json').write_text(json.dumps({'model':{'cable':{'marker_interval_lengths_m':self.rest.tolist()}},'task':{'reward':'fixture'}}))
         self.time=np.arange(5)*.01
         self.positions=np.zeros((5,11,3));self.positions[:,:,0]=np.linspace(0,1,11)
         self.velocities=np.zeros_like(self.positions)
@@ -99,7 +99,7 @@ class DiagnosticsTests(unittest.TestCase):
 
     def continuous_fixture(self):
         snapshot=json.loads((self.root/'configuration.json').read_text())
-        snapshot['task']['continuous_whip']={'version':'continuous_directional_whip_four_second_v6'}
+        snapshot['task']['reward']='continuous_directional_whip_four_second_v6'
         (self.root/'configuration.json').write_text(json.dumps(snapshot))
         fields=np.array(['fold_support','straightening_mps','reward_rate','accrued_credit'])
         values=np.array([[0.,0.,0.,0.], [.2,.5,1.,.01], [.4,.8,2.,.03],

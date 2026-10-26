@@ -7,7 +7,7 @@ Last reviewed: 2026-10-26.
 **Training is stopped.** Only the four-second +X Stage 1 PPO recipe remains supported.
 Read [the complete Stage 1 specification](stage1.md) for the reward, fold tracking,
 termination, control, exploration, evidence and limitations. The default is
-[the v6 preset](../configs/learning/whip_stage1_ppo_continuous_directional_four_second_v6.json):
+[the v6 experiment file](../configs/experiments/stage1_fold_x_v6.json):
 64 lanes, 200 collections, 12,800 episodes, ten physical links, fresh actor/critic.
 The latest production run `20261025-215750-176045` completed zero collections and
 zero optimizer updates. Its stopped checkpoint is not a learned policy. Its saved
@@ -973,4 +973,35 @@ lanes and four CUDA lanes, plus one seeded PPO collection and update) reproduces
 tests pass (five tests of removed features were deleted). Physics, reward, controller,
 timing and PPO arithmetic are unchanged. Runs saved before this change no longer load.
 Not checked: the GUIs beyond offscreen construction; no training or flight was run.
+
+## Dated change note — 2026-10-26 reorganization phase 2 (one experiment file)
+
+- One experiment file, [configs/experiments/stage1_fold_x_v6.json](../configs/experiments/stage1_fold_x_v6.json),
+  replaces the separate learning preset and task file. It holds the run, control and PPO
+  settings and an inline `task` section. The physical model (`configs/simulation.json`) and
+  scene stay separate and are referenced by path, because simulation, fitting and deployment
+  share them. Run snapshots keep `settings` and `task` as before.
+- [tasks/whip/configuration.py](../tasks/whip/configuration.py) defines the typed
+  `Stage1TaskConfig`. The reward (`continuous_whip.py`) and environment read the horizon,
+  workspace, workspace-cost weight, envelope limits, failure cost, fold-support windows and
+  thresholds, rate weight and powers from it. The descriptive `continuous_whip` contract
+  block and its repeated literals are gone.
+- Validation checks required keys, types and ranges instead of exact approved values.
+  Unimplemented choices fail explicitly: only the `continuous_directional_whip_four_second_v6`
+  reward, world +X output, the acceleration interface, a 100 Hz observation clock, policy
+  rates dividing 100 Hz and the ten-link mesh are supported. Changing a value in the file
+  now defines a new experiment; the approved values are the file's contents.
+- The duplicate workspace-penalty implementation used only for logged metrics was removed;
+  the logged `workspace_cost` is now the reward's own C. Its values can differ from earlier
+  logs in the last floating-point digits.
+- PPO no longer checks task contract names; its history length comes from the environment
+  (`history_samples` in the saved interface).
+- The Training window's description is generated from the experiment values.
+- Fixed a pre-existing settings-dialog defect: pressing OK clamped `seed` to 10,000,000 and
+  rounded `initial_log_std` to nine decimals even when untouched. Untouched fields now keep
+  their exact stored values (checked offscreen).
+
+Checked: the equivalence check reproduces all 154 reference tensors exactly (CPU and CUDA
+rollouts, one seeded PPO update); 231 unit tests pass, including new rejection tests for
+invalid task and run values. No training, simulation campaign or flight was run.
 

@@ -7,49 +7,10 @@ from collections import deque
 import math
 import numpy as np
 
+from .configuration import OBSERVATION_PERIOD_S
 from .horizontal_fold import FoldGeometry
 
-SHORT_MODE = 'continuous_directional_whip_four_second_v6'
 FEATURE_SIZE = 18  # Critic task features, including workspace cost and net return.
-SHORT_CONTRACT = {'version': 'continuous_directional_whip_four_second_v6',
- 'links': 10,
- 'horizon_s': 4.0,
- 'observation_hz': 100,
- 'history_window_s': 0.1,
- 'support_fade_s': 0.1,
- 'travel_reference_fraction': 0.1,
- 'soft_fold_lower_deg': 90.0,
- 'soft_fold_upper_deg': 150.0,
- 'coherence_reference': 0.8,
- 'rate_weight': 10.0,
- 'reach_power': 2.0,
- 'alignment_power': 2.0,
- 'failure_return': None,
- 'time_cost_per_s': 0.0,
- 'effort_cost': 0.0,
- 'path_cost': 0.0,
- 'target_reward': False,
- 'failure_cancels_credit': False,
- 'per_whip_bonus': False,
- 'early_completion': False,
- 'minimum_radius_fraction': 1e-06,
- 'rate_integration': 'right_endpoint_dt_v1',
- 'geometry': 'existing_ten_link_FoldGeometry_v1',
- 'output_speed': 'minimum_world_x_relative_x_end_to_end_extension_v1',
- 'workspace_termination': False,
- 'workspace_cost': '10_times_fixed_horizon_mean_squared_excess_m2_v1',
- 'workspace_radius_m': 0.55,
- 'workspace_height_lower_m': 1.5,
- 'workspace_height_upper_m': 2.6,
- 'negative_net_transform': 'identity',
- 'failure_cancels_cost_and_credit': False,
- 'failure_cost_per_remaining_s': 1.0,
- 'failure_preserves_prefix': True,
- 'physical_termination': False,
- 'physical_violation_diagnostic': True,
- 'numerical_termination': True,
- 'output_direction_world': [1.0, 0.0, 0.0],
- 'reach_measure': 'positive_world_x_attachment_relative_extension_v1'}
 _OUTPUT_FIELDS = ('fold_support', 'horizontal_reach_fraction', 'alignment', 'world_outward_mps', 'relative_outward_mps', 'straightening_mps', 'effective_outward_mps', 'reward_rate', 'accrued_credit', 'end_to_end_fraction', 'transport_signal', 'max_turn_rad')
 TRACE_FIELDS = _OUTPUT_FIELDS + ('workspace_cost', 'raw_net_return', 'net_return')
 
@@ -73,11 +34,19 @@ def output_metrics(positions, velocities, length):
 
 
 class ContinuousWhipAttempt:
-    """One full-horizon episode, without event-count or preparation bonuses."""
-    def __init__(self, rest, *, workspace_origin, horizon_s=4.):
-        if horizon_s != 4.:
-            raise ValueError('Current Stage 1 requires the four-second horizon')
-        self.horizon_s=float(horizon_s)
+    """One full-horizon episode, without event-count or preparation bonuses.
+
+    All task constants come from a Stage1TaskConfig (tasks/whip/configuration.py).
+    """
+    def __init__(self, rest, config, *, workspace_origin):
+        self.config=config
+        self.dt=OBSERVATION_PERIOD_S
+        self.horizon_s=config.duration_s
+        self.steps=round(self.horizon_s/self.dt)
+        fold=config.fold
+        self.window=round(fold.history_window_s/self.dt)+1
+        self.turn_lower=math.radians(fold.turn_lower_deg)
+        self.turn_range=math.radians(fold.turn_upper_deg-fold.turn_lower_deg)
         self.geometry=FoldGeometry(rest);self.L=self.geometry.L
         self.workspace_origin=np.asarray(workspace_origin,float)
         if self.workspace_origin.shape!=(3,) or not np.isfinite(self.workspace_origin).all():
@@ -85,7 +54,7 @@ class ContinuousWhipAttempt:
         self.failure_cost=0.
         self.cost=0.
         self.fields=TRACE_FIELDS
-        self.histories={};self.support=deque(maxlen=11)
+        self.histories={};self.support=deque(maxlen=self.window)
         self.time=self.total=self.accrued=self.peak_rate=self.support_time=self.output_time=0.
         self.terminal=None;self.initialized=False;self.selected=None
         self.last={key:0. for key in self.fields};self.trace=[];self.log=[]
@@ -98,21 +67,22 @@ class ContinuousWhipAttempt:
         return p,v
 
     def _fold_support(self,time,rows):
+        fold=self.config.fold
         histories={};transport=0.;max_turn=0.
         for b in rows:
             if b['unresolved'] or set(b['flags'])&{'plateau','ambiguous_identity'}:continue
-            ident=b['track_id'];samples=deque(self.histories.get(ident,()),maxlen=11)
-            if samples and not math.isclose(time-samples[-1][0],.01,abs_tol=1e-8):samples.clear()
+            ident=b['track_id'];samples=deque(self.histories.get(ident,()),maxlen=self.window)
+            if samples and not math.isclose(time-samples[-1][0],self.dt,abs_tol=1e-8):samples.clear()
             samples.append((time,b['centre_m'],b['theta'],b['coherence']))
             histories[ident]=samples;max_turn=max(max_turn,b['theta'])
-            if len(samples)<11:continue
-            strength=float(np.clip((max(s[2] for s in samples)-math.pi/2)/(math.pi/3),0.,1.))
-            coherence=float(np.clip(min(s[3] for s in samples)/.8,0.,1.))
-            travel=float(np.clip((samples[-1][1]-samples[0][1])/(.1*self.L),0.,1.))
+            if len(samples)<self.window:continue
+            strength=float(np.clip((max(s[2] for s in samples)-self.turn_lower)/self.turn_range,0.,1.))
+            coherence=float(np.clip(min(s[3] for s in samples)/fold.coherence_reference,0.,1.))
+            travel=float(np.clip((samples[-1][1]-samples[0][1])/(fold.travel_reference_fraction*self.L),0.,1.))
             transport=max(transport,strength*coherence*travel)
         self.histories=histories
         self.support.append((time,transport))
-        support=max(value*max(0.,1.-(time-stamp)/.1) for stamp,value in self.support)
+        support=max(value*max(0.,1.-(time-stamp)/fold.support_fade_s) for stamp,value in self.support)
         return support,transport,max_turn
 
     def initialize(self,positions,velocities):
@@ -124,21 +94,24 @@ class ContinuousWhipAttempt:
 
     def observe(self,time,positions,velocities, *, drone_position=None):
         if not self.initialized or self.terminal is not None:raise RuntimeError('Episode is not active')
-        if not math.isclose(time-self.time,.01,abs_tol=1e-8) or time>self.horizon_s+1e-9:
+        if not math.isclose(time-self.time,self.dt,abs_tol=1e-8) or time>self.horizon_s+1e-9:
             raise ValueError('Observe causal 100Hz endpoints through the configured horizon')
         p,v=self._arrays(positions,velocities)
         tracking=np.asarray(drone_position,float)
         if tracking.shape!=(3,) or not np.isfinite(tracking).all():
             raise ValueError('Soft workspace cost requires finite drone tracking-point XYZ')
-        radial=max(0.,float(np.linalg.norm(tracking[:2]-self.workspace_origin[:2]))-.55)
-        vertical=max(0.,1.5-tracking[2])+max(0.,tracking[2]-2.6)
-        charge=10.*(radial*radial+vertical*vertical)/(100.*self.horizon_s)
+        c,w=self.config,self.config.workspace
+        radial=max(0.,float(np.linalg.norm(tracking[:2]-self.workspace_origin[:2]))-w.radius_m)
+        vertical=max(0.,w.height_lower_world_m-tracking[2])+max(0.,tracking[2]-w.height_upper_world_m)
+        # Fixed-horizon mean of the weighted squared excess, integrated at right endpoints.
+        charge=c.workspace_cost_weight*(radial*radial+vertical*vertical)/self.steps
         previous=self.total
         _,rows=self.geometry.observe(p)
         support,transport,turn=self._fold_support(time,rows)
         m=output_metrics(p,v,self.L)
-        rate=10.*support*m['horizontal_reach_fraction']**2*m['alignment']**2*m['effective_outward_mps']/self.L
-        reward=rate*.01;self.accrued+=reward;self.cost+=charge
+        rate=(c.rate_weight*support*m['horizontal_reach_fraction']**c.reach_power
+              *m['alignment']**c.alignment_power*m['effective_outward_mps']/self.L)
+        reward=rate*self.dt;self.accrued+=reward;self.cost+=charge
         self.total=self.prefix_return()
         reward=self.total-previous
         self.time=float(time)
@@ -146,7 +119,7 @@ class ContinuousWhipAttempt:
                        reward_rate=rate,accrued_credit=self.accrued,workspace_cost=self.cost,
                        raw_net_return=self.accrued-self.cost,failure_cost=self.failure_cost,net_return=self.total)
         self.trace.append([self.last[k] for k in self.fields])
-        self.support_time+=.01*support;self.output_time+=.01*(rate>0.)
+        self.support_time+=self.dt*support;self.output_time+=self.dt*(rate>0.)
         if rate>self.peak_rate:
             self.peak_rate=rate;self.selected=dict(self.last,time_s=time)
         if time>=self.horizon_s-1e-10:
@@ -160,18 +133,13 @@ class ContinuousWhipAttempt:
         if self.terminal is not None or not self.initialized:raise RuntimeError('Episode is not active')
         if not self.time<=time<=self.horizon_s+1e-9 or reason in ('horizon','hit','event_end','timeout'):
             raise ValueError('Failure must follow the valid prefix')
-        self.failure_cost=max(0.,self.horizon_s-time)
+        self.failure_cost=self.config.failure_cost_per_remaining_s*max(0.,self.horizon_s-time)
         correction=-self.failure_cost
         self.total=self.prefix_return()-self.failure_cost
         entry=dict(kind=reason,time_s=time,return_value=self.total,
             failure_cost=self.failure_cost,preserved_credit=self.accrued,preserved_workspace_cost=self.cost)
         self.time=float(time);self.terminal=reason;self.log.append(entry)
         return correction
-
-    @property
-    def qualified(self):
-        # No unvalidated binary success gate is introduced by a continuous score.
-        return False
 
     def features(self):
         m=self.last
@@ -189,5 +157,5 @@ class ContinuousWhipAttempt:
             continuous_metrics=dict(accrued_credit=self.accrued,peak_reward_rate=self.peak_rate,
                 fold_support_integral_s=self.support_time,positive_output_duration_s=self.output_time),
             workspace_cost=self.cost,raw_net_return=self.accrued-self.cost,failure_cost=self.failure_cost,
-            output_direction_world=[1.,0.,0.],
-            contract=SHORT_MODE,qualification_note='Continuous diagnostic; binary whip success is not defined.')
+            output_direction_world=list(self.config.output_direction_world),
+            contract=self.config.reward,qualification_note='Continuous diagnostic; binary whip success is not defined.')

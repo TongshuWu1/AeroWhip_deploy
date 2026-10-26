@@ -17,10 +17,9 @@ import torch
 from controllers.full_state_controller.tensor_controller import GeometricController
 from simulation.tensor_model import TensorModel, ControlledState, controlled_values, state_values
 from simulation.state import quaternion_xyzw_to_rotation_matrix
-from training.configuration import action_limit_key
-from .continuous_whip import ContinuousWhipAttempt, FEATURE_SIZE, TRACE_FIELDS, SHORT_MODE
+from .configuration import OBSERVATION_PERIOD_S
+from .continuous_whip import ContinuousWhipAttempt, FEATURE_SIZE, TRACE_FIELDS
 from .stage1 import Stage1Score
-from .workspace import WorkspacePenalty
 
 
 def _conditional_solver_enabled(conditional=None):
@@ -40,18 +39,15 @@ class Stage1Environment:
     @torch.no_grad()
     def __init__(self, settings, snapshot, configuration, scene, *, progress=None, capture=True,
                  conditional=None):
-        if configuration.reward_mode != SHORT_MODE:
-            raise ValueError('Only the current four-second Stage 1 is supported')
         self.settings, self.configuration, self.scene = settings, configuration, scene
-        self.horizon_s = 4.
         self.device, self.batch = settings['device'], settings['parallel_environments']
         self.model = m = TensorModel(snapshot['model'], device=self.device, batched=True)
-        if m.dt != .01 or scene.timestep_s != .01:
+        if m.dt != OBSERVATION_PERIOD_S or scene.timestep_s != OBSERVATION_PERIOD_S:
             raise ValueError('Stage 1 requires a 100 Hz observation clock')
+        if m.n != 11:
+            raise ValueError('The fold reward measures a ten-link (eleven-node) cable')
         self.action_interface = settings['action_interface']
-        limit_key = action_limit_key(settings)
         self.controller = GeometricController(m).acceleration
-        self.workspace_penalty = WorkspacePenalty(**settings['workspace_penalty'])
         initial = scene.initial_state
         self.origin = m.tensor(initial.position_world_m)
         seed = m.controller_state(m.initial_state(initial.position_world_m,
@@ -62,22 +58,22 @@ class Stage1Environment:
             cable_velocities=initial.cable_node_velocities_world_mps,
             material_angles=initial.cable_material_angles_rad))
         self.seed = [v.expand(self.batch,*v.shape).clone() for v in controlled_values(seed)]
-        self.stride = 100//settings['policy_rate_hz']
-        self.samples = round(configuration.episode.duration_s/.01)+1
+        self.stride = round(1/(OBSERVATION_PERIOD_S*settings['policy_rate_hz']))
+        self.samples = round(configuration.duration_s/OBSERVATION_PERIOD_S)+1
         self.time_samples = self.samples-1
-        self.decisions = (self.samples-1)//self.stride
-        if m.n != 11 or self.samples != 401 or self.decisions != 200:
-            raise ValueError('Stage 1 requires ten links and its registered four-second horizon')
-        self.time = torch.arange(self.samples,device=self.device,dtype=torch.float64)*.01
+        if self.time_samples % self.stride:
+            raise ValueError('The episode must contain a whole number of policy decisions')
+        self.decisions = self.time_samples//self.stride
+        self.time = torch.arange(self.samples,device=self.device,dtype=torch.float64)*OBSERVATION_PERIOD_S
         self.maximum_thrust = float(sum(m.config['actuator']['maximum_thrust_n']))
         self.action_size = 3
-        self.action_limit = m.tensor(settings[limit_key])
+        self.action_limit = m.tensor(settings['acceleration_limit_mps2'])
         rotation = quaternion_xyzw_to_rotation_matrix(initial.quaternion_body_to_world_xyzw)
         yaw = float(np.arctan2(rotation[1,0],rotation[0,0]))
         self.hold = m.tensor([0.,0.,0.,yaw])
-        self.delay = round(m.config['controller']['command_delay_s']/.01)
+        self.delay = round(m.config['controller']['command_delay_s']/OBSERVATION_PERIOD_S)
         self.frame_size = 18+6*m.n+8+self.action_size+1
-        self.policy_encoder_options = dict(history_samples=401)
+        self.policy_encoder_options = dict(history_samples=self.samples)
         # Deployable actor inputs are unchanged. Critic-only state is stored
         # separately at policy boundaries, never appended to actor histories.
         self.actor_columns = list(range(18))
@@ -121,8 +117,8 @@ class Stage1Environment:
 
     def _envelope(self, p, q, rotation):
         c = self.configuration
-        return ((rotation[:,2,2] >= math.cos(math.radians(c.returns.maximum_tilt_deg)))
-            & (q[:,:,2].amin(-1) >= c.returns.minimum_cable_height_m))
+        return ((rotation[:,2,2] >= math.cos(math.radians(c.maximum_tilt_deg)))
+            & (q[:,:,2].amin(-1) >= c.minimum_cable_height_m))
 
     @torch.no_grad()
     def reset(self):
@@ -156,14 +152,14 @@ class Stage1Environment:
         self._record_critic_state()
         result = self.frames,self.indices()
         rest = self.model.rest.detach().cpu().numpy()
-        self.attempts = [ContinuousWhipAttempt(rest,workspace_origin=self.origin.cpu().numpy(),horizon_s=self.horizon_s)
+        self.attempts = [ContinuousWhipAttempt(rest,self.configuration,workspace_origin=self.origin.cpu().numpy())
                          for _ in range(self.batch)]
         _,_,p,v = self._observe(self.state);p=p.cpu().numpy();v=v.cpu().numpy()
         for lane,a in enumerate(self.attempts):a.initialize(p[lane],v[lane])
         self.minimum_observed_cable_height = torch.as_tensor(p[:,:,2].min(axis=1),device=self.device).clone()
         self.maximum_observed_tilt = torch.rad2deg(torch.acos(self.state.rotation[:,2,2].clamp(-1,1)))
-        self.physical_violation = ((self.minimum_observed_cable_height<self.configuration.returns.minimum_cable_height_m)
-            | (self.maximum_observed_tilt>self.configuration.returns.maximum_tilt_deg))
+        self.physical_violation = ((self.minimum_observed_cable_height<self.configuration.minimum_cable_height_m)
+            | (self.maximum_observed_tilt>self.configuration.maximum_tilt_deg))
         self.ledger = torch.zeros((self.batch,self.decisions),dtype=torch.float64,device=self.device)
         self.terminal_times = torch.zeros(self.batch,dtype=torch.float64,device=self.device)
         self.failure_reasons = ['']*self.batch;self.substep_records = [];self._record_critic_state()
@@ -267,11 +263,11 @@ class Stage1Environment:
             for lane in np.flatnonzero(active):
                 a=self.attempts[lane]
                 if lost[lane]:
-                    elapsed=(self.index-1)*.01+float(times[lane])
+                    elapsed=(self.index-1)*OBSERVATION_PERIOD_S+float(times[lane])
                     reward=a.fail(elapsed,'numerical_failure');self.failure_reasons[lane]='numerical_failure'
                     self.substep_records.append(dict(lane=int(lane),time_s=elapsed,reason='numerical_failure',
                         drone_position_m=p[lane].cpu().tolist()))
-                else:reward=a.observe(self.index*.01,pp[lane],vv[lane],drone_position=tracking[lane])
+                else:reward=a.observe(self.index*OBSERVATION_PERIOD_S,pp[lane],vv[lane],drone_position=tracking[lane])
                 self.ledger[lane,self.decision]+=reward
                 if a.terminal is not None:
                     self.active[lane]=False;self.terminal_times[lane]=a.time
@@ -311,29 +307,26 @@ class Stage1Environment:
     def event_records(self):
         records=[a.record() for a in self.attempts]
         for lane,row in enumerate(records):
-            row.update(contract=self.configuration.reward_mode,
+            row.update(contract=self.configuration.reward,
                 physical_violation=bool(self.physical_violation[lane]),
                 numerically_valid=not bool(self.failed[lane]),
                 minimum_cable_height_m=float(self.minimum_observed_cable_height[lane]),
                 maximum_tilt_deg=float(self.maximum_observed_tilt[lane]))
         return records
 
-    def workspace_charges(self, observed):
-        return self.workspace_penalty.charges(self.history['drone_positions'],
-            self.origin.expand(self.batch,3),self.configuration.workspace,observed)
-
     def workspace_metrics(self):
         mask = self.numerical_valid[:,1:]
-        radial,vertical = self.workspace_penalty.distances(self.history['drone_positions'],
-            self.origin.expand(self.batch,3),self.configuration.workspace)
+        radial,vertical = self.configuration.workspace.excess(self.history['drone_positions'],
+            self.origin.expand(self.batch,3))
         radial,vertical = radial[:,1:],vertical[:,1:]
         return dict(boundary_breached=self.workspace_breached.clone(),
             executed_duration_s=self.terminal_times.clone(),
             workspace_mean_square_excess_m2=torch.where(mask,radial.square()+vertical.square(),0.).sum(1)/mask.sum(1).clamp_min(1),
             max_radial_violation_m=torch.where(mask,radial,0.).amax(1),
             max_vertical_violation_m=torch.where(mask,vertical,0.).amax(1),
-            outside_duration_s=(((radial>0)|(vertical>0))&mask).sum(1)*.01,
-            workspace_cost=self.workspace_charges(self.numerical_valid).sum(1))
+            outside_duration_s=(((radial>0)|(vertical>0))&mask).sum(1)*OBSERVATION_PERIOD_S,
+            # The reward's own workspace cost C, not a second implementation.
+            workspace_cost=torch.tensor([a.cost for a in self.attempts],device=self.device,dtype=torch.float64))
 
     def replay_arrays(self, lane=0):
         # Valid numerical prefix only, including a finite envelope violation.
@@ -367,7 +360,7 @@ class Stage1Environment:
         return callback(self.frames.repeat(width,1,1),self.indices().repeat(width))[:1]
 
     def provenance(self):
-        return dict(evaluation_backend='native_tensor_substep_guard_v1',reward_mode=self.configuration.reward_mode,
+        return dict(evaluation_backend='native_tensor_substep_guard_v1',reward_mode=self.configuration.reward,
             evaluation_environments=self.batch,evaluation_policy_lanes=self.settings.get('evaluation_environments',128),
             unique_initial_states=1)
 

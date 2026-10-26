@@ -1,15 +1,17 @@
-"""Four-second contract, full native-adapter schedule and accounting checks."""
+"""Four-second task schedule, full native-adapter accounting and config validation."""
 from copy import deepcopy
 from dataclasses import replace
 import unittest
 import numpy as np
 import torch
-from tasks.whip.continuous_whip import ContinuousWhipAttempt, SHORT_MODE
+from helpers import TASK
+from tasks.whip.configuration import REWARD_VERSION
+from tasks.whip.continuous_whip import ContinuousWhipAttempt
 from tasks.whip.environment import make_environment
-from training.configuration import load, task_configuration
+from training.configuration import DEFAULT, load, task_configuration
 from training.ppo import PPO
 
-PRESET='configs/learning/whip_stage1_ppo_continuous_directional_four_second_v6.json'
+PRESET=DEFAULT
 
 class FourSecondTests(unittest.TestCase):
     def env(self):
@@ -21,8 +23,7 @@ class FourSecondTests(unittest.TestCase):
         self.assertEqual((e.samples,e.decisions),(401,200))
         self.assertEqual(e.policy_encoder_options,dict(history_samples=401))
         a=PPO(e.settings,e.actor_columns,e.frame_size,'cpu',privileged_size=e.critic_state_size,encoder_options=e.policy_encoder_options)
-        self.assertEqual(a.interface['time_reference_samples'],400)
-        self.assertEqual(a.interface['history_layout'],'continuous_directional_whip_401_v1')
+        self.assertEqual(a.interface['history_samples'],401)
         self.assertEqual(a.entropy_episode_budget,12800)
         self.assertFalse(a.actor_optimizer.state_dict()['state'])
         bad=replace(e.state,position_com=e.state.position_com+e.model.tensor([.8,0,-2.3]))
@@ -37,7 +38,7 @@ class FourSecondTests(unittest.TestCase):
         self.assertEqual(score.components['executed_duration_s'][0],4.)
         self.assertEqual(score.components['failure_cost'][0],0.)
         torch.testing.assert_close(e.transition_rewards.sum(1),returns)
-        self.assertEqual(e.event_records()[0]['contract'],SHORT_MODE)
+        self.assertEqual(e.event_records()[0]['contract'],REWARD_VERSION)
         self.assertEqual(len(e.replay_arrays()['time_s']),401)
         self.assertAlmostEqual(float(e.attempts[0].features()[0]),1.)
         with self.assertRaises(RuntimeError):e.step(torch.zeros(1,3))
@@ -46,8 +47,8 @@ class FourSecondTests(unittest.TestCase):
         # Known constant output with synthetic fold support isolates integration.
         p=np.linspace([0,0,0],[.8,0,0],11);v=np.zeros_like(p);v[-1,0]=2
         result=[]
-        for horizon in (4.,):
-            a=ContinuousWhipAttempt(np.full(10,.1),workspace_origin=np.zeros(3),horizon_s=horizon)
+        for horizon in (TASK.duration_s,):
+            a=ContinuousWhipAttempt(np.full(10,.1),TASK,workspace_origin=np.zeros(3))
             a.initialize(p,v);a._fold_support=lambda *args:(1.,1.,np.pi)
             rewards=[a.observe(k*.01,p,v,drone_position=[.65,0,2]) for k in range(1,int(horizon*100)+1)]
             self.assertAlmostEqual(a.cost,.1)
@@ -66,12 +67,21 @@ class FourSecondTests(unittest.TestCase):
         self.assertAlmostEqual(float(score.components['failure_cost'][0]),4-1/600)
         self.assertTrue(torch.isfinite(returns).all())
 
-    def test_wrong_horizon_or_contract_rejected(self):
+    def test_invalid_task_values_rejected(self):
         s,snap,cfg,scene=load(PRESET)
-        for change in ('episode','continuous_whip'):
-            bad=deepcopy(snap['task']);bad[change]['duration_s' if change=='episode' else 'horizon_s']=7
-            with self.assertRaises(ValueError):task_configuration(bad,s,snap['model'],scene)
+        edits=[('duration_s',4.005),('duration_s',-1),('reward','unknown_v1'),('rate_weight',0),
+               ('maximum_tilt_deg',90),('workspace',dict(radius_m=.55)),('extra',1)]
+        for key,value in edits:
+            bad=deepcopy(snap['task']);bad[key]=value
+            with self.subTest(key=key,value=value),self.assertRaises(ValueError):
+                task_configuration(bad,s,snap['model'],scene)
+        bad=deepcopy(snap['task']);del bad['fold']
+        with self.assertRaises(ValueError):task_configuration(bad,s,snap['model'],scene)
+        bad=deepcopy(snap['task']);bad['fold']['turn_upper_deg']=80
+        with self.assertRaises(ValueError):task_configuration(bad,s,snap['model'],scene)
+        for key,value in (('policy_rate_hz',30),('acceleration_limit_mps2',[8,8]),('discount',0),('action_interface','velocity_v1')):
+            with self.subTest(key=key),self.assertRaises(ValueError):load(dict(s,task=snap['task'],**{key:value}))
         e=self.env()
-        with self.assertRaises(ValueError):PPO(e.settings,e.actor_columns,e.frame_size,'cpu',privileged_size=e.critic_state_size,encoder_options=dict(history_samples=701))
+        with self.assertRaises(ValueError):PPO(e.settings,e.actor_columns,e.frame_size,'cpu',privileged_size=e.critic_state_size,encoder_options=dict(phase=1))
 
 if __name__=='__main__':unittest.main()

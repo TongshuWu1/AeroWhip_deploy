@@ -161,7 +161,7 @@ class PresentationData:
     @property
     def output_direction(self):
         """Task output direction in world axes, for live tip-velocity display."""
-        return self.config.continuous_whip['output_direction_world']
+        return self.config.output_direction_world
 
     def evidence(self):
         return dict(run=str(self.directory), replay=self.filename,

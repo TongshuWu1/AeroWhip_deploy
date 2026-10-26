@@ -11,7 +11,7 @@ from fitting.artifacts import atomic_save
 from simulation.configuration import load_configuration
 from tasks.whip.environment import make_environment
 from training.configuration import (task_configuration, validate, run_schema, checkpoint_schema,
-    episode_budget, evaluation_due, require_launchable)
+    episode_budget, evaluation_due)
 from training.artifacts import (EventLog, read_json, save_json, execution_hashes, save_checkpoint,
                                 checkpoint_replay, replay_from_checkpoint)
 from training.ppo import PPO
@@ -39,7 +39,7 @@ def record_collection(directory,env,returns,valid,score,round_number):
         transition_rewards=env.transition_rewards.cpu().numpy())
     save_arrays(f'collection-{round_number:05d}.npz',payload)
     save_json(directory/f'collection-{round_number:05d}-events.json',
-        dict(schema=env.configuration.reward_mode,lanes=env.event_records(),substep_failures=env.substep_records))
+        dict(schema=env.configuration.reward,lanes=env.event_records(),substep_failures=env.substep_records))
     ordered=returns.argsort();selected={int(ordered[0]),int(ordered[len(ordered)//2]),int(ordered[-1])}
     for mask in (valid,~valid,qualification.bool(),valid&~qualification.bool()):
         lanes=mask.nonzero().flatten()
@@ -92,7 +92,6 @@ def run(directory):
         if snapshot['execution_hashes'] != execution_hashes():
             raise ValueError('Source changed after run preparation; prepare a new run')
         settings = snapshot['settings']; validate(settings)
-        require_launchable(settings)
         reward_scale = settings.get('reward_scale', 1.0)
         if settings['device'] == 'cuda' and not torch.cuda.is_available():
             raise RuntimeError('CUDA is unavailable. Select CPU explicitly; no silent fallback')

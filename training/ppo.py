@@ -214,11 +214,10 @@ class PPO:
                 likelihood='history_conditional_squashed_gaussian_v1')
         h = settings['hidden_units']
         options = dict(encoder_options or {})
-        if options:
-            if (settings.get('continuous_whip_contract') != 'continuous_directional_whip_four_second_v6'
-                    or options != dict(history_samples=401)):
-                raise ValueError('Current Stage 1 requires its 401-sample history')
-            self.interface.update(history_layout='continuous_directional_whip_401_v1',time_reference_samples=400)
+        if set(options)-{'history_samples'}:
+            raise ValueError('Unknown history encoder options')
+        if 'history_samples' in options:
+            self.interface.update(history_samples=options['history_samples'])
         self.actor = make_ppo_actor(settings,columns,action_size,**options).to(device)
         self.value = Value(columns, h, privileged_size,**options).to(device)
         self.actor_optimizer = torch.optim.Adam((p for p in self.actor.parameters() if p.requires_grad), lr=settings['learning_rate'])

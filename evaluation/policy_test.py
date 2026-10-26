@@ -231,7 +231,7 @@ def run(directory):
                 workspace_cost=float(cost[0]),components={k:float(v[0]) for k,v in score.components.items()},
                 workspace={k:float(v[0]) for k,v in env.workspace_metrics().items()},
                 case=case,warnings=warnings,source_mode='current_code',exact_source_reproduction=False,
-                scoring=cfg.reward_mode,checkpoint_sha256=info['sha256'],**env.provenance()))
+                scoring=cfg.reward,checkpoint_sha256=info['sha256'],**env.provenance()))
         verify_contract(snapshot,request)
         if load_checkpoint(request['checkpoint'])['sha256']!=request['checkpoint_sha256']:
             raise ValueError('Source checkpoint changed during the test')

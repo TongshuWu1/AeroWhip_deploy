@@ -5,11 +5,19 @@ import sys
 from PySide6 import QtCore, QtWidgets
 
 from project_paths import ROOT, project_path
-from training.configuration import DEFAULT, load, task_configuration
+from training.configuration import DEFAULT, experiment, load
 from training.artifacts import PPO_RUNS, create_run, read_json, save_json, events
 from training.ui.plots import MetricPlot
 from training.ui.preview import EvaluationPreview
 from training.ui.whip_diagnostics import WhippingDiagnostics
+
+
+def unchanged(control, value):
+    """Keep the exact stored value unless the user edited the (display-rounded) spin box."""
+    control.blockSignals(True)
+    shown=control.value(); control.setValue(value); initial=control.value(); control.setValue(shown)
+    control.blockSignals(False)
+    return value if shown==initial else shown
 
 
 class SettingsDialog(QtWidgets.QDialog):
@@ -29,13 +37,11 @@ class SettingsDialog(QtWidgets.QDialog):
             return {k:self.settings[k] for k in keys if k in self.settings}
         groups = [
             ('Run & compute', subset(('device','seed','parallel_environments','evaluation_environments','training_episodes','evaluation_interval_episodes','policy_rate_hz','acceleration_limit_mps2'))),
-            ('Learner & exploration', subset(('learning_rate','batch_size','hidden_units','initial_log_std','discount','ppo'))),
-            ('Reward & boundary', dict(learning=subset(('reward_scale','workspace_penalty')), contract=self.task['continuous_whip'], workspace=self.task['workspace'])),
-            ('Episode', dict(episode=self.task['episode'])),
+            ('Learner & exploration', subset(('learning_rate','batch_size','hidden_units','initial_log_std','discount','reward_scale','ppo'))),
+            ('Task & reward', self.task),
             ('Configuration sources', {k:v for k,v in self.settings.items() if k not in used})]
-        learning_owners={id(values):self.settings for _,values in groups[:2]}
-        learning_owners[id(groups[2][1]['learning'])]=self.settings
-        learning_owners[id(groups[4][1])]=self.settings
+        # Top-level learner keys are shown through copies; edits write back to settings.
+        learning_owners={id(groups[i][1]):self.settings for i in (0,1,3)}
         for name,values in groups:
             scroll = QtWidgets.QScrollArea(); scroll.setWidgetResizable(True)
             contents = QtWidgets.QWidget(); form = QtWidgets.QFormLayout(contents)
@@ -67,8 +73,8 @@ class SettingsDialog(QtWidgets.QDialog):
                         'training_episodes':'Total episode budget including earlier completed episodes when resuming; not an iteration count.',
                         'evaluation_interval_episodes':'Evaluation happens when this cumulative episode boundary is crossed, plus first and final collections.',
                         'reward_scale':'Multiplies task returns for optimization. It does not change physical units.',
-                        'workspace_penalty':'Outside-only soft cost. Zero inside/on the workspace; no action filter or enforced confinement.',
-                        'reward_mode':'Frozen reward version. Changing it creates a new experiment; old checkpoints retain their original objective.',
+                        'workspace_cost_weight':'Outside-only soft cost weight. Zero inside/on the workspace; no action filter or enforced confinement.',
+                        'reward':'Frozen reward version. Changing reward settings creates a new experiment; old checkpoints retain their original objective.',
                         'target_kl':'With the enabled post-update safeguard, trial actor updates are checked against cohort-mean KL; not a pointwise action guarantee.',
                         'initial_weight':'PPO entropy bonus coefficient, not a guaranteed achieved entropy.',
                     }.get(key,'Stored configuration key: '+path)
@@ -86,18 +92,19 @@ class SettingsDialog(QtWidgets.QDialog):
                             control=QtWidgets.QDoubleSpinBox(); control.setDecimals(9); control.setRange(-1e6,1e6); control.setValue(number)
                             items.addWidget(control); controls.append(control)
                         row.setToolTip(help_text); self.controls[path]=controls
-                        form.addRow(label,row); self.fields.append((owner,key,lambda controls=controls:[c.value() for c in controls]))
+                        form.addRow(label,row); self.fields.append((owner,key,lambda controls=controls,value=value:
+                            [unchanged(c,v) for c,v in zip(controls,value)]))
                         continue
                     elif isinstance(value,bool):
                         control=QtWidgets.QCheckBox(); control.setChecked(value)
                         form.addRow(label,control); self.fields.append((owner,key,control.isChecked))
                     elif type(value) is int:
                         # Signed values must round trip unchanged. The configuration validator sets semantics.
-                        control=QtWidgets.QSpinBox(); control.setRange(-10000000,10000000); control.setValue(value)
+                        control=QtWidgets.QSpinBox(); control.setRange(-2**31+1,2**31-1); control.setValue(value)
                         form.addRow(label,control); self.fields.append((owner,key,control.value))
                     elif isinstance(value,float):
                         control=QtWidgets.QDoubleSpinBox(); control.setDecimals(9); control.setRange(-1e9,1e9); control.setValue(value)
-                        form.addRow(label,control); self.fields.append((owner,key,control.value))
+                        form.addRow(label,control); self.fields.append((owner,key,lambda c=control,v=value:unchanged(c,v)))
                     elif key=='device':
                         control=QtWidgets.QComboBox(); control.addItems(['cuda','cpu']); control.setCurrentText(value)
                         form.addRow(label,control); self.fields.append((owner,key,control.currentText))
@@ -119,8 +126,7 @@ class SettingsDialog(QtWidgets.QDialog):
     def accept(self):
         try:
             for mapping,key,getter in self.fields: mapping[key]=getter()
-            settings,snapshot,_,scene=load(self.settings)
-            task_configuration(self.task,settings,snapshot['model'],scene)
+            load(experiment(self.settings,self.task))
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self,'Invalid settings',str(exc)); return
         super().accept()
@@ -268,17 +274,19 @@ class TrainingWindow(QtWidgets.QMainWindow):
 
     def update_description(self):
         s,t=self.settings,self.task
+        w,f=t['workspace'],t['fold']
         self.setup_toggle.setText(f"Training setup · Stage 1 · PPO · {s['device'].upper()} · {s['parallel_environments']} lanes")
         self.setWindowTitle(f"Training — PPO — {self.config_path.stem}")
+        e=s['ppo']['entropy']
         self.config_label.setText(
-            f"Stage 1: continuous fold transport and outward opening toward world +X. No target-hit reward.\n"
-            f"{s['parallel_environments']} training lanes · {s['training_episodes']} episodes · 4 s horizon · 10 links · 50 Hz acceleration actions.\n"
-            "Return Q − C. Q = integral of 10 × fold support × forward reach² × alignment² × outward speed / cable length.\n"
-            "C = 10 × fixed-horizon mean of squared workspace excess in metres. Radius 0.55 m; world height 1.5–2.6 m.\n"
-            "No path, acceleration, elapsed-time or per-whip cost/bonus. No early completion or physical-envelope termination.\n"
-            "Tilt >60° or cable height <0.05 m is recorded as invalid but continues. Numerical corruption aborts and subtracts remaining seconds.\n"
-            "Entropy coefficient = 0.001 + 0.019 exp(−8 n/N), original episode budget retained on resume. AR(1) correlation 100 ms.\n"
-            "Acceleration limits [8,8,4] m/s² excluding gravity; zero action does not brake or hold position.\n"
+            f"Stage 1 ({t['reward']}): continuous fold transport and outward opening toward world +X. No target-hit reward.\n"
+            f"{s['parallel_environments']} training lanes · {s['training_episodes']} episodes · {t['duration_s']:g} s horizon · 10 links · {s['policy_rate_hz']} Hz acceleration actions.\n"
+            f"Return Q − C. Q = integral of {t['rate_weight']:g} × fold support × forward reach^{t['reach_power']:g} × alignment^{t['alignment_power']:g} × outward speed / cable length.\n"
+            f"C = {t['workspace_cost_weight']:g} × fixed-horizon mean of squared workspace excess in metres. Radius {w['radius_m']:g} m; world height {w['height_lower_world_m']:g}–{w['height_upper_world_m']:g} m.\n"
+            f"Fold support: turn {f['turn_lower_deg']:g}–{f['turn_upper_deg']:g}°, coherence {f['coherence_reference']:g}, {1000*f['history_window_s']:g} ms window.\n"
+            f"Tilt >{t['maximum_tilt_deg']:g}° or cable height <{t['minimum_cable_height_m']:g} m is recorded as invalid but continues. Numerical corruption aborts and costs {t['failure_cost_per_remaining_s']:g} per remaining second.\n"
+            f"Entropy coefficient = {e['final_weight']:g} + {e['initial_weight']-e['final_weight']:g} exp(−{e['decay_exponent']:g} n/N), original episode budget retained on resume. AR(1) correlation {1000*s['ppo']['action_noise']['correlation_time_s']:g} ms.\n"
+            f"Acceleration limits {s['acceleration_limit_mps2']} m/s² excluding gravity; zero action does not brake or hold position.\n"
             "Deterministic evaluation is one fixed physical case; the saved actor batch layout is not independent trials.\n"
             "Continuous score is an experimental guide, not a validated binary whipping-success definition.")
 
@@ -305,11 +313,9 @@ class TrainingWindow(QtWidgets.QMainWindow):
         filename,_=QtWidgets.QFileDialog.getSaveFileName(self,'Save training settings',str(self.config_path),'JSON (*.json)')
         if not filename: return False
         try:
-            path=project_path(filename); task_path=path.with_name(path.stem+'_task.json')
-            if task_path==path: raise ValueError('Separate task filename required')
+            path=project_path(filename)
             self.settings['training_episodes']=self.rounds.value()
-            self.settings['task']=task_path.relative_to(ROOT).as_posix()
-            save_json(task_path,self.task); save_json(path,self.settings); self.config_path=path
+            save_json(path,experiment(self.settings,self.task)); self.config_path=path
             return True
         except Exception as exc: self.error(exc); return False
 

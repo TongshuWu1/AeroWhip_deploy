@@ -166,7 +166,7 @@ class WhipDiagnosticsData:
         return cls(path, time, positions, rel, velocities, rv, rest,
                    reach/rest.sum(), rel[:, -1, 2], ws, rs, uw, ur, wc, rc,
                    np.degrees(turn), density, grid, regions, record, events,
-                   snapshot.get('task', {}).get('continuous_whip', {}).get('version', 'unknown'), validity, notices,continuous)
+                   snapshot.get('task', {}).get('reward', 'unknown'), validity, notices,continuous)
 
     def phase(self, index):
         past = [e for e in self.events if e['time_s'] <= self.time[index]+1e-9]

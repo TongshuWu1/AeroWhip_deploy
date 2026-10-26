@@ -555,7 +555,7 @@ def run_manifest(manifest_path, output):
         runtime=dict(python=sys.version.split()[0], numpy=np.__version__),
         source_hashes={str(p): sha256(p) for p in (Path(__file__).resolve(),
                       Path(__file__).with_name('whip_measurements.py'),
-                      Path(__file__).resolve().parents[1]/'tasks/whip/stage1_configuration.py',
+                      
                       Path(__file__).resolve().parents[1]/'viewer/replay.py')},
         definitions=dict(event_selection='All sampled relative-tip speed maxima bounded by adjacent troughs; explicit intervals override',
             tracking='Consecutive local curvature peaks within one spatial sample; ambiguous associations split tracks',

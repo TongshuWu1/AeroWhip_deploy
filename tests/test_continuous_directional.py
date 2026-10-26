@@ -5,12 +5,14 @@ import math
 import unittest
 import numpy as np
 import torch
-from tasks.whip.continuous_whip import ContinuousWhipAttempt, output_metrics, SHORT_MODE
+from helpers import TASK
+from tasks.whip.configuration import REWARD_VERSION
+from tasks.whip.continuous_whip import ContinuousWhipAttempt, output_metrics
 from tasks.whip.environment import make_environment
-from training.configuration import load, task_configuration
+from training.configuration import DEFAULT, load, task_configuration
 from training.ppo import PPO
 
-PRESET='configs/learning/whip_stage1_ppo_continuous_directional_four_second_v6.json'
+PRESET=DEFAULT
 
 
 class DirectionalTests(unittest.TestCase):
@@ -49,7 +51,7 @@ class DirectionalTests(unittest.TestCase):
 
     def test_no_fold_zero_credit_repetition_and_workspace_accounting(self):
         p,v=self.sample()
-        a=ContinuousWhipAttempt(np.full(10,.1),workspace_origin=np.zeros(3))
+        a=ContinuousWhipAttempt(np.full(10,.1),TASK,workspace_origin=np.zeros(3))
         a.initialize(p,v)
         self.assertEqual(a.observe(.01,p,v,drone_position=[0,0,2]),0.)
         # Isolate scoring from fold geometry with explicitly synthetic support.
@@ -62,7 +64,7 @@ class DirectionalTests(unittest.TestCase):
         self.assertAlmostEqual(a.total,expected_q-expected_c)
         self.assertAlmostEqual(sum(delta),a.total)
         self.assertEqual(a.terminal,'horizon')
-        self.assertEqual(a.record()['contract'],SHORT_MODE)
+        self.assertEqual(a.record()['contract'],REWARD_VERSION)
 
     def env(self):
         s,snapshot,cfg,scene=load(PRESET)
@@ -79,7 +81,7 @@ class DirectionalTests(unittest.TestCase):
             self.assertEqual(done,i==199)
         returns,valid,score,_=e.finish()
         self.assertFalse(bool(valid[0]));self.assertFalse(bool(e.failed[0]))
-        self.assertEqual(e.event_records()[0]['contract'],SHORT_MODE)
+        self.assertEqual(e.event_records()[0]['contract'],REWARD_VERSION)
         self.assertEqual(e.event_records()[0]['output_direction_world'],[1.,0.,0.])
         torch.testing.assert_close(e.transition_rewards.sum(1),returns)
         self.assertEqual(score.components['executed_duration_s'][0],4.)
@@ -99,7 +101,7 @@ class DirectionalTests(unittest.TestCase):
     def test_registered_direction_and_fresh_entropy_budget(self):
         s,snapshot,cfg,scene=load(PRESET)
         self.assertEqual(s['training_episodes'],200*64)
-        bad=deepcopy(snapshot['task']);bad['continuous_whip']['output_direction_world']=[0.,1.,0.]
+        bad=deepcopy(snapshot['task']);bad['output_direction_world']=[0.,1.,0.]
         with self.assertRaises(ValueError):task_configuration(bad,s,snapshot['model'],scene)
         e=self.env()
         a=PPO(e.settings,e.actor_columns,e.frame_size,'cpu',privileged_size=e.critic_state_size,encoder_options=e.policy_encoder_options)

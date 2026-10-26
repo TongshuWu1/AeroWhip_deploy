@@ -1,5 +1,4 @@
 {
-  "task": "configs/tasks/whip_stage1_continuous_directional_four_second_v6.json",
   "model": "configs/simulation.json",
   "scene": "configs/scenes/default.toml",
   "device": "cuda",
@@ -10,17 +9,17 @@
   "evaluation_interval_episodes": 512,
   "policy_rate_hz": 50,
   "action_interface": "acceleration_direct_v1",
-  "workspace_penalty": {
-    "mode": "squared_excess_v1",
-    "weight": 0.1,
-    "distance_scale_m": 0.1
-  },
+  "acceleration_limit_mps2": [
+    8.0,
+    8.0,
+    4.0
+  ],
   "learning_rate": 0.0003,
   "batch_size": 256,
   "hidden_units": 128,
   "initial_log_std": -0.9931471805599452,
-  "reward_scale": 1,
   "discount": 1,
+  "reward_scale": 1,
   "ppo": {
     "epochs": 5,
     "clip_ratio": 0.2,
@@ -42,10 +41,33 @@
       "correlation_time_s": 0.1
     }
   },
-  "acceleration_limit_mps2": [
-    8.0,
-    8.0,
-    4.0
-  ],
-  "continuous_whip_contract": "continuous_directional_whip_four_second_v6"
+  "task": {
+    "reward": "continuous_directional_whip_four_second_v6",
+    "duration_s": 4,
+    "output_direction_world": [
+      1.0,
+      0.0,
+      0.0
+    ],
+    "workspace": {
+      "radius_m": 0.55,
+      "height_lower_world_m": 1.5,
+      "height_upper_world_m": 2.6
+    },
+    "workspace_cost_weight": 10.0,
+    "maximum_tilt_deg": 60,
+    "minimum_cable_height_m": 0.05,
+    "failure_cost_per_remaining_s": 1.0,
+    "fold": {
+      "history_window_s": 0.1,
+      "support_fade_s": 0.1,
+      "travel_reference_fraction": 0.1,
+      "turn_lower_deg": 90.0,
+      "turn_upper_deg": 150.0,
+      "coherence_reference": 0.8
+    },
+    "rate_weight": 10.0,
+    "reach_power": 2.0,
+    "alignment_power": 2.0
+  }
 }

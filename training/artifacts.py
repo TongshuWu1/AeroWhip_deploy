@@ -9,14 +9,9 @@ import torch
 
 from fitting.artifacts import atomic_save
 from project_paths import ROOT, project_path, project_reference, contained_child
-from training.configuration import digest, load, checkpoint_schema, episode_budget, validate, require_launchable
+from training.configuration import digest, load, checkpoint_schema, episode_budget, experiment, validate
 
 PPO_RUNS = ROOT/'runs/ppo_stage1'
-
-
-def run_root(settings):
-    require_launchable(settings)
-    return PPO_RUNS
 
 
 def clean(value):
@@ -53,6 +48,7 @@ def identity(snapshot):
 
 
 def create_run(settings, resume=None, *, task=None, root=None):
+    """Freeze a new run folder. A fresh run needs its task section; a resume reuses the checkpoint's."""
     parent = None
     if resume:
         parent = project_path(resume)
@@ -70,16 +66,12 @@ def create_run(settings, resume=None, *, task=None, root=None):
         if episode_budget(snapshot['settings']) <= saved['episodes']:
             raise ValueError('The total training budget must exceed the saved episodes')
     else:
-        require_launchable(settings)
-        _,snapshot,_,scene = load(settings)
-        if task is not None:
-            from training.configuration import task_configuration
-            task_configuration(task,settings,snapshot['model'],scene)
-            snapshot['task'] = task
+        if task is None:
+            raise ValueError('A new run needs its task section')
+        _,snapshot,_,_ = load(experiment(settings,task))
         snapshot['execution_hashes'] = execution_hashes()
-    require_launchable(snapshot['settings'])
     snapshot['identity'] = identity(snapshot)
-    root = project_path(run_root(snapshot['settings']) if root is None else root)
+    root = project_path(PPO_RUNS if root is None else root)
     # identity must not recursively include itself in subsequent comparisons.
     path = root/datetime.now().strftime('%Y%m%d-%H%M%S-%f')
     path.mkdir(parents=True,exist_ok=False)

@@ -1,39 +1,10 @@
-"""Optional cylindrical task constraints; no wall forces or state correction."""
+"""Cylindrical drone workspace for task cost and metrics; no wall forces or state correction."""
 
 from dataclasses import dataclass
 import math
 
 import torch
 
-@dataclass(frozen=True)
-class WorkspacePenalty:
-    weight: float
-    distance_scale_m: float
-    mode: str = 'squared_excess_v1'
-
-    def __post_init__(self):
-        if self.mode != 'squared_excess_v1':
-            raise ValueError('Unknown workspace penalty mode')
-        if (isinstance(self.weight, bool) or not math.isfinite(self.weight) or self.weight < 0
-                or isinstance(self.distance_scale_m, bool) or not math.isfinite(self.distance_scale_m)
-                or self.distance_scale_m <= 0):
-            raise ValueError('Workspace penalty needs nonnegative weight and positive distance scale')
-
-    def distances(self, positions, initial_positions, workspace):
-        radial = ((positions[..., :2]-initial_positions[:, None, :2]).norm(dim=-1)-workspace.radius_m).clamp_min(0)
-        vertical = ((workspace.height_lower_world_m-positions[..., 2]).clamp_min(0)
-                    +(positions[..., 2]-workspace.height_upper_world_m).clamp_min(0))
-        return radial, vertical
-
-    def charges(self, positions, initial_positions, workspace, observed):
-        """Right-endpoint 100-Hz integration divided by the fixed full horizon.
-
-        Includes settling, excludes initial sample and unexecuted suffixes.
-        No position projection, command filtering or termination decision.
-        """
-        radial, vertical = self.distances(positions, initial_positions, workspace)
-        density = self.weight*((radial/self.distance_scale_m).square()+(vertical/self.distance_scale_m).square())
-        return torch.where(observed[:, 1:], density[:, 1:]/(positions.shape[1]-1), 0.)
 
 @dataclass(frozen=True)
 class CylinderWorkspace:
@@ -46,6 +17,13 @@ class CylinderWorkspace:
                 self.radius_m, self.height_lower_world_m, self.height_upper_world_m))
                 or self.radius_m <= 0 or self.height_lower_world_m >= self.height_upper_world_m):
             raise ValueError('Workspace requires a positive radius and increasing finite world heights')
+
+    def excess(self, positions, initial_positions):
+        """Radial and vertical distance outside the workspace [m]; zero inside."""
+        radial = ((positions[..., :2]-initial_positions[:, None, :2]).norm(dim=-1)-self.radius_m).clamp_min(0)
+        vertical = ((self.height_lower_world_m-positions[..., 2]).clamp_min(0)
+                    +(positions[..., 2]-self.height_upper_world_m).clamp_min(0))
+        return radial, vertical
 
     def contains(self, positions, initial_positions):
         """(batch,samples,3) world tracking positions; fixed initial XY center.

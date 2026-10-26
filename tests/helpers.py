@@ -8,6 +8,9 @@ from project_paths import ROOT, project_path
 from training.configuration import DEFAULT, load
 from training.ppo import PPO
 
+# Typed Stage 1 task settings from the default experiment file.
+TASK = load(DEFAULT)[2]
+
 
 def project_temporary():
     directory = project_path(ROOT/'tmp')

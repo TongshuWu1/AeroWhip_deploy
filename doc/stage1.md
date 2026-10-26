@@ -1,6 +1,6 @@
 # Current Stage 1: continuous directional fold transport
 
-Last reviewed: 2026-10-25. Implemented experiment, **not a validated whipping classifier or a successful learned policy**.
+Last reviewed: 2026-10-26. Implemented experiment, **not a validated whipping classifier or a successful learned policy**.
 
 ## What is running, and what it should learn
 
@@ -8,9 +8,11 @@ Training is stopped. The latest production run, `runs/ppo_stage1/20261025-215750
 stopped during its first collection: **zero completed collections, zero completed episodes,
 zero optimizer updates**. Its checkpoint is an initialization, not a trained result.
 
-The only supported training recipe is
-[`whip_stage1_ppo_continuous_directional_four_second_v6.json`](../configs/learning/whip_stage1_ppo_continuous_directional_four_second_v6.json),
-with its [task contract](../configs/tasks/whip_stage1_continuous_directional_four_second_v6.json).
+The only supported training recipe is the experiment file
+[`configs/experiments/stage1_fold_x_v6.json`](../configs/experiments/stage1_fold_x_v6.json).
+It holds the run, control and PPO settings and an inline `task` section; every number
+below is read from that file (typed by [tasks/whip/configuration.py](../tasks/whip/configuration.py)).
+The values shown here are the file's current values, not constants in code.
 It asks the drone to generate a coherently moving fold and associated outward cable opening
 in **world +X**. Sideways/backward preparation is allowed. It does not ask the tip to hit a target.
 Repeated useful output can earn reward throughout the episode; there is no numbered-attempt
@@ -115,6 +117,11 @@ These windows, bandwidths and angle scales are the existing experimental choices
 has not changed them. In particular, the current reward does not require a separately
 completed 150° formation → propagation → 60° opening event.
 
+The 11-sample window, 90°/150° turn limits, 0.8 coherence, 0.1 L travel and 100 ms fade are
+`task.fold.*`; the rate weight and powers are `task.rate_weight`, `task.reach_power` and
+`task.alignment_power`. The Gaussian bandwidth and 1,001-point grid belong to the fixed
+fold-measurement geometry and are not task settings.
+
 Sources: [fold geometry](../tasks/whip/horizontal_fold.py),
 [region extraction](../tasks/whip/fold_geometry.py),
 [continuous reward](../tasks/whip/continuous_whip.py).
@@ -129,6 +136,9 @@ radial_excess = max(0, ||drone_xy − reset_xy|| − 0.55 m)
 vertical_excess = max(0, 1.5 m − drone_z) + max(0, drone_z − 2.6 m)
 C = sum(10 × (radial_excess² + vertical_excess²) / 400)
 ```
+
+The radius and heights are `task.workspace`, the factor 10 is `task.workspace_cost_weight`,
+and 400 is the number of 10 ms steps in `task.duration_s`.
 
 `C` is an uncapped fixed-horizon average squared-distance cost. A constant 0.1 m radial
 excess for all four seconds costs 0.1; a constant 1 m excess costs 10. There is no saturated
@@ -193,4 +203,4 @@ python run_training.py --start
 This opens the UI and starts a fresh current Stage 1. Without `--start`, it only opens the UI.
 Do not restore old presets into the active configuration directory. To inspect old reward
 implementations or replay their models, use a separate checkout of commit `3c9a49e` and the
-archived data. Source-hash checks for exact resume remain enforced.
+archived data; runs saved before 2026-10-26 need commit `375b44e`. Source-hash checks for exact resume remain enforced.
