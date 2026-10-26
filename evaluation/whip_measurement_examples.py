@@ -1,23 +1,10 @@
-"""Pin retained replays and explicit kinematic controls without running physics.
+"""Explicit kinematic cable controls for measurement checks, without physics.
 
-python -m evaluation.whip_measurement_examples --output <new-input-folder>
 Synthetic arrays are geometric constructions, not dynamically feasible flights
-or labels of whipping. Every case keeps its own model/task snapshot.
+or labels of whipping.
 """
-import argparse
-import json
-from pathlib import Path
-import tomllib
 
 import numpy as np
-
-from project_paths import ROOT, project_path
-from viewer.replay_data import sha256
-
-
-PRESET = 'configs/learning/whip_stage1_ppo_acceleration_discovery_v1.json'
-RUN = 'runs/ppo_stage1/20261021-214537-277266'
-RECHECK = 'tmp/whip-proxy-recheck-20261021'
 
 
 def _chain(rest, angles, rates):
@@ -137,89 +124,3 @@ def kinematic_controls(rest_lengths, *, time_s=None, origin=(0., 0., 2.),
                 dict(start_index=index(.65), peak_index=index(.79), end_index=index(.95))],
         notes='Prescribed early travelling turn packet becomes exactly zero by 40% of duration. A later rigid horizontal translation crosses the frozen +X target plane. Explicit windows are construction intervals, not physical labels.'))
     return result
-
-
-def generate(output):
-    """Create a new bundle, checking retained provenance before writing anything."""
-    from training.configuration import load
-    output = project_path(output)
-    if output.exists():
-        raise FileExistsError(output)
-    _, loaded, _, _ = load(PRESET)
-    run_snapshot = ROOT/RUN/'configuration.json'
-    frozen = json.loads(run_snapshot.read_text())
-    if any(loaded[key] != frozen[key] for key in ('model', 'task', 'settings', 'scene_text')):
-        raise ValueError('Current discovery metadata differs from its retained snapshot')
-    previous = json.loads((ROOT/RECHECK/'report.json').read_text())
-    controls = {row['name']: row for row in previous['native_controls']}
-    sources = []
-    for name, old in [('retained_hover', 'hover'), ('retained_small_sinusoid', 'cos_A1.0_f1.0'),
-                      ('retained_strong_sinusoid', 'cos_A8.0_f1.0')]:
-        record = controls[old]
-        source = ROOT/record['path']
-        if sha256(source) != record['sha256']:
-            raise ValueError('Retained control hash mismatch: '+str(source))
-        sources.append((name, source, run_snapshot,
-            'Retained native control; no new simulation. Snapshot basis checked against the preset used by the retained control script.'))
-    historical = ROOT/'models/milestone-20261009/evidence/stage1'
-    sources.append(('historical_stage1_final', historical/'final-replay.npz',
-                    historical/'configuration.json',
-                    'Historical nominal Stage1 replay with its original snapshot. Different policy and action interface; not a fair training comparison or a ground-truth whip label.'))
-    sources.append(('collection9_zero_noise_diagnostic', ROOT/'tmp/exploration-review-20261021/checkpoint9-seed2026102101-scale0.0-pairedlane0.npz',
-                    run_snapshot, 'Retained separate zero-noise evaluation of the frozen round9 actor, nominal paired lane0. This is not a scheduled collection9 evaluation or an independent robustness trial.'))
-    pinned = [(name, replay, snapshot, notes, sha256(replay), sha256(snapshot))
-              for name, replay, snapshot, notes in sources]
-    scene = tomllib.loads(loaded['scene_text'])
-    synthetic = kinematic_controls(loaded['model']['cable']['marker_interval_lengths_m'],
-        origin=scene['initial_state']['position_world_m'],
-        attachment_offset=scene['platform']['attachment_offset_body_m'])
-    output.mkdir(parents=True, exist_ok=False)
-    cases = []
-    for name, replay, snapshot, notes, digest, snapshot_digest in pinned:
-        # Keep run/package replays attached to their original recorded outcome.
-        # Detached numerical probes need a colocated frozen scene for playback.
-        if (replay.parent == snapshot.parent and snapshot.name == 'configuration.json'
-                and (snapshot.parent/'scene.toml').read_text(encoding='utf-8-sig') ==
-                json.loads(snapshot.read_text())['scene_text']):
-            snapshot_ref = str(snapshot)
-        else:
-            folder = output/name; folder.mkdir()
-            copy = folder/'source_snapshot.json'
-            copy.write_bytes(snapshot.read_bytes())
-            (folder/'scene.toml').write_text(json.loads(copy.read_text())['scene_text'])
-            snapshot_ref = str(copy.relative_to(output))
-        cases.append(dict(name=name, path=str(replay), sha256=digest,
-            source_snapshot=dict(path=snapshot_ref, sha256=snapshot_digest),
-            original_snapshot=dict(path=str(snapshot), sha256=snapshot_digest),
-            evidence_kind='saved_simulation', notes=notes))
-    for control in synthetic:
-        folder = output/control['name']; folder.mkdir()
-        snapshot = folder/'source_snapshot.json'
-        snapshot.write_text(json.dumps(loaded, indent=2, allow_nan=False)+'\n')
-        (folder/'scene.toml').write_text(loaded['scene_text'])
-        replay = folder/'replay.npz'
-        np.savez_compressed(replay, **control['arrays'])
-        case = dict(name=control['name'], path=str(replay.relative_to(output)), sha256=sha256(replay),
-            source_snapshot=dict(path=str(snapshot.relative_to(output)), sha256=sha256(snapshot)),
-            evidence_kind='synthetic_kinematic_control', notes=control['notes'])
-        if 'events' in control:
-            case['events'] = control['events']
-        cases.append(case)
-    manifest = dict(schema='offline_whip_event_inputs_v1', cases=cases,
-        scope='Read-only retained histories plus prescribed kinematics; no physics, inference, training, reward ranking, or whip labels.',
-        generator=dict(path=str(Path(__file__).resolve()), sha256=sha256(__file__)),
-        provenance_reports=[dict(path=str(ROOT/p), sha256=sha256(ROOT/p)) for p in (
-            RECHECK+'/report.json', 'tmp/exploration-review-20261021/report.json')])
-    path = output/'manifest.json'
-    path.write_text(json.dumps(manifest, indent=2, allow_nan=False)+'\n')
-    return path
-
-
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output', required=True, type=Path)
-    print(generate(parser.parse_args().output))
-
-
-if __name__ == '__main__':
-    main()
