@@ -21,3 +21,6 @@ __pycache__/
 /.env
 /.env.*
 !/.env.example
+
+# Locally regenerated refactoring reference (tools/equivalence_baseline.py --record at 375b44e).
+/tests/data/*.pt
