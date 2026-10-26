@@ -1,0 +1,374 @@
+EEEEEEFEFF.s....................................FE......................s............................................................................................................................................................s..............F........................Viewer process crashed. The real ROS stack remains owned by this terminal. Use --attach in another terminal to reopen the viewer. After flight has ended, Ctrl+C here stops this stack.
+............This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+.This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+...................................................EE.EEEEE........................s........s.....s.....s.................s....s.....s...........................................................................................This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+.This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+......This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+...........core_schema_fixture: 2 candidate intervals; unreviewed
+............synthetic_event_linkage: 2 candidate intervals; unreviewed
+.................................
+======================================================================
+ERROR: test_acceleration_checkpoint_roundtrip_and_tamper_guard (test_acceleration.AccelerationTests.test_acceleration_checkpoint_roundtrip_and_tamper_guard)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 167, in test_acceleration_checkpoint_roundtrip_and_tamper_guard
+    saved=self.checkpoint()
+          ^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 49, in checkpoint
+    agent=self.agent().state_dict(),round=0,episodes=0,steps=0)
+          ^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 40, in agent
+    e = self.env()
+        ^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 36, in env
+    return Stage1Environment(settings,self.snapshot,self.cfg,self.scene,capture=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/sac_environment.py", line 43, in __init__
+    raise ValueError('Use make_environment for the causal fold task')
+ValueError: Use make_environment for the causal fold task
+
+======================================================================
+ERROR: test_acceleration_has_no_position_or_velocity_feedback (test_acceleration.AccelerationTests.test_acceleration_has_no_position_or_velocity_feedback)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 98, in test_acceleration_has_no_position_or_velocity_feedback
+    e=self.env(); m=e.model; c=GeometricController(m)
+      ^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 36, in env
+    return Stage1Environment(settings,self.snapshot,self.cfg,self.scene,capture=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/sac_environment.py", line 43, in __init__
+    raise ValueError('Use make_environment for the causal fold task')
+ValueError: Use make_environment for the causal fold task
+
+======================================================================
+ERROR: test_acceleration_stage_handoffs_keep_action_units_and_rewards (test_acceleration.AccelerationTests.test_acceleration_stage_handoffs_keep_action_units_and_rewards)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 62, in test_acceleration_stage_handoffs_keep_action_units_and_rewards
+    previous=self.agent()
+             ^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 40, in agent
+    e = self.env()
+        ^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 36, in env
+    return Stage1Environment(settings,self.snapshot,self.cfg,self.scene,capture=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/sac_environment.py", line 43, in __init__
+    raise ValueError('Use make_environment for the causal fold task')
+ValueError: Use make_environment for the causal fold task
+
+======================================================================
+ERROR: test_action_scaling_delay_and_replay_units (test_acceleration.AccelerationTests.test_action_scaling_delay_and_replay_units)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 117, in test_action_scaling_delay_and_replay_units
+    e=self.env(native=True)
+      ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 35, in env
+    return DeterministicEvaluationEnvironment(settings,self.snapshot,self.cfg,self.scene)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/deterministic_evaluation.py", line 64, in __init__
+    super().__init__(dict(settings,parallel_environments=1),snapshot,configuration,scene,
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/sac_environment.py", line 134, in __init__
+    self.reset()
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/deterministic_evaluation.py", line 72, in reset
+    return super().reset()
+           ^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/sac_environment.py", line 220, in reset
+    self._record_critic_state()
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/sac_environment.py", line 243, in _record_critic_state
+    features = torch.cat((features,self._task_critic_features()),-1)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'DeterministicEvaluationEnvironment' object has no attribute '_task_critic_features'
+
+======================================================================
+ERROR: test_actor_and_resume_cannot_reinterpret_velocity_outputs (test_acceleration.AccelerationTests.test_actor_and_resume_cannot_reinterpret_velocity_outputs)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 151, in test_actor_and_resume_cannot_reinterpret_velocity_outputs
+    acc,vel=self.agent(),self.agent(velocity=True)
+            ^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 40, in agent
+    e = self.env()
+        ^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 36, in env
+    return Stage1Environment(settings,self.snapshot,self.cfg,self.scene,capture=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/sac_environment.py", line 43, in __init__
+    raise ValueError('Use make_environment for the causal fold task')
+ValueError: Use make_environment for the causal fold task
+
+======================================================================
+ERROR: test_best_replay_checkpoint_roundtrip_with_text_and_legacy_arrays (test_acceleration.AccelerationTests.test_best_replay_checkpoint_roundtrip_with_text_and_legacy_arrays)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 181, in test_best_replay_checkpoint_roundtrip_with_text_and_legacy_arrays
+    env=self.env(native=True)
+        ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 35, in env
+    return DeterministicEvaluationEnvironment(settings,self.snapshot,self.cfg,self.scene)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/deterministic_evaluation.py", line 64, in __init__
+    super().__init__(dict(settings,parallel_environments=1),snapshot,configuration,scene,
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/sac_environment.py", line 134, in __init__
+    self.reset()
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/deterministic_evaluation.py", line 72, in reset
+    return super().reset()
+           ^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/sac_environment.py", line 220, in reset
+    self._record_critic_state()
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/sac_environment.py", line 243, in _record_critic_state
+    features = torch.cat((features,self._task_critic_features()),-1)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'DeterministicEvaluationEnvironment' object has no attribute '_task_critic_features'
+
+======================================================================
+ERROR: test_native_tensor_agree_with_motor_and_history_state (test_acceleration.AccelerationTests.test_native_tensor_agree_with_motor_and_history_state)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 133, in test_native_tensor_agree_with_motor_and_history_state
+    native,tensor=self.env(native=True),self.env()
+                  ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 35, in env
+    return DeterministicEvaluationEnvironment(settings,self.snapshot,self.cfg,self.scene)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/deterministic_evaluation.py", line 64, in __init__
+    super().__init__(dict(settings,parallel_environments=1),snapshot,configuration,scene,
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/sac_environment.py", line 134, in __init__
+    self.reset()
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/deterministic_evaluation.py", line 72, in reset
+    return super().reset()
+           ^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/sac_environment.py", line 220, in reset
+    self._record_critic_state()
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tasks/whip/sac_environment.py", line 243, in _record_critic_state
+    features = torch.cat((features,self._task_critic_features()),-1)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'DeterministicEvaluationEnvironment' object has no attribute '_task_critic_features'
+
+======================================================================
+ERROR: test_stopped_actor_continuation_clock_and_guard (test_continuous_full_horizon.FullHorizonTests.test_stopped_actor_continuation_clock_and_guard)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_continuous_full_horizon.py", line 78, in test_stopped_actor_continuation_clock_and_guard
+    validate_actor_source(saved,snapshot)
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/training/artifacts.py", line 121, in validate_actor_source
+    raise ValueError('Full-horizon handoff requires v3 actor, same lanes and remaining original budget')
+ValueError: Full-horizon handoff requires v3 actor, same lanes and remaining original budget
+
+======================================================================
+ERROR: test_containment_is_required_and_cost_is_bounded (test_reward_review.RewardReviewTests.test_containment_is_required_and_cost_is_bounded)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_reward_review.py", line 111, in test_containment_is_required_and_cost_is_bounded
+    result, _ = evaluate(a, self.snapshot)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/evaluation/reward_review.py", line 119, in evaluate
+    cfg = candidate_configuration(snapshot)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/evaluation/reward_review.py", line 55, in candidate_configuration
+    raise ValueError('Select a full-horizon Stage1–3 reference, not recovery/first-hit')
+ValueError: Select a full-horizon Stage1–3 reference, not recovery/first-hit
+
+======================================================================
+ERROR: test_earlier_wave_cannot_qualify_later_rigid_crossing (test_reward_review.RewardReviewTests.test_earlier_wave_cannot_qualify_later_rigid_crossing)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_reward_review.py", line 81, in test_earlier_wave_cannot_qualify_later_rigid_crossing
+    result, _ = evaluate(self.late_rigid_crossing(earlier_wave=True), self.snapshot)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/evaluation/reward_review.py", line 119, in evaluate
+    cfg = candidate_configuration(snapshot)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/evaluation/reward_review.py", line 55, in candidate_configuration
+    raise ValueError('Select a full-horizon Stage1–3 reference, not recovery/first-hit')
+ValueError: Select a full-horizon Stage1–3 reference, not recovery/first-hit
+
+======================================================================
+ERROR: test_explicit_crossing_review_and_later_failure (test_reward_review.RewardReviewTests.test_explicit_crossing_review_and_later_failure)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_reward_review.py", line 94, in test_explicit_crossing_review_and_later_failure
+    result, _ = evaluate(a, self.snapshot)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/evaluation/reward_review.py", line 119, in evaluate
+    cfg = candidate_configuration(snapshot)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/evaluation/reward_review.py", line 55, in candidate_configuration
+    raise ValueError('Select a full-horizon Stage1–3 reference, not recovery/first-hit')
+ValueError: Select a full-horizon Stage1–3 reference, not recovery/first-hit
+
+======================================================================
+ERROR: test_future_samples_do_not_change_crossing_mechanics (test_reward_review.RewardReviewTests.test_future_samples_do_not_change_crossing_mechanics)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_reward_review.py", line 120, in test_future_samples_do_not_change_crossing_mechanics
+    original, _ = evaluate(a, self.snapshot)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/evaluation/reward_review.py", line 119, in evaluate
+    cfg = candidate_configuration(snapshot)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/evaluation/reward_review.py", line 55, in candidate_configuration
+    raise ValueError('Select a full-horizon Stage1–3 reference, not recovery/first-hit')
+ValueError: Select a full-horizon Stage1–3 reference, not recovery/first-hit
+
+======================================================================
+ERROR: test_hover_zero_and_early_failure_cannot_improve_it (test_reward_review.RewardReviewTests.test_hover_zero_and_early_failure_cannot_improve_it)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_reward_review.py", line 63, in test_hover_zero_and_early_failure_cannot_improve_it
+    hover, _ = evaluate(a, self.snapshot)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/evaluation/reward_review.py", line 119, in evaluate
+    cfg = candidate_configuration(snapshot)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/evaluation/reward_review.py", line 55, in candidate_configuration
+    raise ValueError('Select a full-horizon Stage1–3 reference, not recovery/first-hit')
+ValueError: Select a full-horizon Stage1–3 reference, not recovery/first-hit
+
+======================================================================
+ERROR: test_incomplete_prefix_has_no_return_and_frozen_suffix_is_rejected (test_reward_review.RewardReviewTests.test_incomplete_prefix_has_no_return_and_frozen_suffix_is_rejected)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_reward_review.py", line 73, in test_incomplete_prefix_has_no_return_and_frozen_suffix_is_rejected
+    result, _ = evaluate(a, self.snapshot)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/evaluation/reward_review.py", line 119, in evaluate
+    cfg = candidate_configuration(snapshot)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/evaluation/reward_review.py", line 55, in candidate_configuration
+    raise ValueError('Select a full-horizon Stage1–3 reference, not recovery/first-hit')
+ValueError: Select a full-horizon Stage1–3 reference, not recovery/first-hit
+
+======================================================================
+ERROR: test_manifest_hashes_and_no_overwrite (test_reward_review.RewardReviewTests.test_manifest_hashes_and_no_overwrite)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_reward_review.py", line 136, in test_manifest_hashes_and_no_overwrite
+    run_manifest(path, root/'result')
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/evaluation/reward_review.py", line 276, in run_manifest
+    result, trace = evaluate(arrays, snapshot, recorded_failure=case.get('recorded_failure'),
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/.venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/evaluation/reward_review.py", line 119, in evaluate
+    cfg = candidate_configuration(snapshot)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/evaluation/reward_review.py", line 55, in candidate_configuration
+    raise ValueError('Select a full-horizon Stage1–3 reference, not recovery/first-hit')
+ValueError: Select a full-horizon Stage1–3 reference, not recovery/first-hit
+
+======================================================================
+FAIL: test_invalid_limits_and_velocity_recovery_are_rejected (test_acceleration.AccelerationTests.test_invalid_limits_and_velocity_recovery_are_rejected)
+----------------------------------------------------------------------
+ValueError: Use make_environment for the causal fold task
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 148, in test_invalid_limits_and_velocity_recovery_are_rejected
+    with self.assertRaisesRegex(ValueError,'velocity'):load_demonstration('unused',self.env())
+AssertionError: "velocity" does not match "Use make_environment for the causal fold task"
+
+======================================================================
+FAIL: test_new_default_preserves_task_and_legacy_presets (test_acceleration.AccelerationTests.test_new_default_preserves_task_and_legacy_presets)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 53, in test_new_default_preserves_task_and_legacy_presets
+    self.assertEqual(self.snapshot['task'],snap['task'])
+AssertionError: {'epi[17 chars]_s': 7, 'settling_s': 0, 'termination': 'conti[2470 chars]rue}} != {'epi[17 chars]_s': 4, 'settling_s': 0.5, 'termination': 'ful[1241 chars]-08}}
+Diff is 4739 characters long. Set self.maxDiff to None to see it.
+
+======================================================================
+FAIL: test_training_ui_exposes_acceleration_units_and_stage_selection (test_acceleration.AccelerationTests.test_training_ui_exposes_acceleration_units_and_stage_selection)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_acceleration.py", line 87, in test_training_ui_exposes_acceleration_units_and_stage_selection
+    self.assertIn('m/s²',window.description_details)
+AssertionError: 'm/s²' not found in 'Stage1: continuous horizontal-whip output Q minus squared-distance workspace cost C.\nFinite, numerically admissible trajectories run7s. Tilt60° and cable-height0.05m violations are recorded, not termination conditions.\nQ−C is unchanged; these physical violations have no extra reward penalty. No early completion or whip-count limit.\nNumerical corruption still aborts and charges1×remaining seconds. No fixed−10.\nFull horizon does not imply physical validity; no ground-contact model is added.\n64lanes · episode budget 9920. Checkpoint continuation preserves the existing learning state and entropy clock.'
+
+======================================================================
+FAIL: test_old_physical_guard_remains_and_new_contract_cannot_hide_termination (test_continuous_full_horizon.FullHorizonTests.test_old_physical_guard_remains_and_new_contract_cannot_hide_termination)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_continuous_full_horizon.py", line 68, in test_old_physical_guard_remains_and_new_contract_cannot_hide_termination
+    self.assertEqual(s['training_episodes'],153*128)
+AssertionError: 9920 != 19584
+
+======================================================================
+FAIL: test_references_are_project_relative_independent_of_cwd (test_paths.PathTests.test_references_are_project_relative_independent_of_cwd)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/tony-5090/PycharmProjects/AeroWhip_deploy/tests/test_paths.py", line 25, in test_references_are_project_relative_independent_of_cwd
+    self.assertEqual(DEFAULT, FROZEN_PRESETS[1])
+AssertionError: Posix[68 chars]ng/whip_stage1_ppo_continuous_horizontal_full_horizon_v4.json') != Posix[68 chars]ng/whip_stage1_ppo_compact_v5.json')
+
+----------------------------------------------------------------------
+Ran 570 tests in 20.645s
+
+FAILED (failures=5, errors=15, skipped=10)

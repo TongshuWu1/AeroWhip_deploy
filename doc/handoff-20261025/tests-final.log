@@ -1,0 +1,20 @@
+...........s............................................................s............................................................................................................................................................s.......................................Viewer process crashed. The real ROS stack remains owned by this terminal. Use --attach in another terminal to reopen the viewer. After flight has ended, Ctrl+C here stops this stack.
+............This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+.This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+..........................................................hover completed [0.0, 0.0]
+.........................s........s.....s.....s.................s....s.....s...........................................................................................This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+.This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+......This plugin does not support propagateSizeHints()
+This plugin does not support propagateSizeHints()
+...........core_schema_fixture: 2 candidate intervals; unreviewed
+............synthetic_event_linkage: 2 candidate intervals; unreviewed
+.................................
+----------------------------------------------------------------------
+Ran 570 tests in 20.589s
+
+OK (skipped=10)

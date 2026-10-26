@@ -17,6 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 build = ["pybind11==3.0.1"]
+review = ["matplotlib>=3.8"]
 
 [tool.setuptools]
 py-modules = ["project_paths", "model_catalog"]

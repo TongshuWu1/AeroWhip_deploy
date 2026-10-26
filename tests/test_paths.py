@@ -10,7 +10,7 @@ from unittest.mock import patch, MagicMock
 from helpers import project_temporary
 from project_paths import ROOT, project_path, project_reference, contained_child
 from model_catalog import packaged_stages, verified_file
-from training.configuration import DEFAULT, FROZEN_PRESETS
+from training.configuration import DEFAULT, CURRENT_PRESETS
 
 
 class PathTests(unittest.TestCase):
@@ -22,7 +22,7 @@ class PathTests(unittest.TestCase):
             self.assertEqual(project_reference(ROOT/'configs/simulation.json'), 'configs/simulation.json')
         finally:
             os.chdir(before)
-        self.assertEqual(DEFAULT, FROZEN_PRESETS[1])
+        self.assertEqual(DEFAULT, CURRENT_PRESETS[1])
 
     def test_outside_home_foreign_and_owner_escape_are_rejected(self):
         for path in (ROOT.parent/'outside.json', '../outside.json', '~/file.json', 'Z:relative.json'):

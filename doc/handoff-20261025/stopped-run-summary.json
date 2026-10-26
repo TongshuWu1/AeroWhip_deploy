@@ -1,0 +1,16 @@
+{
+  "phase": "stopped",
+  "round": 0,
+  "episodes": 0,
+  "steps": 12096,
+  "training_stage": 1,
+  "evaluation_steps": 0,
+  "gradient_updates": 0,
+  "best_return": null,
+  "reward_scale": 1,
+  "scaled_best_return": null,
+  "best_replay": null,
+  "latest_checkpoint": "latest.pt",
+  "elapsed_s": 52.74622677100069,
+  "value_gradient_updates": 0
+}

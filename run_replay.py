@@ -1,4 +1,4 @@
-"""Launch the saved-motion browser; never starts training or a new simulation."""
+"""Launch saved motions or --measurement-report review; never train or simulate."""
 from viewer.replay_browser import main
 
 

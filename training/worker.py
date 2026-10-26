@@ -11,7 +11,7 @@ import torch
 
 from fitting.artifacts import atomic_save
 from simulation.configuration import load_configuration
-from tasks.whip.sac_environment import Stage1Environment
+from tasks.whip.sac_environment import make_environment
 from tasks.whip.deterministic_evaluation import DeterministicEvaluationEnvironment
 from training.configuration import (task_configuration, validate, run_schema, checkpoint_schema, algorithm,
     episode_budget, evaluation_settings, collection_updates, evaluation_due, training_stage, require_launchable)
@@ -25,6 +25,55 @@ from tasks.whip.learned_recovery import make_scorer
 from tasks.whip.target_sampling import target_surface
 
 
+def record_horizontal_fold_collection(directory,env,returns,valid,score,round_number):
+    """Retain every causal-fold outcome, with task-specific qualification labels."""
+    is_retained=env.configuration.matching.reward_mode=='retained_fold_delivery_v1'
+    is_continuous=env.configuration.matching.reward_mode in ('continuous_horizontal_whip_v1', 'continuous_horizontal_whip_soft_workspace_v2','continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6')
+    qualification=(torch.zeros_like(returns) if is_continuous else
+                   score.components['qualified_hit' if is_retained else 'qualified_outreach'])
+    payload=dict(returns=returns.cpu().numpy(),valid=valid.cpu().numpy(),
+        qualified=qualification.cpu().numpy(),lengths=env.lengths.cpu().numpy(),
+        stored_reward_sum=env.transition_rewards.sum(1).cpu().numpy(),
+        **{'component_'+k:v.cpu().numpy() for k,v in score.components.items()})
+    def save_arrays(name,arrays):
+        def writer(path):
+            with path.open('wb') as f:np.savez_compressed(f,**arrays)
+        atomic_save(directory/name,writer)
+    # Preserve every attempted cable trajectory so event accounting can be
+    # reconstructed independently, including failures and zero-output attempts.
+    payload.update(time_s=env.time.cpu().numpy(),
+        cable_positions=env.history['cable_positions'].cpu().numpy(),
+        cable_velocities=env.history['cable_velocities'].cpu().numpy(),
+        drone_positions=env.history['drone_positions'].cpu().numpy(),
+        state_valid=env.numerical_valid.cpu().numpy(),
+        terminal_time_s=env.terminal_times.cpu().numpy(),
+        transition_rewards=env.transition_rewards.cpu().numpy())
+    save_arrays(f'collection-{round_number:05d}.npz',payload)
+    save_json(directory/f'collection-{round_number:05d}-events.json',
+        dict(schema=env.configuration.matching.reward_mode,lanes=env.event_records(),substep_failures=env.substep_records))
+    ordered=returns.argsort();selected={int(ordered[0]),int(ordered[len(ordered)//2]),int(ordered[-1])}
+    for mask in (valid,~valid,qualification.bool(),valid&~qualification.bool()):
+        lanes=mask.nonzero().flatten()
+        if len(lanes):selected.add(int(lanes[0]))
+    retained=[]
+    for lane in sorted(selected):
+        arrays=env.replay_arrays(lane)
+        if arrays is not None:
+            name=f'collection-{round_number:05d}-fold-lane-{lane:03d}.npz'
+            save_arrays(name,arrays)
+            retained.append(dict(lane=lane,replay=name,valid=bool(valid[lane]),
+                qualified=None if is_continuous else bool(qualification[lane]),episode_return=float(returns[lane])))
+    save_json(directory/f'collection-{round_number:05d}-motions.json',dict(samples=retained))
+    return dict(phase='collection_evidence',round=round_number,collection_episodes=len(returns),
+        qualified_count=None if is_continuous else int(qualification.sum()),invalid_count=int((~valid).sum()),
+        accounting=f'collection-{round_number:05d}.npz',motions=retained,
+        hit_definition=('continuous diagnostic only; no binary whip-success or target-hit gate'
+                        if is_continuous else 'verified same-opening forward rectangle hit with outward H>=0.75 and world vx>=1m/s'
+                        if env.configuration.matching.reward_mode=='retained_fold_delivery_v1'
+                        else 'not a hit task; qualified horizontal fold outreach'),
+        policy_measurement='stochastic pre-update collection')
+
+
 def record_simple_collection(directory, env, returns, valid, score, round_number):
     """Retain all-lane accounting and up to three actual stochastic hit motions.
 
@@ -32,9 +81,11 @@ def record_simple_collection(directory, env, returns, valid, score, round_number
     chosen initial-state robustness trials. No changes to rollout or optimizer.
     """
     directory = Path(directory)
+    if env.settings.get('horizontal_fold_contract') or env.settings.get('retained_fold_delivery_contract') or env.settings.get('continuous_whip_contract'):
+        return record_horizontal_fold_collection(directory,env,returns,valid,score,round_number)
     workspace = env.workspace_metrics()
     qualified = valid & (score.components['strike_success'] == 1)
-    whip_mode = env.configuration.matching.reward_mode in ('directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1')
+    whip_mode = env.configuration.matching.reward_mode in ('directed_whip_v1', 'directed_discovery_bounded_v1', 'directed_shape_release_v1', 'directed_unified_fold_v1', 'flexible_excitation_v1', 'directed_fold_formation_v1', 'directed_fold_release_aligned_v1', 'first_hit_flexible_delivery_v2', 'flexible_delivery_v1', 'directed_shape_delivery_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1')
     quality_mode = env.configuration.matching.reward_mode == 'geometric_hit_quality_v1'
     strict_qualified = (valid & (score.components['strict_strike_success'] == 1)) if quality_mode else qualified
     payload = dict(returns=returns.cpu().numpy(), valid=valid.cpu().numpy(),
@@ -54,6 +105,43 @@ def record_simple_collection(directory, env, returns, valid, score, round_number
         payload.update(geometric_hit=qualified.cpu().numpy(),
             strict_qualified=strict_qualified.cpu().numpy(),
             hit_definition=np.array('first_geometric_forward_crossing_in_current_rectangle'))
+    if env.configuration.matching.reward_mode in ('directed_shape_release_v1', 'directed_unified_fold_v1', 'flexible_excitation_v1', 'directed_fold_formation_v1', 'directed_fold_release_aligned_v1', 'first_hit_flexible_delivery_v2', 'flexible_delivery_v1', 'directed_shape_delivery_v1'):
+        records = env.scorer.event_records
+        event_key={'first_hit_flexible_delivery_v2':'delivery_only_episode_return','flexible_delivery_v1':'delivery_only_episode_return','flexible_excitation_v1':'excitation_only_episode_return',
+                   'directed_unified_fold_v1':'event_only_episode_return',
+                   'directed_fold_formation_v1':'formation_only_episode_return',
+                   'directed_fold_release_aligned_v1':'fold_only_episode_return',
+                   'directed_shape_delivery_v1':'event_only_episode_return'}.get(
+                       env.configuration.matching.reward_mode,'shape_only_episode_return')
+        if 'drone_path_length_m' in score.components:
+            records = [dict(record,
+                **{event_key: record['episode_return']},
+                episode_return=float(returns[i]),
+                drone_path_length_m=float(score.components['drone_path_length_m'][i]),
+                movement_accrued_cost=float(score.components['movement_accrued_cost'][i]),
+                movement_cost=float(score.components['movement_cost'][i]),
+                workspace_accrued_cost=float(score.components.get('workspace_accrued_cost',score.components['workspace_cost'])[i]),
+                workspace_cost=float(score.components['workspace_cost'][i]))
+                for i,record in enumerate(records)]
+        if env.settings.get('stage1_return_transform') or env.settings.get('stage2_return_transform'):
+            records = [dict(record, return_transform=env.settings.get('stage1_return_transform',env.settings.get('stage2_return_transform')),
+                **{key:float(score.components[key][i]) for key in (
+                    ('raw_net_delivery_return' if env.configuration.matching.reward_mode in ('flexible_delivery_v1','first_hit_flexible_delivery_v2') else 'raw_net_excitation_return'), 'return_compression_adjustment',
+                    ('failure_applied_total_cost' if env.first_hit_delivery else 'failure_applied_workspace_cost'), 'net_episode_return')})
+                for i, record in enumerate(records)]
+        if env.first_hit_delivery:
+            records=[dict(record,terminal_outcome=('failure' if not bool(valid[i]) else
+                'hit' if bool(env.terminal_hit[i]) else 'timeout'),
+                **{key:float(score.components[key][i]) for key in
+                   ('time_cost','executed_duration_s','timeout_penalty','terminal_quality_hit')})
+                for i,record in enumerate(records)]
+        save_json(directory/f'collection-{round_number:05d}-events.json',
+                  dict(schema=env.configuration.matching.reward_mode, lanes=records))
+    if env.configuration.matching.reward_mode == 'directed_shape_delivery_v1':
+        payload['hit_definition'] = np.array('diagnostic_global_crossings_selected_release_hits_separate_v1')
+    if env.configuration.matching.reward_mode in ('flexible_delivery_v1','first_hit_flexible_delivery_v2'):
+        payload['hit_definition'] = np.array('confirmed_forward_crossing_quality_separate_v1')
+        payload['quality_hit'] = (valid & (score.components['quality_hit_success']==1)).cpu().numpy()
     filename = f'collection-{round_number:05d}.npz'
     def write_arrays(path, arrays):
         with path.open('wb') as stream: np.savez_compressed(stream, **arrays)
@@ -67,7 +155,7 @@ def record_simple_collection(directory, env, returns, valid, score, round_number
         # Keep actual broad crossings represented, not only strict diagnostic
         # hits or reward-selected approaches. Source criteria remain unchanged.
         geometric_lanes = ((valid & (score.components['geometric_hit_success'] == 1)).nonzero().flatten()
-            if env.configuration.matching.reward_mode in ('directed_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_precision_v1', 'crossing_priority_delivery_v1') else qualified.nonzero().flatten())
+            if env.configuration.matching.reward_mode in ('first_hit_flexible_delivery_v2', 'flexible_delivery_v1', 'directed_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_precision_v1', 'crossing_priority_delivery_v1') else qualified.nonzero().flatten())
         if geometric_lanes.numel():
             selected |= {int(geometric_lanes[0]),int(geometric_lanes[returns[geometric_lanes].argmax()]),
                 int(geometric_lanes[workspace['workspace_mean_square_excess_m2'][geometric_lanes].argmin()])}
@@ -89,6 +177,15 @@ def record_simple_collection(directory, env, returns, valid, score, round_number
             candidates=valid.nonzero().flatten()
             if candidates.numel():
                 selected.add(int(candidates[score.components['recovery_quality'][candidates].argmax()]))
+    if env.configuration.matching.reward_mode in ('flexible_excitation_v1','first_hit_flexible_delivery_v2', 'flexible_delivery_v1'):
+        # Keep typical/weak responses and a failure as well as reward maxima.
+        candidates = valid.nonzero().flatten()
+        if candidates.numel():
+            ordered = candidates[score.score[candidates].argsort()]
+            selected |= {int(ordered[0]), int(ordered[len(ordered)//2])}
+        failed_with_prefix = ((~valid) & env.numerical_valid[:, :2].all(1)).nonzero().flatten()
+        if failed_with_prefix.numel():
+            selected.add(int(failed_with_prefix[0]))
     retained = []
     for lane in sorted(selected):
         arrays = env.replay_arrays(lane)
@@ -106,7 +203,11 @@ def record_simple_collection(directory, env, returns, valid, score, round_number
         qualified_count=int(strict_qualified.sum()), invalid_count=int((~valid).sum()),
         **(dict(geometric_hit_count=int((valid & (score.components['geometric_hit_success']==1)).sum()),
                  strict_qualified_count=int(strict_qualified.sum())) if quality_mode or whip_mode else {}),
-        hit_definition=('diagnostic only; mechanics event reward over full horizon' if whip_mode else
+        hit_definition=('confirmed forward passage; q>=1 quality separate'
+            if env.configuration.matching.reward_mode in ('flexible_delivery_v1','first_hit_flexible_delivery_v2') else
+            'diagnostic only; flexible excitation is not target success'
+            if env.configuration.matching.reward_mode == 'flexible_excitation_v1' else
+            'diagnostic only; mechanics event reward over full horizon' if whip_mode else
             'geometric forward crossing; strict qualification recorded separately'
             if env.configuration.matching.reward_mode == 'geometric_hit_quality_v1' else 'strict qualified crossing'),
         motions=retained, policy_measurement='stochastic pre-update collection')
@@ -140,8 +241,14 @@ def run(directory):
     def stop(): return (directory/'stop.request').exists()
     try:
         snapshot = read_json(directory/'configuration.json')
+        expected_delivery = ('continuous_fold_rate_v1' if snapshot['settings'].get('continuous_whip_contract') else
+            'retained_coherent_progress_v1' if snapshot['settings'].get('retained_fold_delivery_contract') else
+            'terminal_event_zero_potential_v2' if snapshot['settings'].get('horizontal_fold_contract') else
+            'causal_transformed_net_differences_v1'
+            if (snapshot['settings'].get('stage1_return_transform') or snapshot['settings'].get('stage2_return_transform')) == 'negative_net_rational_v1'
+            else 'causal_best_event_differences_v1')
         if (snapshot.get('schema') != run_schema(snapshot['settings'])
-                or snapshot.get('reward_delivery') != 'causal_best_event_differences_v1'):
+                or snapshot.get('reward_delivery') != expected_delivery):
             raise ValueError('Prepare a current learning run; old transitions cannot be reused')
         if snapshot['execution_hashes'] != execution_hashes():
             raise ValueError('Source changed after run preparation; prepare a new run')
@@ -165,13 +272,15 @@ def run(directory):
         def environment(width):
             if width not in environments:
                 local_settings = dict(settings,parallel_environments=width)
-                environments[width] = Stage1Environment(local_settings,snapshot,cfg,scene,
+                environments[width] = make_environment(local_settings,snapshot,cfg,scene,
                     progress=lambda x:event(**dict(x,parallel_environments=width)))
                 strict_scorers[width] = environments[width].scorer
             return environments[width]
 
         env = environment(min(settings['parallel_environments'],episode_budget(settings)))
-        evaluation_env = DeterministicEvaluationEnvironment(settings,snapshot,cfg,scene)
+        evaluation_env = (make_environment(dict(settings,parallel_environments=1),snapshot,cfg,scene)
+                          if settings.get('horizontal_fold_contract') or settings.get('retained_fold_delivery_contract') or settings.get('continuous_whip_contract') else
+                          DeterministicEvaluationEnvironment(settings,snapshot,cfg,scene))
         evaluation_scorer = evaluation_env.scorer  # Immutable strict-final scorer, not the mutable env slot.
         curriculum_env = environment(evaluation_settings(settings)['parallel_environments']) if curriculum else None
         training_scorers = {}
@@ -273,6 +382,7 @@ def run(directory):
         def collect(deterministic=False, *, evaluation=False):
             nonlocal steps,evaluation_steps,ppo_rollout
             env.reset()
+            previous_raw = previous_index = None
             if is_ppo and not deterministic and not evaluation:
                 shape = (env.batch, env.decisions)
                 ppo_rollout = dict(collection=agent.collections+1, stride=env.stride,
@@ -286,9 +396,15 @@ def run(directory):
                 if stop(): return False
                 active = int(env.active.sum())
                 if is_ppo and not deterministic and not evaluation:
-                    action,*saved_policy = agent.collect_action(env.frames,env.indices(),env.critic_states[:,env.decision])
+                    action,*saved_policy = agent.collect_action(env.frames,env.indices(),env.critic_states[:,env.decision],
+                        previous_raw=previous_raw, previous_index=previous_index)
+                    previous_raw, previous_index = saved_policy[0], env.indices().clone()
                     for key, value in zip(('raw','logp','mean','log_std','values'),saved_policy):
                         ppo_rollout[key][:,env.decision].copy_(value)
+                elif is_ppo and not deterministic and agent.noise_rho is not None:
+                    action,previous_raw,*_ = agent.collect_action(env.frames,env.indices(),env.critic_states[:,env.decision],
+                        previous_raw=previous_raw,previous_index=previous_index)
+                    previous_index = env.indices().clone()
                 else:
                     action = (env.policy_action(lambda h,i:agent.action(h,i,True)) if deterministic
                               else agent.action(env.frames,env.indices(),False))
@@ -384,7 +500,8 @@ def run(directory):
         checkpoint()  # Stop during the first cohort still leaves a resumable policy.
         if curriculum is not None and curriculum.review_round is not None:
             await_review()
-        while episodes < episode_budget(settings) and not stop():
+        from training.configuration import collection_limit
+        while episodes < episode_budget(settings) and round_number < collection_limit(settings) and not stop():
             # A smaller final graph avoids padded/fictitious episodes and preserves
             # the exact user budget without changing the environment's physics.
             env = environment(min(settings['parallel_environments'],episode_budget(settings)-episodes))
@@ -395,7 +512,7 @@ def run(directory):
             returns,valid,score,cost = env.finish()
             observed_plateau_metrics=(collection_metrics(training_stage(settings),returns,valid,score,env.workspace_metrics())
                 if plateau is not None else None)
-            if is_ppo and env.configuration.matching.reward_mode in ('directed_hit_v1', 'geometric_hit_quality_v1', 'directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1'):
+            if is_ppo and env.configuration.matching.reward_mode in ('continuous_horizontal_whip_v1', 'continuous_horizontal_whip_soft_workspace_v2', 'continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6', 'retained_fold_delivery_v1', 'horizontal_fold_outreach_v2', 'directed_hit_v1', 'geometric_hit_quality_v1', 'directed_whip_v1', 'directed_discovery_bounded_v1', 'directed_shape_release_v1', 'directed_unified_fold_v1', 'flexible_excitation_v1', 'directed_fold_formation_v1', 'directed_fold_release_aligned_v1', 'first_hit_flexible_delivery_v2', 'flexible_delivery_v1', 'directed_shape_delivery_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1'):
                 event(**record_simple_collection(directory,env,returns,valid,score,round_number+1))
             if replay is not None:
                 replay.add(env.frames,env.actions,env.transition_rewards,env.lengths,env.critic_states)
@@ -474,7 +591,37 @@ def run(directory):
                 event(phase='curriculum_stage',round=round_number,stage=curriculum.stage+1,
                       normal_width_m=env.configuration.strike_surface.approach_width_m,
                       angle_width_deg=env.configuration.matching.direction_width_deg)
-            if not stop() and evaluation_due(settings,round_number,before_episodes,episodes):
+            delivery_review = cfg.matching.reward_mode in ('flexible_delivery_v1','first_hit_flexible_delivery_v2') and round_number % 10 == 0
+            if delivery_review and not stop():
+                # Frozen development trials do not enter PPO or advance its
+                # exploration clock. Restore training RNG after the probe.
+                env = environment(128)
+                set_reward(strict=True)
+                devices = [torch.cuda.current_device()] if env.device == 'cuda' else []
+                seed = (2026103000 if cfg.matching.reward_mode == 'first_hit_flexible_delivery_v2' else 2026102900)+round_number
+                with torch.random.fork_rng(devices=devices):
+                    torch.manual_seed(seed)
+                    if env.device == 'cuda': torch.cuda.manual_seed_all(seed)
+                    complete = collect(evaluation=True)
+                if complete:
+                    values, vmask, measured, _ = env.finish()
+                    folder = directory/f'development-{round_number:05d}'
+                    folder.mkdir(exist_ok=True)
+                    evidence = record_simple_collection(folder,env,values,vmask,measured,round_number)
+                    save_arrays(f'development-{round_number:05d}.npz',dict(
+                        **{k:v.cpu().numpy() for k,v in env.history.items()},
+                        time_s=env.time.cpu().numpy(),state_valid=env.numerical_valid.cpu().numpy(),
+                        failed=env.failed.cpu().numpy(),valid=vmask.cpu().numpy(),returns=values.cpu().numpy()))
+                    event(phase='delivery_development',round=round_number,seed=seed,
+                        attempts=128,valid_count=int(vmask.sum()),
+                        geometric_hits=int((vmask & (measured.components['geometric_hit_success']==1)).sum()),
+                        quality_hits=int((vmask & (measured.components['quality_hit_success']==1)).sum()),
+                        evidence=str(folder.relative_to(directory)),episodes=episodes,
+                        evaluation_steps=evaluation_steps)
+                    # Retain all development candidates for later hit-rate AND
+                    # motion selection; deterministic best.pt is not that choice.
+                    checkpoint(f'development-{round_number:05d}.pt')
+            if not stop() and (delivery_review or evaluation_due(settings,round_number,before_episodes,episodes)):
                 env = evaluation_env
                 set_reward(strict=True)
                 if collect(deterministic=True):
@@ -548,12 +695,18 @@ def run(directory):
                     plateau_stop=True
                     break
         checkpoint()
-        status = 'stopped' if stop() else 'plateau_stopped' if plateau_stop else 'completed'
+        fold_review=(settings.get('fold_curriculum',{}).get('phase')=='formation_v1'
+                     and round_number>=collection_limit(settings) and not stop())
+        status = 'stopped' if stop() or fold_review else 'plateau_stopped' if plateau_stop else 'completed'
         summary = dict(phase=status,round=round_number,episodes=episodes,steps=steps,training_stage=training_stage(settings),
             evaluation_steps=evaluation_steps,gradient_updates=agent.updates,best_return=best,
             reward_scale=reward_scale,scaled_best_return=reward_scale*best,
             best_replay=best_replay,latest_checkpoint='latest.pt',elapsed_s=perf_counter()-started)
         if is_ppo: summary['value_gradient_updates'] = agent.value_updates
+        if fold_review:
+            summary.update(termination_reason='fold_formation_motion_review_required',
+                full_stage1_complete=False,release_phase_started=False,
+                message='Formation warm-up ended at30 collections; independent evaluation and motion review required. No automatic reward or stage change.')
         if plateau is not None:
             summary['plateau_detection']=plateau_result
             summary['termination_reason']='user_stop' if stop() else 'plateau_heuristic' if plateau_stop else 'hard_episode_budget'

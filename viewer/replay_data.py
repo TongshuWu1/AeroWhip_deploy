@@ -97,6 +97,90 @@ class PresentationData:
     surface: dict
     strike: dict
     hashes: dict
+    measurement_event: dict | None = None
+
+    @classmethod
+    def load_measurement(cls, report_path, case_index=0, event_index=None):
+        """Display a pinned offline review without rescoring or changing saved outcomes."""
+        from simulation.configuration import load_configuration
+        from training.configuration import task_configuration
+        from viewer.replay import StateReplay
+        report_path = project_path(report_path)
+        report = json.loads(report_path.read_text())
+        if report.get('schema') != 'offline_whip_event_review_v1':
+            raise ValueError('Unsupported offline measurement report schema')
+        cases = report.get('cases')
+        if (not isinstance(cases, list) or type(case_index) is not int
+                or not 0 <= case_index < len(cases)):
+            raise ValueError('Measurement case index is out of range (indices start at zero)')
+        case = cases[case_index]
+        pinned = {}
+        for field, digest in (('source_replay', 'replay_sha256'),
+                              ('source_snapshot', 'source_snapshot_sha256')):
+            value = case.get(field)
+            if not isinstance(value, str) or not Path(value).is_absolute():
+                raise ValueError('Measurement source must be an absolute path: '+field)
+            path = project_path(value)
+            if sha256(path) != case.get(digest):
+                raise ValueError('Measurement source SHA256 mismatch: '+field)
+            pinned[field] = path
+        replay_path, snapshot_path = pinned['source_replay'], pinned['source_snapshot']
+        snapshot = json.loads(snapshot_path.read_text())
+        scene_path = contained_child(snapshot_path.parent, 'scene.toml')
+        if scene_path.read_text(encoding='utf-8-sig') != snapshot.get('scene_text'):
+            raise ValueError('Saved scene differs from the pinned configuration snapshot')
+        # Ordinary training/package replays retain their exact recorded outcome.
+        if replay_path.parent == snapshot_path.parent and snapshot_path.name == 'configuration.json':
+            data = cls.load(replay_path.parent, replay_path.name)
+        else:
+            scene = load_configuration(scene_path)
+            config = task_configuration(snapshot['task'], snapshot['settings'], snapshot['model'], scene)
+            with np.load(replay_path, allow_pickle=False) as archive:
+                replay = StateReplay(dict(archive))
+            surface = config.strike_surface.description(scene.initial_state.position_world_m, config.request)
+            # Detached diagnostics have no recorded training outcome to infer.
+            data = cls(replay_path.parent, replay_path.name, {}, {}, snapshot, scene,
+                       config, replay, surface, None, {})
+        reported_surface = case.get('target_surface')
+        if reported_surface is not None:
+            for key in ('center_world_m', 'normal_world', 'width_m', 'height_m'):
+                actual = np.asarray(data.surface[key], dtype=np.float64)
+                reported = np.asarray(reported_surface.get(key), dtype=np.float64)
+                if (reported.shape != actual.shape or not np.isfinite(reported).all()
+                        or not np.allclose(reported, actual, atol=1e-12, rtol=0)):
+                    raise ValueError('Measurement target geometry differs from pinned snapshot: '+key)
+        events = case.get('events')
+        if not isinstance(events, list):
+            raise ValueError('Measurement case must contain an event list')
+        if event_index is None:
+            event_index = case.get('default_event_index', 0 if events else None)
+        candidate = None
+        if event_index is not None:
+            if type(event_index) is not int or not 0 <= event_index < len(events):
+                raise ValueError('Measurement event index is out of range (indices start at zero)')
+            candidate = events[event_index]
+            if not isinstance(candidate.get('id'), (str, int)):
+                raise ValueError('Measurement candidate must have an event id')
+            indices = [candidate.get(key+'_index') for key in ('start', 'peak', 'end')]
+            if (any(type(index) is not int for index in indices)
+                    or not 0 <= indices[0] <= indices[1] <= indices[2] < len(data.replay.time)):
+                raise ValueError('Measurement event indices do not describe a saved interval')
+            for key, index in zip(('start', 'peak', 'end'), indices):
+                value = candidate.get(key+'_s')
+                if (not isinstance(value, (int, float)) or not np.isfinite(value)
+                        or not np.isclose(value, data.replay.time[index], atol=1e-9, rtol=0)):
+                    raise ValueError('Measurement event time/index mismatch: '+key)
+            if candidate.get('review_status') != 'unreviewed':
+                raise ValueError('This viewer accepts unreviewed measurement candidates only')
+            notes = candidate.get('notes')
+            if not isinstance(notes, list) or any(not isinstance(note, str) for note in notes):
+                raise ValueError('Measurement candidate notes must be a list of strings')
+        data.measurement_event = dict(report_path=str(report_path), case_index=case_index,
+            case_name=case.get('name', str(case_index)), evidence_kind=case.get('evidence_kind', 'unspecified'),
+            event_index=event_index, event=candidate, source_hashes=report.get('source_hashes', {}))
+        data.hashes.update(measurement_report=sha256(report_path),
+                           source_replay=case['replay_sha256'], source_snapshot=case['source_snapshot_sha256'])
+        return data
 
     @classmethod
     def load(cls, directory=DEFAULT_RUN, filename=None, event=None):
@@ -181,6 +265,7 @@ class PresentationData:
                         key: value.tolist() if isinstance(value, np.ndarray) else value
                         for key, value in self.strike.items()},
                     recorded_event=self.event, workspace=self.event.get('workspace', {}),
+                    measurement_review=self.measurement_event,
                     sha256=self.hashes,
                     limitations=['One selected saved motion, not robustness or real-flight evidence',
                                  'Virtual target plane: no target contact/impact force',

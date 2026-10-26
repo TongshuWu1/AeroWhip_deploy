@@ -1,0 +1,11 @@
+{
+  "removed_bytes": 2859528247,
+  "removed_entries": 4845,
+  "reason": "Verified redundant old-release copies, generated Python caches and stale worker locks; unique records retained in new archive.",
+  "tests": {
+    "run": 570,
+    "skipped": 10,
+    "result": "passed",
+    "environment": "CPU only; CUDA_VISIBLE_DEVICES empty"
+  }
+}

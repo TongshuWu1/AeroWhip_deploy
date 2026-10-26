@@ -39,6 +39,8 @@ class Stage1Environment:
     @torch.no_grad()
     def __init__(self, settings, snapshot, configuration, scene, *, progress=None, capture=True,
                  conditional=None):
+        if type(self) is Stage1Environment and configuration.matching.reward_mode in ('horizontal_fold_outreach_v2','retained_fold_delivery_v1','continuous_horizontal_whip_v1','continuous_horizontal_whip_soft_workspace_v2','continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6'):
+            raise ValueError('Use make_environment for the causal fold task')
         self.settings, self.configuration, self.scene = settings, configuration, scene
         self.device, self.batch = settings['device'], settings['parallel_environments']
         self.model = m = TensorModel(snapshot['model'], device=self.device, batched=True)
@@ -66,6 +68,8 @@ class Stage1Environment:
         self.samples = round((configuration.episode.duration_s+configuration.episode.post_hold_s)/.01)+1
         self.time_samples = (round(configuration.recovery.whip_duration_s/.01)
             if configuration.recovery is not None else self.samples-1)
+        self.first_hit_delivery = configuration.matching.reward_mode == 'first_hit_flexible_delivery_v2'
+        if self.first_hit_delivery: self.time_samples = 450
         self.decisions = (self.samples-1)//self.stride
         self.time = torch.arange(self.samples,device=self.device,dtype=torch.float64)*.01
         self.maximum_thrust = float(sum(m.config['actuator']['maximum_thrust_n']))
@@ -80,7 +84,9 @@ class Stage1Environment:
         self.frame_size = 18+6*m.n+8+self.action_size+1
         self.event_recovery = (configuration.recovery is not None
             and configuration.recovery.timing_mode=='after_first_geometric_hit_v1')
-        self.policy_encoder_options = {}
+        self.policy_encoder_options = dict(history_samples=451) if self.first_hit_delivery else {}
+        if settings.get('horizontal_fold_contract') or settings.get('retained_fold_delivery_contract') or settings.get('continuous_whip_contract'):
+            self.policy_encoder_options = dict(history_samples=401 if settings.get('continuous_whip_contract')=='continuous_directional_whip_four_second_v6' else 701)
         original_frame_size = self.frame_size
         # Deployable actor inputs are unchanged. Critic-only state is stored
         # separately at policy boundaries, never appended to actor histories.
@@ -113,6 +119,13 @@ class Stage1Environment:
             self.critic_state_size += 2  # Target dimensions, not actor/deployment observations.
         if self.event_recovery:
             self.critic_state_size += 2  # Observable recovery phase and elapsed time.
+        if settings.get('horizontal_fold_contract'): self.critic_state_size += 16
+        if settings.get('retained_fold_delivery_contract'):
+            from .retained_fold_delivery import FEATURE_SIZE
+            self.critic_state_size += FEATURE_SIZE
+        if settings.get('continuous_whip_contract'):
+            from .continuous_whip import FEATURE_SIZE
+            self.critic_state_size += FEATURE_SIZE + (2 if settings['continuous_whip_contract'] in ('continuous_horizontal_whip_soft_workspace_v2','continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6') else 0)
         self.scorer = make_scorer(m.rest,self.time,configuration,initial_position=self.origin)
         if self.relative_target_input:
             self.goal_relative = ((self.scorer.center-self.origin)/length).float()
@@ -184,6 +197,7 @@ class Stage1Environment:
         self.active = torch.ones(self.batch,device=self.device,dtype=torch.bool)
         self.failed = torch.zeros_like(self.active)
         self.terminal_hit = torch.zeros_like(self.active)
+        self.executed_samples = torch.zeros(self.batch,device=self.device,dtype=torch.long)
         self.recovery_start = torch.full((self.batch,),-1,device=self.device,dtype=torch.long)
         self.recovery_hit = torch.zeros_like(self.active)
         self.workspace_breached = torch.zeros_like(self.active)
@@ -200,6 +214,9 @@ class Stage1Environment:
         if not bool(inside.all()): raise ValueError('Initial state is outside the workspace')
         hold = self.hold.expand(self.batch,4)
         self._record(p,v,q,cv,hold,hold,self.active,~inside)
+        if self.first_hit_delivery:
+            from .first_hit_delivery import FirstHitTracker
+            self.delivery_tracker = FirstHitTracker(q,self.model.rest,self.scorer.center)
         self._record_critic_state()
         return self.frames,self.indices()
 
@@ -222,6 +239,8 @@ class Stage1Environment:
             features = torch.cat((features, dimensions.expand(self.batch,2)), -1)
         if self.event_recovery:
             features = torch.cat((features,self._recovery_phase().float()),-1)
+        if self.settings.get('horizontal_fold_contract') or self.settings.get('retained_fold_delivery_contract') or self.settings.get('continuous_whip_contract'):
+            features = torch.cat((features,self._task_critic_features()),-1)
         self.critic_states[:,self.decision] = features
 
     def _record(self,p,v,q,cv,command,applied,valid,violation):
@@ -296,6 +315,8 @@ class Stage1Environment:
         active_at_start = self.active.clone()
         for _ in range(self.stride):
             was_active = self.active.clone()
+            if self.first_hit_delivery:
+                self.executed_samples += was_active.long()
             applied = self.queue[:,0].clone() if self.delay else command
             if self.delay:
                 shifted = torch.cat((self.queue[:,1:],command[:,None]),1)
@@ -316,6 +337,13 @@ class Stage1Environment:
             self.failed |= was_active & ~self.active
             self.index += 1
             self._record(p,v,q,cv,command,applied,keep,violation)
+            if self.first_hit_delivery:
+                i=self.index
+                reached=self.delivery_tracker.observe(self.history['cable_positions'][:,i-1],q,
+                    self.history['cable_velocities'][:,i-1],cv,self.active)
+                self.terminal_hit |= reached
+                self.active &= ~reached
+                if not bool(self.active.any()): break
             if self.event_recovery:
                 self._advance_recovery_clock()
                 if not bool(self.active.any()):
@@ -365,6 +393,7 @@ class Stage1Environment:
         observed,hit = self.scoring_prefix()
         terminal_samples = observed.long().sum(1) if first_hit_mode else None
         score = self.scorer(h['cable_positions'],h['cable_velocities'],observed,
+            **({'failed': self.failed} if c.matching.reward_mode in ('directed_shape_release_v1', 'directed_unified_fold_v1', 'flexible_excitation_v1', 'directed_fold_formation_v1', 'directed_fold_release_aligned_v1', 'first_hit_flexible_delivery_v2', 'flexible_delivery_v1', 'directed_shape_delivery_v1') else {}),
             **({'terminal_samples': terminal_samples} if first_hit_mode else {}),
             **({'drone_positions':h['drone_positions']}
                 if c.recovery is None and c.matching.reward_mode in ('directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1') else {}),
@@ -380,19 +409,74 @@ class Stage1Environment:
             acceleration = torch.where(observed[:,1:count+1,None], acceleration, 0.)
         cost = c.returns.acceleration_cost_weight*(acceleration/c.returns.acceleration_cost_scale_mps2).square().sum(-1).mean(-1)
         valid = (~self.failed | hit) & score.valid if first_hit_mode else ~self.failed & score.valid
-        if not first_hit_mode and not self.event_recovery:
+        if not first_hit_mode and not self.event_recovery and not self.first_hit_delivery:
             valid &= self.numerical_valid.all(-1)
         workspace_charge = self.workspace_charges(observed)
         workspace_cost = workspace_charge.sum(1)
+        movement_charge = None
+        soft_fold_formation = (c.matching.reward_mode == 'directed_fold_formation_v1'
+                               and self.workspace_penalty.weight > 0)
+        soft_full_horizon_guide = c.matching.reward_mode in ('directed_unified_fold_v1', 'flexible_excitation_v1', 'first_hit_flexible_delivery_v2', 'flexible_delivery_v1')
+        if 'movement_penalty' in self.settings or soft_fold_formation or soft_full_horizon_guide:
+            from .movement import MovementPenalty
+            path_settings = self.settings.get('movement_penalty', dict(mode='path_length_v1',weight_per_cable_length=1.))
+            distance,movement_charge = MovementPenalty(**path_settings).measure(
+                h['drone_positions'],observed,self.model.rest.sum())
+            if soft_fold_formation or soft_full_horizon_guide:
+                # Keep path as a diagnostic; movement inside the workspace is free.
+                movement_charge = torch.zeros_like(movement_charge)
+            accrued = movement_charge.sum(1)
+            score.components['drone_path_length_m'] = distance.sum(1)
+            score.components['movement_accrued_cost'] = accrued
+            score.components['movement_cost'] = torch.where(valid,accrued,0.)
         time_charge = torch.zeros_like(workspace_charge)
+        if self.first_hit_delivery:
+            time_charge=(torch.arange(1,self.samples,device=self.device)[None] <= self.executed_samples[:,None]).to(torch.float64)*.001
+            score.components['time_cost']=time_charge.sum(1)
         if c.matching.reward_mode in ('directed_hit_v1', 'geometric_hit_quality_v1'):
             horizon = c.episode.duration_s+c.episode.post_hold_s
             time_charge = observed[:, 1:].to(torch.float64)*(.01*c.matching.time_preference/horizon)
             score.components['time_cost'] = time_charge.sum(1)
-        # A failure cancels positive event credit, never erases accrued workspace cost.
+        # Historical modes retain accrued cost on failure. Bounded discovery
+        # replaces the ENTIRE failed-episode return, including accrued cost.
         returns = (torch.where(valid,score.score-cost,c.returns.failure_return)
                    -workspace_cost-time_charge.sum(1))
+        if movement_charge is not None and not soft_full_horizon_guide:
+            # The failure outcome replaces the WHOLE return, including travel.
+            returns = torch.where(valid,returns-movement_charge.sum(1),c.returns.failure_return)
         score.components['workspace_cost'] = workspace_cost
+        if soft_full_horizon_guide:
+            # Failure removes positive credit but never refunds accrued cost.
+            score.components['workspace_accrued_cost'] = workspace_cost
+        rational_return = (self.settings.get('stage1_return_transform') or self.settings.get('stage2_return_transform')) == 'negative_net_rational_v1'
+        if rational_return:
+            from .excitation import negative_net_rational
+            total_cost=workspace_cost+time_charge.sum(1) if self.first_hit_delivery else workspace_cost
+            raw_net = score.causal_best[:, -1]-total_cost
+            failure_cost = -negative_net_rational(-total_cost)
+            returns = torch.where(valid, negative_net_rational(raw_net),
+                                  c.returns.failure_return-failure_cost)
+            if self.first_hit_delivery:
+                inferred_hit=valid & (score.components['quality_hit_success']==1)
+                if not torch.equal(inferred_hit,self.terminal_hit & ~self.failed):
+                    raise ValueError('Online first-hit termination disagrees with offline crossing evidence')
+                timeout=valid & ~inferred_hit
+                returns=returns-2*timeout.to(returns.dtype)
+                score.components['timeout']=timeout.to(returns.dtype)
+                score.components['timeout_penalty']=2*timeout.to(returns.dtype)
+                score.components['terminal_quality_hit']=inferred_hit.to(returns.dtype)
+                score.components['executed_duration_s']=self.executed_samples.to(torch.float64)*.01
+                score.components['failure_applied_total_cost']=torch.where(valid,0.,failure_cost)
+            # Keep raw cost/guide distinct from the nonlinear episode return.
+            score.components['raw_net_delivery_return' if c.matching.reward_mode in ('flexible_delivery_v1','first_hit_flexible_delivery_v2') else 'raw_net_excitation_return'] = raw_net
+            score.components['return_compression_adjustment'] = torch.where(
+                valid, (negative_net_rational(raw_net) if self.first_hit_delivery else returns)-raw_net, total_cost-failure_cost)
+            score.components['failure_applied_total_cost' if self.first_hit_delivery else 'failure_applied_workspace_cost'] = torch.where(valid, 0., failure_cost)
+            score.components['net_episode_return'] = returns
+        if c.matching.reward_mode == 'directed_discovery_bounded_v1' or soft_fold_formation:
+            returns = torch.where(valid, returns, c.returns.failure_return)
+            score.components['workspace_accrued_cost'] = workspace_cost
+            score.components['workspace_cost'] = torch.where(valid, workspace_cost, 0.)
         if c.recovery is not None:
             end=(self.recovery_start.clamp_min(0) if self.event_recovery else
                  torch.full_like(self.lengths,round(c.recovery.whip_duration_s/.01)))
@@ -418,8 +502,12 @@ class Stage1Environment:
         cumulative_cost = torch.cat((cumulative_cost, cumulative_cost[:, -1:].expand(
             -1, self.samples-cumulative_cost.shape[1])), 1)
         running_charge = workspace_charge+time_charge
+        if movement_charge is not None:
+            running_charge = running_charge+movement_charge
         cumulative_cost = cumulative_cost+torch.cat((torch.zeros_like(running_charge[:,:1]),running_charge.cumsum(1)),1)
         potential = (score.causal_best-cumulative_cost)[:, ::self.stride]
+        if rational_return:
+            potential = negative_net_rational(potential)
         rewards = potential.diff(dim=1)
         scoring_lengths = ((terminal_samples-1+self.stride-1)//self.stride).clamp_min(1) if first_hit_mode else self.lengths
         terminal = scoring_lengths-1
@@ -440,7 +528,8 @@ class Stage1Environment:
     def workspace_charges(self, observed):
         p,origin,c = self.history['drone_positions'],self.origin.expand(self.batch,3),self.configuration
         if c.recovery is None:
-            return self.workspace_penalty.charges(p,origin,c.workspace,observed)
+            charges=self.workspace_penalty.charges(p,origin,c.workspace,observed)
+            return charges*((self.samples-1)/450) if self.first_hit_delivery else charges
         if self.event_recovery:
             # Fixed reference denominators, never actual episode length: short
             # hits/padded suffixes cannot dilute accrued boundary cost.
@@ -493,3 +582,16 @@ class Stage1Environment:
                           acceleration_limit_mps2=self.action_limit.cpu().numpy(),
                           policy_rate_hz=np.array(self.settings['policy_rate_hz']))
         return arrays
+
+
+def make_environment(settings, snapshot, configuration, scene, **kwargs):
+    if configuration.matching.reward_mode in ('continuous_horizontal_whip_v1', 'continuous_horizontal_whip_soft_workspace_v2','continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6'):
+        from .continuous_whip_environment import ContinuousWhipEnvironment
+        return ContinuousWhipEnvironment(settings,snapshot,configuration,scene,**kwargs)
+    if configuration.matching.reward_mode == 'retained_fold_delivery_v1':
+        from .retained_fold_delivery_environment import RetainedFoldDeliveryEnvironment
+        return RetainedFoldDeliveryEnvironment(settings,snapshot,configuration,scene,**kwargs)
+    if configuration.matching.reward_mode == 'horizontal_fold_outreach_v2':
+        from .horizontal_fold_environment import HorizontalFoldEnvironment
+        return HorizontalFoldEnvironment(settings,snapshot,configuration,scene,**kwargs)
+    return Stage1Environment(settings,snapshot,configuration,scene,**kwargs)

@@ -60,6 +60,8 @@ class ReleaseMatchingConfiguration:
     shaping_weight: float = 1.0
     center_weight: float = 0.0
     center_sigma_m: float = 0.3
+    # Explicit same-q Stage2 guidance width; absent in all historical tasks.
+    delivery_sigma_m: float | None = None
     # None preserves the exact historical M-weighted strike arithmetic and
     # maneuver-limited search. Current presets select a bounded hit-priority
     # bonus M/(M+scale); this scale is not a physical whip qualification.
@@ -97,6 +99,12 @@ class ReleaseMatchingConfiguration:
     crossing_strict_weight: float | None = None
 
     def __post_init__(self):
+        if self.reward_mode == 'directed_shape_delivery_v1':
+            if self.delivery_sigma_m is None:
+                raise ValueError('Shape delivery requires explicit delivery_sigma_m')
+            _positive(self.delivery_sigma_m, 'delivery_sigma_m')
+        elif self.delivery_sigma_m is not None:
+            raise ValueError('delivery_sigma_m requires shape delivery')
         for name in ('crossing_whip_weight', 'crossing_side_scale_m',
                      'crossing_height_scale_m', 'crossing_geometric_weight',
                      'crossing_strict_weight'):
@@ -113,7 +121,7 @@ class ReleaseMatchingConfiguration:
         if self.alignment_cone_deg >= 90:
             raise ValueError('Alignment cone must be strictly below 90 degrees')
         if self.alignment_mode != 'squared_cosine_v1' and self.reward_mode not in (
-                'directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1'):
+                'directed_whip_v1', 'directed_discovery_bounded_v1', 'directed_shape_release_v1', 'directed_unified_fold_v1', 'flexible_excitation_v1', 'directed_fold_formation_v1', 'directed_fold_release_aligned_v1', 'first_hit_flexible_delivery_v2', 'flexible_delivery_v1', 'directed_shape_delivery_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1'):
             raise ValueError('Cone alignment requires a directed whip reward')
         for name in ('height_width_m', 'speed_width_mps', 'direction_width_deg'):
             _positive(getattr(self, name), name)
@@ -140,9 +148,9 @@ class ReleaseMatchingConfiguration:
                 raise ValueError(name+' must be finite and in [0,1]')
         if self.reward_mode != 'geometric_hit_quality_v1' and (self.hit_speed_weight or self.hit_straightness_weight):
             raise ValueError('Hit-quality weights require the geometric-hit reward mode')
-        if self.reward_mode not in ('mechanics_event_v1', 'directed_hit_v1', 'geometric_hit_quality_v1', 'directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1'):
+        if self.reward_mode not in ('continuous_horizontal_whip_v1', 'continuous_horizontal_whip_soft_workspace_v2', 'continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6', 'retained_fold_delivery_v1', 'horizontal_fold_outreach_v2', 'mechanics_event_v1', 'directed_hit_v1', 'geometric_hit_quality_v1', 'directed_whip_v1', 'directed_discovery_bounded_v1', 'directed_shape_release_v1', 'directed_unified_fold_v1', 'flexible_excitation_v1', 'directed_fold_formation_v1', 'directed_fold_release_aligned_v1', 'first_hit_flexible_delivery_v2', 'flexible_delivery_v1', 'directed_shape_delivery_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1'):
             raise ValueError('Unknown reward mode')
-        if self.reward_mode in ('directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1') and (
+        if self.reward_mode in ('directed_whip_v1', 'directed_discovery_bounded_v1', 'directed_shape_release_v1', 'directed_unified_fold_v1', 'flexible_excitation_v1', 'directed_fold_formation_v1', 'directed_fold_release_aligned_v1', 'first_hit_flexible_delivery_v2', 'flexible_delivery_v1', 'directed_shape_delivery_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1') and (
                 self.mechanics_credit_weight != 1 or self.shaping_weight != 1
                 or self.time_preference != 0 or self.center_weight != 0
                 or self.strike_mechanics_scale is not None):
@@ -242,15 +250,51 @@ class Stage1Configuration:
     strike_surface: StrikeSurfaceConfiguration | None = None
     termination: str = 'full_horizon_v1'
     recovery: LearnedRecoveryConfiguration | None = None
+    horizontal_fold: dict | None = None
+    retained_fold_delivery: dict | None = None
+    continuous_whip: dict | None = None
 
     def __post_init__(self):
-        if self.termination not in ('full_horizon_v1', 'first_qualified_hit_v1', 'first_geometric_hit_v1'):
+        if self.returns.failure_cost_per_remaining_s is not None and self.matching.reward_mode not in ('continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6'):
+            raise ValueError('Remaining-time failure cost requires the registered distance task')
+        if self.termination not in ('continuous_whip_horizon_v1', 'retained_fold_delivery_event_v1', 'horizontal_fold_event_v2', 'full_horizon_v1', 'first_useful_hit_v2', 'first_qualified_hit_v1', 'first_geometric_hit_v1'):
             raise ValueError('Unknown task termination rule')
-        if self.matching.reward_mode in ('directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1') and (
-                self.termination != 'full_horizon_v1' or self.returns.acceleration_cost_weight != 0
+        from .horizontal_fold import MODE, CONTRACT
+        if self.matching.reward_mode == MODE:
+            if (self.horizontal_fold != CONTRACT or self.termination != 'horizontal_fold_event_v2'
+                    or self.episode.duration_s != 7 or self.episode.post_hold_s != 0
+                    or self.returns.acceleration_cost_weight != 0 or self.returns.failure_return != -10):
+                raise ValueError('Horizontal-fold configuration differs from approved v2 contract')
+        elif self.horizontal_fold is not None or self.termination == 'horizontal_fold_event_v2':
+            raise ValueError('Horizontal-fold fields require the registered reward mode')
+        if self.matching.reward_mode == 'retained_fold_delivery_v1':
+            from .retained_fold_delivery import CONTRACT as RETAINED_CONTRACT
+            if (self.retained_fold_delivery != RETAINED_CONTRACT or self.termination != 'retained_fold_delivery_event_v1'
+                    or self.episode.duration_s != 7 or self.episode.post_hold_s != 0
+                    or self.returns.acceleration_cost_weight != 0 or self.returns.failure_return != -10):
+                raise ValueError('Retained fold-delivery configuration differs from approved v1 contract')
+        elif self.retained_fold_delivery is not None or self.termination == 'retained_fold_delivery_event_v1':
+            raise ValueError('Retained fold-delivery fields require the registered reward mode')
+        if self.matching.reward_mode in ('continuous_horizontal_whip_v1', 'continuous_horizontal_whip_soft_workspace_v2','continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6'):
+            from .continuous_whip import CONTRACT, SOFT_CONTRACT, SOFT_MODE, PLAIN_CONTRACT, PLAIN_MODE, FULL_CONTRACT, FULL_MODE, DIRECTED_CONTRACT, DIRECTED_MODE, SHORT_CONTRACT, SHORT_MODE
+            plain=self.matching.reward_mode in (PLAIN_MODE,FULL_MODE,DIRECTED_MODE,SHORT_MODE)
+            CONTINUOUS_CONTRACT=SHORT_CONTRACT if self.matching.reward_mode==SHORT_MODE else DIRECTED_CONTRACT if self.matching.reward_mode==DIRECTED_MODE else FULL_CONTRACT if self.matching.reward_mode==FULL_MODE else PLAIN_CONTRACT if plain else SOFT_CONTRACT if self.matching.reward_mode==SOFT_MODE else CONTRACT
+            if (self.continuous_whip != CONTINUOUS_CONTRACT or self.termination != 'continuous_whip_horizon_v1'
+                    or self.episode.duration_s != CONTINUOUS_CONTRACT['horizon_s'] or self.episode.post_hold_s != 0
+                    or self.returns.acceleration_cost_weight != 0 or self.returns.failure_return != (None if plain else -10)
+                    or self.returns.failure_cost_per_remaining_s != (1. if plain else None)
+                    or self.matching.time_preference != 0 or self.matching.center_weight != 0
+                    or (self.strike_surface is not None and self.strike_surface.strike_bonus_weight != 0)):
+                raise ValueError('Continuous-whip configuration differs from the registered v1 contract')
+        elif self.continuous_whip is not None or self.termination == 'continuous_whip_horizon_v1':
+            raise ValueError('Continuous-whip fields require the registered reward mode')
+        if (self.termination == 'first_useful_hit_v2') != (self.matching.reward_mode == 'first_hit_flexible_delivery_v2'):
+            raise ValueError('Useful-hit termination requires its explicit delivery reward')
+        if self.matching.reward_mode in ('directed_whip_v1', 'directed_discovery_bounded_v1', 'directed_shape_release_v1', 'directed_unified_fold_v1', 'flexible_excitation_v1', 'directed_fold_formation_v1', 'directed_fold_release_aligned_v1', 'first_hit_flexible_delivery_v2', 'flexible_delivery_v1', 'directed_shape_delivery_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1') and (
+                self.termination != ('first_useful_hit_v2' if self.matching.reward_mode == 'first_hit_flexible_delivery_v2' else 'full_horizon_v1') or self.returns.acceleration_cost_weight != 0
                 or (self.strike_surface is not None and self.strike_surface.strike_bonus_weight != 0)):
             raise ValueError('Directed whip requires full horizon, zero acceleration cost and zero strike bonus')
-        if self.matching.reward_mode in ('directed_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_precision_v1', 'crossing_priority_delivery_v1') and (
+        if self.matching.reward_mode in ('first_hit_flexible_delivery_v2', 'flexible_delivery_v1', 'directed_shape_delivery_v1', 'directed_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_precision_v1', 'crossing_priority_delivery_v1') and (
                 self.strike_surface is None or self.strike_surface.overflow_width_m is not None):
             raise ValueError('Directed delivery requires a fixed rectangle and isotropic distance guidance')
         if self.termination in ('first_qualified_hit_v1', 'first_geometric_hit_v1') and self.strike_surface is None:

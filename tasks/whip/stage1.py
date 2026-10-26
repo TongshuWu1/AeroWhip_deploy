@@ -59,6 +59,10 @@ class Stage1Score:
 class Stage1Scorer:
     """Score fixed-request batches on a cached 100 Hz mesh/time grid.
 
+    directed_discovery_bounded_v1 uses 0.5 times directed_whip_v1, with
+    the unweighted W retained as whip_proxy. Target crossings are diagnostics.
+    The environment supplies bounded workspace cost and fixed failure return.
+
     Explicit directed_whip_v1 selects max_e M(e)*U(e)*D(e), where U is
     recovered chord/arc slack from the minimum within that bend window and
     D is squared positive forward velocity alignment. No wall interpolation,
@@ -212,7 +216,7 @@ class Stage1Scorer:
             h = round(seconds/.01)
             begins = torch.arange(start, stop-h+1, round(cfg.window_stride_s/.01), device=self.rest.device)
             if (configuration.matching.strike_mechanics_scale is not None
-                    or configuration.matching.reward_mode in ('directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1')) and int(begins[-1]) != stop-h:
+                    or configuration.matching.reward_mode in ('directed_whip_v1', 'directed_discovery_bounded_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1')) and int(begins[-1]) != stop-h:
                 # The 50-ms stride need not land on the final search endpoint.
                 # Include it explicitly so the last accepted crossing interval
                 # has an eligible SAME-event bend window and tip lag.
@@ -402,7 +406,7 @@ class Stage1Scorer:
         delivery_mode = self.configuration.matching.reward_mode in ('directed_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1')
         precision_mode = self.configuration.matching.reward_mode == 'directed_precision_v1'
         outreach_precision_mode = self.configuration.matching.reward_mode == 'directed_outreach_speed_precision_v1'
-        whip_mode = self.configuration.matching.reward_mode in ('directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1')
+        whip_mode = self.configuration.matching.reward_mode in ('directed_whip_v1', 'directed_discovery_bounded_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1')
         interpolated_mode = precision_mode or not whip_mode
         surface = None
         if self.surface is not None:
@@ -698,6 +702,11 @@ class Stage1Scorer:
                 components.update(crossing_precision_diagnostics(surface,valid))
         result = Stage1Score(score, valid, has_event, indices.masked_fill(~has_event[:, None], -1),
                              components, event_scores.cummax(1).values)
+        if match.reward_mode == 'directed_discovery_bounded_v1':
+            components['whip_proxy'] = result.score.clone()
+            components['mechanics_credit'] = .5*result.score
+            return Stage1Score(.5*result.score, result.valid, result.has_event,
+                              result.event_indices, components, .5*result.causal_best)
         if match.reward_mode == 'crossing_priority_delivery_v1':
             return self._crossing_priority_score(result, surface, prefix_valid)
         return result

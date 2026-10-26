@@ -49,6 +49,9 @@ def execution_hashes():
     for directory in ('simulation','controllers','tasks','training','native'):
         for suffix in ('*.py','*.cpp','*.h','*.hpp','*.inc','*.pyd','*.so'):
             paths.extend((ROOT/directory).rglob(suffix))
+    # These pure kinematic helpers are used by the versioned shape-release task.
+    paths.extend(ROOT/'evaluation'/name for name in (
+        'stage1_candidate.py', 'whip_measurements.py', 'whip_output_decomposition.py'))
     return {p.relative_to(ROOT).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
             for p in sorted(set(paths)) if not any(x in p.parts for x in ('build','__pycache__'))}
 
@@ -71,6 +74,18 @@ def validate_actor_source(saved, snapshot):
         raise ValueError('Actor initialization requires an identity-consistent PPO checkpoint')
     if algorithm(snapshot['settings']) != 'ppo':
         raise ValueError('PPO actor initialization cannot initialize SAC')
+    reviewed_shape_handoff = (old['task']['matching'].get('reward_mode') == 'directed_shape_release_v1'
+        and training_stage(old['settings']) == 1 and training_stage(snapshot['settings']) == 2
+        and snapshot['task']['matching'].get('reward_mode') == 'directed_shape_delivery_v1')
+    reviewed_flexible_handoff = (old['task']['matching'].get('reward_mode') == 'flexible_excitation_v1'
+        and training_stage(old['settings']) == 1 and training_stage(snapshot['settings']) == 2
+        and old['settings'].get('stage1_return_transform') == 'negative_net_rational_v1'
+        and snapshot['task']['matching'].get('reward_mode') in ('flexible_delivery_v1','first_hit_flexible_delivery_v2')
+        and old['settings'].get('target_observation') == snapshot['settings'].get('target_observation'))
+    if (old['task']['matching'].get('reward_mode') in ('continuous_horizontal_whip_v1', 'continuous_horizontal_whip_soft_workspace_v2', 'continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6', 'directed_discovery_bounded_v1', 'directed_shape_release_v1', 'directed_unified_fold_v1', 'flexible_excitation_v1', 'directed_fold_formation_v1','directed_fold_release_aligned_v1')
+            and training_stage(snapshot['settings']) != 1 and not (reviewed_shape_handoff or reviewed_flexible_handoff)):
+        raise ValueError('Bounded Stage1 discovery requires motion review and an approved '
+                         'later-stage handoff; only registered shape or flexible delivery handoffs are allowed')
     if old['model'] != snapshot['model'] or old['scene_text'] != snapshot['scene_text']:
         raise ValueError('Actor transfer requires the same physical model and initial scene')
     current = execution_hashes()
@@ -84,9 +99,59 @@ def validate_actor_source(saved, snapshot):
     if (snapshot['settings']['ppo'].get('transfer_entropy_clock', 'inherit') == 'inherit'
             and old['settings']['ppo']['entropy'] != snapshot['settings']['ppo']['entropy']):
         raise ValueError('Actor transfer preserves the existing exploration schedule')
+    if snapshot['task']['matching'].get('reward_mode')=='continuous_horizontal_whip_soft_workspace_v2':
+        if (old['task']['matching'].get('reward_mode')!='continuous_horizontal_whip_v1'
+                or training_stage(old['settings'])!=1 or training_stage(snapshot['settings'])!=1
+                or snapshot['settings']['training_episodes']!=saved['agent']['entropy_episode_budget']-saved['episodes']
+                or snapshot['settings']['parallel_environments']!=old['settings']['parallel_environments']):
+            raise ValueError('Soft workspace handoff must preserve the stopped continuous Stage1 campaign budget and lanes')
+    if snapshot['task']['matching'].get('reward_mode')=='continuous_horizontal_whip_distance_v3':
+        spent=saved['agent']['entropy_episode_offset']+saved['episodes']
+        if (old['task']['matching'].get('reward_mode')!='continuous_horizontal_whip_soft_workspace_v2'
+                or training_stage(old['settings'])!=1 or training_stage(snapshot['settings'])!=1
+                or snapshot['settings']['training_episodes']!=saved['agent']['entropy_episode_budget']-spent
+                or snapshot['settings']['parallel_environments']!=old['settings']['parallel_environments']):
+            raise ValueError('Distance-cost handoff requires stopped v2 actor, same lanes and remaining original budget')
+    if snapshot['task']['matching'].get('reward_mode')=='continuous_horizontal_whip_full_horizon_v4':
+        spent=saved['agent']['entropy_episode_offset']+saved['episodes']
+        if (old['task']['matching'].get('reward_mode')!='continuous_horizontal_whip_distance_v3'
+                or training_stage(old['settings'])!=1 or training_stage(snapshot['settings'])!=1
+                or snapshot['settings']['training_episodes']!=saved['agent']['entropy_episode_budget']-spent
+                or snapshot['settings']['parallel_environments']!=old['settings']['parallel_environments']):
+            raise ValueError('Full-horizon handoff requires v3 actor, same lanes and remaining original budget')
     actor = saved['agent'].get('actor', {})
     if not actor or any(not bool(torch.isfinite(v).all()) for v in actor.values()):
         raise ValueError('Cannot initialize from nonfinite actor weights')
+
+
+def validate_fold_handoff(saved,snapshot,checkpoint_sha256,source_path=None):
+    """Require review tied to the exact warm-up actor and remaining total budget."""
+    if snapshot['task']['matching'].get('reward_mode')!='directed_fold_release_aligned_v1':return
+    if saved['snapshot']['task']['matching'].get('reward_mode')!='directed_fold_formation_v1':
+        raise ValueError('Fold release must use the reviewed formation actor')
+    for key in ('movement_penalty', 'workspace_penalty'):
+        if saved['snapshot']['settings'].get(key) != snapshot['settings'].get(key):
+            raise ValueError('Fold handoff must preserve the reviewed movement/workspace contract')
+    if source_path is None:raise ValueError('Fold handoff requires its completed warm-up run')
+    summary=read_json(project_path(source_path).parent/'summary.json')
+    if (summary.get('phase') not in ('stopped','completed')
+            or summary.get('episodes')!=saved['episodes'] or summary.get('round')!=saved['round']):
+        raise ValueError('Fold handoff uses the final stopped warm-up actor; earlier best cannot rewind the campaign budget or entropy clock')
+    review=read_json(snapshot['settings']['fold_curriculum']['motion_review'])
+    if (review.get('schema')!='stage1_fold_formation_review_v1' or review.get('approved') is not True
+            or review.get('numeric_gate_passed') is not True or review.get('motion_review_passed') is not True
+            or review.get('checkpoint_sha256')!=checkpoint_sha256
+            or review.get('formation_episodes')!=saved['episodes']
+            or not isinstance(review.get('evidence'),list) or not review['evidence']):
+        raise ValueError('Exact formation checkpoint requires retained numeric AND motion approval')
+    if (not 0<saved['episodes']<=3840
+            or snapshot['settings']['training_episodes']!=15360-saved['episodes']
+            or snapshot['settings']['ppo'].get('transfer_entropy_clock')!='inherit'
+            or saved['agent'].get('entropy_episode_budget')!=15360):
+        raise ValueError('Fold release must preserve the120-collection total and original entropy clock')
+    snapshot['fold_formation_review']=dict(path=snapshot['settings']['fold_curriculum']['motion_review'],
+        sha256=hashlib.sha256(project_path(snapshot['settings']['fold_curriculum']['motion_review']).read_bytes()).hexdigest(),
+        **review)
 
 
 def create_run(settings, resume=None, *, task=None, root=None, initialize_actor=None):
@@ -117,7 +182,18 @@ def create_run(settings, resume=None, *, task=None, root=None, initialize_actor=
             task_configuration(task,settings,snapshot['model'],scene)
             snapshot['task'] = task
         snapshot['execution_hashes'] = execution_hashes()
-        if training_stage(settings) == 2 and not initialize_actor:
+        fold_mode=snapshot['task']['matching'].get('reward_mode')
+        if fold_mode in ('continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6') and initialize_actor:
+            raise ValueError('Directed +X restart requires a fresh actor and critic')
+        if fold_mode in ('continuous_horizontal_whip_soft_workspace_v2','continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4') and not initialize_actor:
+            raise ValueError('Soft workspace continuation requires its stopped Stage1 actor')
+        if fold_mode=='retained_fold_delivery_v1' and initialize_actor:
+            raise ValueError('Retained fold-delivery restart requires a fresh random actor and critic')
+        if fold_mode in ('continuous_horizontal_whip_v1','horizontal_fold_outreach_v2','directed_fold_formation_v1','directed_unified_fold_v1','flexible_excitation_v1') and initialize_actor:
+            raise ValueError('Approved fresh Stage1 restart requires a random actor, not initialization')
+        if fold_mode=='directed_fold_release_aligned_v1' and not initialize_actor:
+            raise ValueError('Fold release requires an explicitly reviewed formation actor')
+        if training_stage(settings) == 2 and not initialize_actor and fold_mode!='retained_fold_delivery_v1':
             raise ValueError('New Stage2 requires an explicit Stage1 or Stage2 actor checkpoint')
         if settings.get('stage3_role') == 'precision_v1' and not initialize_actor:
             raise ValueError('New precision Stage3 requires an explicit Stage2 actor or precision Stage3 actor checkpoint')
@@ -141,6 +217,7 @@ def create_run(settings, resume=None, *, task=None, root=None, initialize_actor=
                     or saved_actor['snapshot']['settings'].get('stage3_role') != 'precision_v1'):
                 raise ValueError('Recovery Stage4 must initialize from a precision Stage3 actor')
             validate_actor_source(saved_actor,snapshot)
+            validate_fold_handoff(saved_actor,snapshot,hashlib.sha256(initialization_payload).hexdigest(),source)
             snapshot['policy_initialization'] = dict(
                 source_checkpoint=project_reference(source), source_sha256=hashlib.sha256(initialization_payload).hexdigest(),
                 source_identity=saved_actor['identity'], source_round=saved_actor['round'],
@@ -195,16 +272,19 @@ def save_checkpoint(path, value):
 
 
 def checkpoint_replay(arrays):
-    """Numeric replay arrays plus scalar text metadata, safe for weights_only load."""
+    """Numeric tensors and Unicode metadata, safe for weights_only loading."""
     if arrays is None:
         return None
-    return {key: value.item() if value.ndim == 0 and value.dtype.kind == 'U'
+    return {key: value.tolist() if value.dtype.kind == 'U'
             else torch.as_tensor(value).clone() for key, value in arrays.items()}
 
 
 def replay_from_checkpoint(saved):
-    """Restore both historical tensor-only and acceleration metadata replays."""
-    return {key: np.asarray(value) if isinstance(value, str) else value.cpu().numpy()
+    """Restore historical numeric tensors and scalar/array Unicode metadata."""
+    def is_text(value):
+        return isinstance(value, str) or (isinstance(value, list) and all(is_text(v) for v in value))
+
+    return {key: np.asarray(value, dtype=str) if is_text(value) else value.cpu().numpy()
             for key, value in saved.items()}
 
 

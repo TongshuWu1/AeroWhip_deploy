@@ -32,10 +32,17 @@ def validate_stage3_actor_training(settings):
 def validate_ppo(c):
     keys = {'epochs', 'clip_ratio', 'gae_lambda', 'value_loss_weight',
             'max_grad_norm', 'target_kl', 'entropy'}
-    if set(c)-{'post_step_kl', 'transfer_entropy_clock'} != keys or type(c['epochs']) is not int or c['epochs'] < 1:
+    if set(c)-{'post_step_kl', 'transfer_entropy_clock', 'action_noise'} != keys or type(c['epochs']) is not int or c['epochs'] < 1:
         raise ValueError('PPO requires explicit epochs, clipping, GAE, value/gradient/KL and entropy settings')
     if c.get('transfer_entropy_clock', 'inherit') not in ('inherit', 'stage_local'):
         raise ValueError('Transfer entropy clock must be inherit or stage_local')
+    noise = c.get('action_noise')
+    if 'action_noise' in c and (not isinstance(noise, dict)
+            or set(noise) != {'mode','correlation_time_s'} or noise['mode'] != 'ar1_v1'
+            or isinstance(noise['correlation_time_s'],bool)
+            or not isinstance(noise['correlation_time_s'],(int,float))
+            or not math.isfinite(noise['correlation_time_s']) or noise['correlation_time_s'] <= 0):
+        raise ValueError('AR1 noise requires a version and positive correlation time in seconds')
     guard = c.get('post_step_kl')
     if guard is not None:
         if (not isinstance(guard, dict) or set(guard) != {'maximum_trials'}
@@ -51,7 +58,10 @@ def validate_ppo(c):
         raise ValueError('Require clip ratio in (0,1), GAE lambda in (0,1]')
     e = c['entropy']
     episode_clock = set(e) == {'initial_weight', 'final_weight', 'hold_fraction', 'anneal_end_fraction'}
-    if not episode_clock and set(e) != {'initial_weight', 'final_weight', 'hold_transitions', 'anneal_end_transitions'}:
+    exponential = (set(e) == {'mode', 'initial_weight', 'final_weight', 'decay_episodes'}
+                   and e['mode'] == 'exponential_episodes_v1')
+    budget_exponential = (set(e) == {'mode','initial_weight','final_weight','decay_exponent'} and e['mode']=='exponential_budget_v1')
+    if not episode_clock and not exponential and not budget_exponential and set(e) != {'initial_weight', 'final_weight', 'hold_transitions', 'anneal_end_transitions'}:
         raise ValueError('PPO entropy requires weights and one explicit episode-budget or historical transition clock')
     for key in ('initial_weight', 'final_weight'):
         value = e[key]
@@ -59,7 +69,13 @@ def validate_ppo(c):
             raise ValueError('Invalid PPO entropy weight')
     if e['initial_weight'] <= e['final_weight']:
         raise ValueError('PPO entropy schedule must decrease')
-    if episode_clock:
+    if exponential:
+        if type(e['decay_episodes']) is not int or e['decay_episodes'] <= 0:
+            raise ValueError('Exponential entropy requires a positive integer episode timescale')
+    elif budget_exponential:
+        if isinstance(e['decay_exponent'],bool) or not isinstance(e['decay_exponent'],(int,float)) or not math.isfinite(e['decay_exponent']) or e['decay_exponent']<=0:
+            raise ValueError('Budget exponential entropy needs a finite positive exponent')
+    elif episode_clock:
         for key in ('hold_fraction', 'anneal_end_fraction'):
             if isinstance(e[key], bool) or not isinstance(e[key], (int, float)) or not math.isfinite(e[key]):
                 raise ValueError('Invalid PPO entropy episode fraction')
@@ -74,6 +90,18 @@ def squashed_log_prob(raw, mean, log_std):
     # Store raw samples; never recover them with atanh(saturated float actions).
     return (-.5*((raw-mean)/log_std.exp()).square()-log_std-.5*math.log(2*math.pi)
             -2*(math.log(2)-raw-F.softplus(-2*raw))).sum(-1)
+
+
+def ar1_distribution(mean, log_std, previous_mean, previous_log_std, previous_raw, first, rho):
+    """Density conditional on fixed logged action history, with live policy fits.
+
+    Gradients through BOTH observation-conditioned marginals are intentional.
+    The first decision uses the stationary marginal, not innovation variance.
+    """
+    conditional_mean = mean+rho*(log_std-previous_log_std).exp()*(previous_raw-previous_mean)
+    conditional_std = log_std+.5*math.log1p(-rho*rho)
+    return (torch.where(first[:,None],mean,conditional_mean),
+            torch.where(first[:,None],log_std,conditional_std))
 
 
 def gaussian_kl(old_mean, old_std_log, mean, std_log):
@@ -292,6 +320,11 @@ class PPO:
             self.interface.update(action_interface='acceleration_direct_v1',
                 acceleration_limit_mps2=list(settings['acceleration_limit_mps2']),
                 policy_rate_hz=settings['policy_rate_hz'])
+        noise = settings['ppo'].get('action_noise')
+        self.noise_rho = None if noise is None else math.exp(-1/(settings['policy_rate_hz']*noise['correlation_time_s']))
+        if noise is not None:
+            self.interface['action_noise'] = dict(noise, rho=self.noise_rho,
+                likelihood='history_conditional_squashed_gaussian_v1')
         h = settings['hidden_units']
         options = dict(encoder_options or {})
         phase_options = {k:v for k,v in options.items() if k != 'goal_columns'}
@@ -308,9 +341,20 @@ class PPO:
         if validate_stage3_actor_training(settings):
             self.interface['stage3_actor_training'] = settings['stage3_actor_training']
         if phase_options:
-            if settings.get('stage4_role') != 'learned_recovery_v1' or phase_options != dict(history_samples=451,phase_columns=[96,97]):
+            if settings.get('continuous_whip_contract')=='continuous_directional_whip_four_second_v6' and phase_options==dict(history_samples=401):
+                self.interface.update(history_layout='continuous_directional_whip_401_v1',time_reference_samples=400)
+            elif settings.get('continuous_whip_contract') in ('continuous_horizontal_whip_v1', 'continuous_horizontal_whip_soft_workspace_v2','continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5') and phase_options == dict(history_samples=701):
+                self.interface.update(history_layout='continuous_horizontal_whip_701_v1',time_reference_samples=700)
+            elif settings.get('retained_fold_delivery_contract') == 'retained_fold_delivery_v1' and phase_options == dict(history_samples=701):
+                self.interface.update(history_layout='retained_fold_delivery_701_v1',time_reference_samples=700)
+            elif settings.get('horizontal_fold_contract') == 'horizontal_fold_outreach_v2' and phase_options == dict(history_samples=701):
+                self.interface.update(history_layout='horizontal_fold_701_v2',time_reference_samples=700)
+            elif 'stage2_first_hit' in settings and phase_options == dict(history_samples=451):
+                self.interface.update(history_layout='stage2_first_hit_451_rolling_v1',time_reference_samples=450)
+            elif settings.get('stage4_role') != 'learned_recovery_v1' or phase_options != dict(history_samples=451,phase_columns=[96,97]):
                 raise ValueError('Only explicit Stage4 supports versioned phase/history transfer')
-            self.interface.update(history_layout='stage4_451_rolling_v1',phase_columns=[96,97])
+            else:
+                self.interface.update(history_layout='stage4_451_rolling_v1',phase_columns=[96,97])
         if 'stage4_recovery_policy' in settings:
             if not phase_options:
                 raise ValueError('Frozen whip recovery requires explicit phase/history inputs')
@@ -342,7 +386,17 @@ class PPO:
             raise ValueError('Unknown saved Stage3 actor training contract')
         expected.pop('stage3_actor_training', None)
         expected.pop('recovery_architecture',None)
-        migration = expected.pop('history_layout',None) == 'stage4_451_rolling_v1'
+        layout = expected.pop('history_layout',None)
+        if layout in ('continuous_horizontal_whip_701_v1','continuous_directional_whip_401_v1'):expected['history_layout']=layout
+        if layout == 'stage2_first_hit_451_rolling_v1':
+            expected.pop('time_reference_samples')
+            if source.get('history_layout') == layout:
+                source.pop('history_layout')
+                if source.pop('time_reference_samples',None) != 450:
+                    raise ValueError('First-hit source time coordinate changed')
+            elif 'history_layout' in source:
+                raise ValueError('First-hit transfer requires the original451sample history layout')
+        migration = layout == 'stage4_451_rolling_v1'
         if migration:
             expected.pop('phase_columns')
             expected['frame_size'] -= 2
@@ -402,7 +456,8 @@ class PPO:
 
     @property
     def entropy_clock(self):
-        return ('completed_episodes_v1' if 'hold_fraction' in self.settings['ppo']['entropy']
+        return ('completed_episodes_v1' if ('hold_fraction' in self.settings['ppo']['entropy']
+                or self.settings['ppo']['entropy'].get('mode') in ('exponential_episodes_v1','exponential_budget_v1'))
                 else 'transitions_v1')
 
     def set_completed_episodes(self, episodes):
@@ -419,6 +474,14 @@ class PPO:
     @property
     def entropy_weight(self):
         e = self.settings['ppo']['entropy']
+        if e.get('mode') == 'exponential_budget_v1':
+            progress=(self.completed_episodes+self.entropy_episode_offset)/self.entropy_episode_budget
+            return e['final_weight']+(e['initial_weight']-e['final_weight'])*math.exp(-e['decay_exponent']*progress)
+        if e.get('mode') == 'exponential_episodes_v1':
+            # Absolute completed-episode clock: lane count and budget extensions
+            # must not reset or stretch the approved decay timescale.
+            elapsed = self.completed_episodes+self.entropy_episode_offset
+            return e['final_weight']+(e['initial_weight']-e['final_weight'])*math.exp(-elapsed/e['decay_episodes'])
         if self.entropy_clock == 'completed_episodes_v1':
             progress = (self.completed_episodes+self.entropy_episode_offset)/self.entropy_episode_budget
             f = min(1., max(0., (progress-e['hold_fraction']) /
@@ -428,14 +491,37 @@ class PPO:
                                (e['anneal_end_transitions']-e['hold_transitions'])))
         return e['initial_weight']+(e['final_weight']-e['initial_weight'])*f
 
-    @torch.no_grad()
-    def action(self, history, index, deterministic=False):
-        return self.actor(history, index, deterministic)[0]
+    def conditional_distribution(self, history, index, previous_raw=None, previous_index=None):
+        mean, log_std = self.actor.distribution(history,index)
+        if self.noise_rho is None:
+            return mean, log_std
+        first = index == 0
+        if previous_raw is None or previous_index is None:
+            if not bool(first.all()):
+                raise ValueError('AR1 decisions after reset require the preceding logged raw action and index')
+            return mean, log_std
+        previous_mean, previous_std = self.actor.distribution(history,previous_index)
+        return ar1_distribution(mean,log_std,previous_mean,previous_std,previous_raw,first,self.noise_rho)
+
+    def rollout_distribution(self, r, b, t):
+        previous = (t-1).clamp_min(0)
+        return self.conditional_distribution(r['frames'][b],t*r['stride'],
+            r['raw'][b,previous],previous*r['stride'])
 
     @torch.no_grad()
-    def collect_action(self, history, index, privileged):
-        action, raw, logp, mean, log_std = self.actor.sample(history, index)
-        return action, raw, logp, mean, log_std, self.value(history, index, privileged)
+    def action(self, history, index, deterministic=False, *, previous_raw=None, previous_index=None):
+        if deterministic or self.noise_rho is None:
+            return self.actor(history,index,deterministic)[0]
+        mean, log_std = self.conditional_distribution(history,index,previous_raw,previous_index)
+        return (mean+log_std.exp()*torch.randn_like(mean)).tanh()
+
+    @torch.no_grad()
+    def collect_action(self, history, index, privileged, *, previous_raw=None, previous_index=None):
+        # Explicit history arguments mean there is no episode state to leak into
+        # evaluation/checkpoints. The worker resets these at every env.reset().
+        mean, log_std = self.conditional_distribution(history,index,previous_raw,previous_index)
+        raw = mean+log_std.exp()*torch.randn_like(mean)
+        return raw.tanh(), raw, squashed_log_prob(raw,mean,log_std), mean, log_std, self.value(history,index,privileged)
 
     def optimize(self, rollout, *, progress=None):
         # Only one fresh completed collection; no replay, target Q or SAC alpha.
@@ -463,7 +549,7 @@ class PPO:
             b = episode[begin:begin+self.settings['batch_size']]
             t = step[begin:begin+self.settings['batch_size']]
             history, index = r['frames'][b], t*r['stride']
-            mean, log_std = self.actor.distribution(history, index)
+            mean, log_std = self.rollout_distribution(r,b,t)
             divergence.append(gaussian_kl(r['mean'][b,t], r['log_std'][b,t], mean, log_std))
             predictions.append(self.value(history, index, r['privileged'][b,t]))
         kl, prediction = torch.cat(divergence), torch.cat(predictions)
@@ -480,6 +566,10 @@ class PPO:
         Overflow chunks use the original path. No change of batch size/order,
         convolution shape/strides, float64 KL reduction, threshold, RNG or trials.
         """
+        if self.noise_rho is not None:
+            # The old cache contains only one prefix. Both adjacent current-policy
+            # marginals must be recomputed for this conditional distribution.
+            return None
         batches=[];used=0
         frozen_actor=isinstance(self.actor,FrozenWhipRecoveryActor)
         self._kl_frozen=[] if frozen_actor else None
@@ -529,7 +619,8 @@ class PPO:
             history=(self._kl_inputs[chunk] if self._kl_inputs is not None and chunk<len(self._kl_inputs) else r['frames'][b])
             frozen=(self._kl_frozen[chunk] if self._kl_inputs is not None and self._kl_frozen is not None
                     and chunk<len(self._kl_frozen) else None)
-            mean, log_std = (self.actor._distribution(history,t*r['stride'],frozen)
+            mean, log_std = (self.rollout_distribution(r,b,t) if self.noise_rho is not None else
+                            self.actor._distribution(history,t*r['stride'],frozen)
                             if frozen is not None else
                             self.actor.distribution(history,t*r['stride']))
             divergence.append(gaussian_kl(r['mean'][b,t].double(), r['log_std'][b,t].double(),
@@ -574,7 +665,7 @@ class PPO:
                 history, index = r['frames'][b], t*r['stride']
                 if not stopped_kl:
                     actor_epochs_started = epoch+1
-                    mean, std_log = self.actor.distribution(history, index)
+                    mean, std_log = self.rollout_distribution(r,b,t)
                     kl = gaussian_kl(r['mean'][b, t], r['log_std'][b, t], mean, std_log).mean()
                     if not bool(torch.isfinite(kl)):
                         raise FloatingPointError('Nonfinite PPO KL')

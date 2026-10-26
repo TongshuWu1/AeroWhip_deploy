@@ -15,6 +15,12 @@ The historical completed Stage1-4 checkpoint chain remains in
 and observations. See [current implementation](doc/current_implementation.md) for
 active configurations, retained evidence, and implemented versus proposed work.
 
+## Current handoff — 2026-10-25
+
+Training is stopped. The active Stage1 preset is the **four-second, fixed +X experiment**,
+with64environments and200collections. Its latest run completed zero collections;
+there is no newly trained policy to resume. See [other-computer setup and data restoration](doc/handoff-20261025/README.md).
+
 ## Setup
 
 The two source projects use this checkout layout for automatic discovery:
@@ -29,7 +35,7 @@ The two source projects use this checkout layout for automatic discovery:
 Keep these directory names when cloning. `AEROWHIP_ROOT` can override the
 AeroWhip path for the Docker launchers. The repositories include source,
 configuration, trajectory CSVs and packaged model artifacts. Recordings, training
-runs and retained test evidence are stored in the private GitHub release
+runs and retained test evidence are stored in the historical GitHub release
 `backup-2026-10-16`, with archives, per-file manifests and SHA-256 checksums.
 They are not downloaded by `git clone`; restore them separately below to use
 historical local evidence links. Virtual environments and build caches remain
@@ -84,8 +90,8 @@ tar -xzf ../aerowhip-data-backup/aerowhip-recordings-and-output.tar.gz
 tar -xzf ../aerowhip-data-backup/aerowhip-retained-evidence.tar.gz
 ```
 
-The companion Crazyswarm release contains its flight logs. Both repositories
-and their releases require access to the owner's private GitHub repositories.
+The companion Crazyswarm release contains its flight logs. This AeroWhip repository and its releases are currently public. Access to the companion
+repository depends on its own permissions. The newer handoff release is linked above.
 
 ## Simulation flight
 
@@ -445,13 +451,19 @@ Wi-Fi. [OptiTrack streaming documentation](https://docs.optitrack.com/v3.2/motiv
 | 3 | Full-actor precision learning at the same target; size curriculum ends at 0.1 x 0.1 m |
 | 4 | Frozen Stage3 whip, internal return controller, learned recovery residual and cable settling |
 
-The Stage1 launcher default is
-[compact v5](configs/learning/whip_stage1_ppo_compact_v5.json); Stage2-4 launcher
-defaults remain `configs/learning/whip_stage{2..4}_ppo_cone25_v4.json`.
-These defaults have 128 training lanes and a 10,240-episode cap: 80 full collections.
-Plateau stopping is a configured heuristic; a cap does not establish convergence
-or success. Stage2-4 require the preceding stage's final actor and start fresh
-critics, optimizers, RNG, and local clocks.
+The Stage1 launcher default is the experimental
+[distance-sensitive flexible-excitation v3](configs/learning/whip_stage1_ppo_flexible_excitation_rational_ar1_v3.json):
+128 lanes,120 collections (15,360 episodes), fresh random actor/critic,
+exponentially decaying entropy, and an uncapped outside-only quadratic workspace
+cost C. For excitation Q, valid return is F(Q−C), where F(x)=x for x≥0 and
+5x/(5−x) otherwise. Failures return−10+F(−C accrued). Negative net scores
+are compressed; distance cost has no per-sample cap. Excitation is a guide,
+not a whipping-success label, and containment still requires review.
+The preceding presets and runs remain preserved. Stage2/3
+launcher defaults remain the retained acceleration presets, and Stage4 remains
+cone25v4; those are not automatic successors of this new Stage1. No automatic
+Stage2 handoff is enabled. See the maintained implementation record for current
+launch status, checks and limitations.
 
 The paused outreach/height experiment uses explicit settings rather than those
 launcher defaults. Its Stage1
@@ -489,6 +501,21 @@ browsers discover the four packaged milestone stages without archived run folder
 The tester displays source-compatibility failures and disables fresh simulation
 for incompatible checkpoints; source loading is not a successful simulation.
 A changed target is a diagnostic, not demonstrated adaptation.
+
+Offline whipping measurements use pinned saved replays and keep deformation,
+distal motion and delivery separate. Install plotting support with
+`python -m pip install -e ".[review]"`, then run:
+
+```bash
+python -m evaluation.whip_event_review --manifest /absolute/path/inputs.json --output /absolute/path/new-review
+python run_replay.py --measurement-report /absolute/path/new-review/report.json --case 0
+```
+
+The review writes synchronized plots, `review.md`, `events.csv`, full measurement
+traces and `report.json`. `--case` and optional `--event` are zero-based. Candidate
+intervals remain unreviewed; they do not change rewards, training outcomes or
+curriculum. The manifest format and retained example bundle are described in
+[the implementation record](doc/current_implementation.md#offline-whipping-event-measurements--implemented-2026-10-22).
 
 Shared physical settings are in `configs/simulation.json`; initial conditions
 are in `configs/scenes/default.toml`. Physical refitting starts with

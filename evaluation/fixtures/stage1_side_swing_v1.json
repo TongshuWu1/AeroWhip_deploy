@@ -1,0 +1,32 @@
+{
+  "schema": "whip_motion_challenge_v1",
+  "case_id": "user_rejected_stage1_side_swing",
+  "arrays": "stage1_side_swing_v1.npz",
+  "sha256": "555e39d8e3ece5f0f8bb335122e32c0fa31f8f5bcbab05000cfd257626797ef2",
+  "source": "tmp/stage1-path-cost-v3-20261022/frozen-best/deterministic.npz",
+  "source_sha256": "1b215b3212dccfc5c9b936b0f5ab61dfc85239a72bf85af227269183c26fa019",
+  "source_snapshot": "tmp/stage1-path-cost-v3-20261022/frozen-best/source_snapshot.json",
+  "source_snapshot_sha256": "c48ad8fdc164e47d6e84720040d60e0fc8eb8b005cc926481027904ba46b6c68",
+  "source_checkpoint_sha256": "dd917009e1f2203e2f20f0392687c759f474805d9a6a276e3415c63943aed434",
+  "recording": "Native nominal deterministic Stage1 saved-best112;100Hz world metres and metres/second; node0 cable attachment.",
+  "goal_review": {
+    "status": "eligible_for_review",
+    "reviewer": "user",
+    "method": "User revised goal scope: we should indeed include side swing.",
+    "scope": "Sidearm/sideways preparation is permitted. This particular trajectory still requires mechanism and target-directed release review; inclusion is not a physical-whip certification or policy promotion."
+  },
+  "expected_automatic_candidate_score": 0.0,
+  "physical_whip_label": "unresolved",
+  "goal_review_history": [
+    {
+      "status": "rejected",
+      "reviewer": "user",
+      "method": "Viewed saved Stage1 motion and identified side swinging; explicitly requested using it as a negative example.",
+      "scope": "Negative for the intended Stage1 skill. Not a universal claim that sideways preparation cannot be part of physical whipping.",
+      "superseded_on": "2026-10-22",
+      "superseded_by": "User includes side-swing motion family"
+    }
+  ],
+  "case_id_scope": "Stable identifier retained from the historical rejection; current goal_review supersedes that interpretation.",
+  "expected_automatic_candidate_score_scope": "Historical candidate algorithm output, retained unchanged; not the current desired goal label or a new acceptance criterion."
+}

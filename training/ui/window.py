@@ -9,6 +9,7 @@ from training.configuration import DEFAULT, CURRENT_PRESETS, load, task_configur
 from training.artifacts import RUNS, PPO_RUNS, PPO_STAGE2_RUNS, PPO_STAGE3_RUNS, PPO_STAGE4_RUNS, create_run, read_json, save_json, events
 from training.ui.plots import MetricPlot
 from training.ui.preview import EvaluationPreview
+from training.ui.whip_diagnostics import WhippingDiagnostics
 
 
 class SettingsDialog(QtWidgets.QDialog):
@@ -264,6 +265,8 @@ class TrainingWindow(QtWidgets.QMainWindow):
         overview_layout.addWidget(result_box)
         self.preview=EvaluationPreview(); overview_layout.addWidget(self.preview,1)
         self.tabs.addTab(overview,'Overview · latest motion')
+        self.whip_diagnostics=WhippingDiagnostics()
+        self.tabs.addTab(self.whip_diagnostics,'Whipping diagnostics')
         curves=QtWidgets.QWidget(); chartgrid=QtWidgets.QGridLayout(curves)
         self.return_plot=MetricPlot('Episode return'); self.mechanics_plot=MetricPlot('Whipping event')
         self.valid_plot=MetricPlot('Valid episodes',limits=(0,1)); self.loss_plot=MetricPlot('Learner losses')
@@ -321,13 +324,25 @@ class TrainingWindow(QtWidgets.QMainWindow):
         compact_mode=t['matching'].get('reward_mode') == 'directed_compact_whip_v1'
         level_mode=t['matching'].get('reward_mode') == 'directed_level_outreach_whip_v1'
         linear_height_mode=t['matching'].get('reward_mode') == 'directed_outreach_height_whip_v1'
-        whip_mode=t['matching'].get('reward_mode') in ('directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1')
+        whip_mode=t['matching'].get('reward_mode') in ('directed_whip_v1', 'directed_discovery_bounded_v1', 'directed_shape_release_v1', 'directed_unified_fold_v1', 'directed_fold_formation_v1', 'directed_fold_release_aligned_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1')
         speed_delivery_mode=t['matching'].get('reward_mode') == 'directed_outreach_speed_delivery_v1'
         crossing_priority_mode=t['matching'].get('reward_mode') == 'crossing_priority_delivery_v1'
         delivery_mode=t['matching'].get('reward_mode') in ('directed_delivery_v1', 'directed_outreach_speed_delivery_v1')
         outreach_precision_mode=t['matching'].get('reward_mode') == 'directed_outreach_speed_precision_v1'
         precision_mode=t['matching'].get('reward_mode') in ('directed_precision_v1', 'directed_outreach_speed_precision_v1')
         if whip_mode: goal='Learn directed bend propagation and unfolding'
+        if t['matching'].get('reward_mode') == 'directed_shape_delivery_v1': goal='Experimental Stage 2: same-release broad-target delivery'
+        if t['matching'].get('reward_mode') == 'directed_shape_release_v1': goal='Experimental Stage 1: outward bend and directed shape release'
+        if t['matching'].get('reward_mode') == 'directed_fold_formation_v1': goal='Stage 1 warm-up: form a fold; release skill remains unlearned'
+        if t['matching'].get('reward_mode') == 'directed_unified_fold_v1': goal='Stage 1: form, propagate and release a fold toward +X'
+        excitation_mode=t['matching'].get('reward_mode') == 'flexible_excitation_v1'
+        if t['matching'].get('reward_mode') == 'flexible_delivery_v1': goal='Stage 2: fixed +X broad delivery; no internal curriculum'
+        if t['matching'].get('reward_mode') == 'first_hit_flexible_delivery_v2': goal='Stage 2: first useful +X hit; five-second deadline'
+        if t['matching'].get('reward_mode') == 'retained_fold_delivery_v1': goal='Stage 2: retained fold progress toward a useful +X strike'
+        if t['matching'].get('reward_mode') in ('continuous_horizontal_whip_v1', 'continuous_horizontal_whip_soft_workspace_v2','continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6'): goal='Stage 1: continuous horizontal fold transport and opening, any heading'
+        if t['matching'].get('reward_mode') in ('continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6'): goal='Stage 1: fold transport and opening toward fixed world +X'
+        if excitation_mode: goal='Experimental Stage 1: flexible cable excitation and distal output'
+        if t['matching'].get('reward_mode') == 'directed_fold_release_aligned_v1': goal='Stage 1: outward fold opening with aligned forward release'
         if compact_mode: goal='Learn a compact directed whip with useful forward reach'
         if level_mode: goal='Learn forward whip outreach near the drone\'s current height'
         if linear_height_mode: goal='Improve whip outreach and tip height together'
@@ -339,8 +354,13 @@ class TrainingWindow(QtWidgets.QMainWindow):
             'first qualified hit or timeout' if t['episode'].get('termination')=='first_qualified_hit_v1' else 'full horizon')
         impact=(f"speed/straightness rewarded; {t['request'][3]:g} m/s / {wall['maximum_entry_angle_deg']:g}° diagnostic only" if quality_mode else
             f"forward speed ≥ {t['request'][3]:g} m/s · entry ≤ {wall['maximum_entry_angle_deg']:g}°")
-        if whip_mode: impact='target, 3 m/s and 30° are diagnostics; no hit reward or hit termination'
+        if whip_mode or excitation_mode: impact='target, 3 m/s and 30° are diagnostics; no hit reward or hit termination'
+        if t['matching'].get('reward_mode') == 'flexible_delivery_v1': impact='confirmed forward crossings; q>=1 quality measured separately; 3 m/s / 30° diagnostic only'
+        if t['matching'].get('reward_mode') == 'first_hit_flexible_delivery_v2':
+            impact='first confirmed forward crossing with q>=1; timeout at5s;3m/s/30° diagnostic only'
+            terminal='first useful hit, physical failure, or5second deadline'
         if delivery_mode: impact='same-event spatial guidance; 3 m/s / 30° diagnostic only; no hit termination'
+        if t['matching'].get('reward_mode') == 'directed_shape_delivery_v1': impact='actual forward rectangle hit in the selected release; 3 m/s / 30° separately diagnostic; full horizon'
         if precision_mode: impact='actual forward crossing center accuracy; 3 m/s / 30° diagnostic only; no hit termination'
         if outreach_precision_mode: impact='same-release rectangle and world XYZ center guidance; 3 m/s / 30° diagnostic only'
         if crossing_priority_mode: impact='geometric hit bonus plus strict bonus at ≥3 m/s and ≤30°; full horizon'
@@ -355,6 +375,65 @@ class TrainingWindow(QtWidgets.QMainWindow):
         if 'hold_fraction' in entropy:
             self.config_label.setText(self.config_label.text()+
                 f"\nEntropy: {entropy['initial_weight']:g} → {entropy['final_weight']:g} · completed training episodes · hold first {100*entropy['hold_fraction']:g}% · decay ends at {100*entropy['anneal_end_fraction']:g}% · original budget preserved on resume")
+        if entropy.get('mode') == 'exponential_episodes_v1':
+            self.config_label.setText(self.config_label.text()+
+                f"\nEntropy: {entropy['initial_weight']:g} → {entropy['final_weight']:g} asymptotically · exponential decay over {entropy['decay_episodes']} completed episodes · no hold · elapsed clock preserved on resume")
+        if entropy.get('mode') == 'exponential_budget_v1':
+            self.config_label.setText(self.config_label.text()+
+                f"\nEntropy: {entropy['final_weight']:g} + ({entropy['initial_weight']:g} − {entropy['final_weight']:g}) × exp(−{entropy['decay_exponent']:g} n/N); N is the saved planned episode budget; no reset on resume")
+        if t['matching'].get('reward_mode') in ('continuous_horizontal_whip_v1', 'continuous_horizontal_whip_soft_workspace_v2','continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6'):
+            self.config_label.setText(
+                "Continuous Stage1: recent fold travel × horizontal reach² × outward alignment² × extending output.\n"
+                "Full7s except safety failure; no target, count bonus, early completion, time/effort/path cost.\n"
+                "Rate = 10 F H² A² min(positive world radial, relative radial, endpoint-extension speed) / L.\n"
+                "Failure total −10, cancelling all accrued output. Continuous score is not validated whip success.\n"
+                f"{self.settings['parallel_environments']} lanes · ten links · 50Hz acceleration · entropy .001+.019exp(−8n/N), N={self.settings['training_episodes']}.")
+        if t['matching'].get('reward_mode') == 'continuous_horizontal_whip_soft_workspace_v2':
+            self.config_label.setText(self.config_label.text().replace(f"N={self.settings['training_episodes']}","N=25600 (original budget)")+
+                "\nSoft workspace: C=10×mean(radial excess² + height excess²), metres, fixed7s denominator. Crossing boundary does not terminate."
+                "\nNet x=Q−C; return=x if x≥0, else5x/(5−x). Physical/numerical failure remains−10."
+                "\nActor and original entropy clock continued; critic/optimizers fresh because reward changed. Remaining178collections of200.")
+        if t['matching'].get('reward_mode') == 'continuous_horizontal_whip_distance_v3':
+            self.config_label.setText(
+                "Stage1: continuous horizontal-whip output Q minus squared-distance workspace cost C.\n"
+                "C=10×fixed7s mean(radial excess² + height excess²), metres. Boundary crossing does not stop an episode.\n"
+                "Valid return Q−C, without compression. Physical/numerical failure keeps Q−C and subtracts1×remaining seconds. No fixed−10.\n"
+                "Safe horizon7s; tilt60°/cable-height0.05m/numerical guards retained. No time reward or whip-count limit.\n"
+                "128lanes · remaining175collections (25already spent). Actor retained; critic/optimizers fresh.\n"
+                "Entropy .001+.019exp(−8×(3200+n)/25600); original budget and elapsed clock preserved.")
+        if t['matching'].get('reward_mode') == 'continuous_horizontal_whip_full_horizon_v4':
+            self.config_label.setText(
+                "Stage1: continuous horizontal-whip output Q minus squared-distance workspace cost C.\n"
+                "Finite, numerically admissible trajectories run7s. Tilt60° and cable-height0.05m violations are recorded, not termination conditions.\n"
+                "Q−C is unchanged; these physical violations have no extra reward penalty. No early completion or whip-count limit.\n"
+                "Numerical corruption still aborts and charges1×remaining seconds. No fixed−10.\n"
+                "Full horizon does not imply physical validity; no ground-contact model is added.\n"
+                f"{self.settings['parallel_environments']}lanes · episode budget {self.settings['training_episodes']}. Checkpoint continuation preserves the existing learning state and entropy clock.")
+        if t['matching'].get('reward_mode') in ('continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6'):
+            self.config_label.setText(
+                "Stage1: continuous fold-supported output toward fixed WORLD +X.\n"
+                "Q = integral 10 F H² A² U/L dt. H = positive attachment-relative X reach/L; A = both-frame +X alignment.\n"
+                "U = positive minimum(world X speed, relative X speed, cable extension speed). No sideways/backward output credit.\n"
+                f"Return Q−C; squared-distance workspace mean over {t['episode']['duration_s']:g}s. No completion/count/time/effort cost.\n"
+                "Tilt/low cable remain diagnostics; only numerical failure aborts with remaining-seconds cost.\n"
+                f"{self.settings['parallel_environments']} lanes · {self.settings['training_episodes']//self.settings['parallel_environments']} collections · fresh actor/critic.\n"
+                f"Entropy .001+.019exp(−8n/{self.settings['training_episodes']}); near floor at75% of this budget.")
+        if t['matching'].get('reward_mode') == 'horizontal_fold_outreach_v2':
+            self.config_label.setText(
+                f"Experimental Stage1: form, propagate and open a fold into horizontal outreach in any heading.\n"
+                f"{self.settings['parallel_environments']} lanes · 10 links · 50 Hz world acceleration · maximum 7 s.\n"
+                f"Hard drone workspace: radius {ws['radius_m']:g} m, world height {ws['height_lower_world_m']:g}–{ws['height_upper_world_m']:g} m; checked at native substeps.\n"
+                "Completed event: 5H² − 0.1T; timeout: −2.7; failure: −10 − 0.1T. No target-hit reward.\n"
+                f"Entropy: 0.001 + 0.019 exp(−8n/N), N = saved planned budget ({self.settings['training_episodes']} episodes for a fresh run).")
+        if t['matching'].get('reward_mode') == 'retained_fold_delivery_v1':
+            self.config_label.setText(
+                "Experimental Stage2: form, propagate and open the SAME fold toward a broad +X target.\n"
+                f"{self.settings['parallel_environments']} lanes · 10 links · 50 Hz world acceleration · maximum 7 s.\n"
+                f"Hard drone workspace: radius {ws['radius_m']:g} m, world height {ws['height_lower_world_m']:g}–{ws['height_upper_world_m']:g} m; checked at native substeps.\n"
+                "Progress: 5 × increases in episode-best coherent progress P. Verified useful hit: total15. Completed miss or timeout: 5P−2. Failure: 5P−10, valid-prefix credit only.\n"
+                "No time, acceleration-effort or travelled-distance cost. Progress is not hit success.\n"
+                "Hit: same-opening forward rectangle crossing, H≥0.75, world forward speed≥1m/s, both outward radial/cone conditions.\n"
+                f"Entropy: 0.001 + 0.019 exp(−8n/N), N = saved planned budget ({self.settings['training_episodes']} episodes for a fresh run).")
         if t['matching'].get('reward_mode') in ('directed_hit_v1', 'geometric_hit_quality_v1'):
             self.config_label.setText(self.config_label.text()+
                 f"\nEXPERIMENT: fixed hit bonus {wall['strike_bonus_weight']:g} · spatial record credit ≤ {t['matching']['shaping_weight']:g} · full-horizon time cost {t['matching']['time_preference']:g} · mechanics diagnostic only")
@@ -379,6 +458,49 @@ class TrainingWindow(QtWidgets.QMainWindow):
             m=t['matching']
             self.config_label.setText(self.config_label.text()+
                 f"\nStage1 experiment: best W × (1 + {m['reach_weight']:g} × forward reach/L) × exp(-{m['preparation_path_weight']:g} × drone path/L) ≤ {1+m['reach_weight']:g}. Path is measured before the same release; workspace cost is separate. No new hit/whip threshold.")
+        elif t['matching'].get('reward_mode') == 'directed_shape_delivery_v1':
+            self.config_label.setText(self.config_label.text()+
+                '\nShape delivery: max finalized S × (1 + exp(-0.5 × (rectangle distance at SAME peak-shape sample / 0.70 m)^2)). Actual forward hits inside that SAME selected release are checked separately. Failure −10; zero additional workspace/acceleration/time costs. Full-episode movement cost retained. Inherited AR(1) exploration; complete actor transfer preserves learned scale.')
+        elif t['matching'].get('reward_mode') == 'first_hit_flexible_delivery_v2':
+            self.config_label.setText(self.config_label.text()+
+                '\nFirst-hit delivery: time cost0.1/s. Hit F(B-C-0.1T); timeout -2+F(A-C-0.5); failure -10+F(-C-0.1T). B=5q/(1+q), A<1. Workspace charge keeps450sample reference. No post-hit tail, effort or path cost. Actor/clock inherited;451sample history retained and rolled beyond4.5s.')
+        elif t['matching'].get('reward_mode') == 'flexible_delivery_v1':
+            self.config_label.setText(self.config_label.text()+
+                '\nFixed delivery: q=min(positive world-X tip speed, shape-residual speed)/(1 m/s). Approach <1; crossing 5q/(1+q). Valid F(max utility minus full-episode workspace cost); failure -10+F(-accrued cost). No path/effort/time cost. Stage1 actor and exploration clock inherited. Full velocity commands deferred to Stage3.')
+        elif excitation_mode:
+            if self.settings.get('stage1_return_transform') == 'negative_net_rational_v1':
+                reward_text = (' Uncapped quadratic workspace cost C. Valid return F(Q−C); failure −10+F(−C accrued). '
+                    'F(x)=x for x≥0, otherwise 5x/(5−x). Valid returns >−5; failures ≤−10. '
+                    'Farther excursions increase raw cost; very negative returns are compressed. No containment or learning guarantee.')
+            elif self.settings['workspace_penalty']['mode'] == 'bounded_density_v1':
+                reward_text = (' Historical bounded workspace cost: valid Q−C, failure −10−C accrued; C≤5. '
+                    'Far-out instantaneous cost saturates.')
+            else:
+                reward_text = ' Historical unbounded quadratic cost: valid Q−C, failure −10−C accrued.'
+            self.config_label.setText(self.config_label.text()+
+                '\nExcitation guide Q: best same-sample min(world tip speed, nonrigid tip speed) / (1 m/s). '
+                'Sidearm motion allowed; no fold, direction, path or acceleration term. Experimental guide, not whipping success; '
+                '120 collections, no automatic stage transition.'+reward_text)
+        elif t['matching'].get('reward_mode') == 'directed_unified_fold_v1':
+            self.config_label.setText(self.config_label.text()+
+                '\nUnified fold: best SAME attempt (0.5 formation + 0.5 propagation + aligned release). Preparation credit is not success. Quadratic outside-workspace cost, coefficient0.1 / (0.1m)^2, averaged over4.5s; no path cost. Failure −10 minus accrued workspace cost. Fresh120-collection run; no automatic stage transition.')
+        elif t['matching'].get('reward_mode') in ('directed_fold_formation_v1','directed_fold_release_aligned_v1'):
+            formation=t['matching'].get('reward_mode')=='directed_fold_formation_v1'
+            self.config_label.setText(self.config_label.text()+
+                ('\nFormation guide: best attachment-side tangent reversal angle in radians. Stops at30 collections for independent motion review; full120-collection entropy budget retained. This is not a successful whip.' if formation else
+                 '\nFold release: same tracked outward fold must open and gain forward tip speed. Multiply output by squared3D alignment of BOTH shape and world tip velocities with intended direction. Lateral/backward output has no bonus. Reviewed warm-up actor required; remaining total120 budget only.')+
+                '\nMovement cost0.25 × full-episode drone path/cable length; failure replaces entire return with−10. Physics/control unchanged; no automatic later-stage promotion.')
+        elif t['matching'].get('reward_mode') == 'directed_shape_release_v1':
+            self.config_label.setText(self.config_label.text()+
+                '\nShape release: best finalized min(positive shape-forward speed, positive world-forward speed) / (1 m/s), at peak shape speed; shape gain ≥0.25 m/s. Failure return −10. Zero workspace/acceleration/time costs. Experimental kinematics, not a validated whip classifier.'+
+                f"\nExploration: conditional AR(1), 100-ms correlation time; initial marginal latent std 0.370409. Budget {self.settings['training_episodes'] // self.settings['parallel_environments']} collections; no automatic plateau stop or stage advance.")
+            if 'movement_penalty' in self.settings:
+                weight=self.settings['movement_penalty']['weight_per_cable_length']
+                self.config_label.setText(self.config_label.text()+
+                    f'\nMovement cost: {weight:g} × full-episode drone path / cable length, including post-release drift. Failure still replaces the entire return with −10. Travel is not physical energy.')
+        elif t['matching'].get('reward_mode') == 'directed_discovery_bounded_v1':
+            self.config_label.setText(self.config_label.text()+
+                '\nStage1 discovery: 0.5 × best directed whip proxy − bounded workspace cost (≤0.25). Failure replaces the total return with −1. Hits are diagnostics. Motion review is required before later-stage transfer; no physical whip classifier is implied.')
         elif t['matching'].get('reward_mode') == 'directed_whip_v1':
             self.config_label.setText(self.config_label.text()+
                 '\nStage1: best directed mechanics × unfolding event ≤ 1; outside-only cost. No acceleration, hit, accuracy or time cost/bonus.')
@@ -620,8 +742,12 @@ class TrainingWindow(QtWidgets.QMainWindow):
         if len(history)==self.last_event_count: return
         self.last_event_count=len(history)
         # Always use the selected run's immutable units, not today's UI preset.
-        selected_settings=read_json(directory/'configuration.json')['settings']
+        selected_snapshot=read_json(directory/'configuration.json')
+        selected_settings=selected_snapshot['settings']
+        retained_progress_mode=selected_snapshot['task']['matching'].get('reward_mode')=='retained_fold_delivery_v1'
+        continuous_mode=selected_snapshot['task']['matching'].get('reward_mode')in ('continuous_horizontal_whip_v1', 'continuous_horizontal_whip_soft_workspace_v2','continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6')
         self.update_overview(directory,history,selected_settings)
+        self.whip_diagnostics.set_run(directory,history)
         method=algorithm(selected_settings)
         scale=selected_settings.get('reward_scale',1.0)
         self.loss_plot.title=method.upper()+' losses (last minibatch)'
@@ -645,12 +771,22 @@ class TrainingWindow(QtWidgets.QMainWindow):
         quality_history=any('geometric_hit_success' in e.get('components',{}) for e in rounds+evaluations)
         motion_terms=(('mechanical','Mechanics'),('matching','Matching'),('geometric_hit_success' if quality_history else 'strike_success','Geometric hit' if quality_history else 'Strike'))
         if quality_history:motion_terms+=(('strict_strike_success','Strict 3 m/s / 30° diagnostic'),)
+        unified_history=any('unified_fold_score' in e.get('components',{}) for e in rounds+evaluations)
+        excitation_history=any('excitation_score' in e.get('components',{}) for e in rounds+evaluations)
+        if unified_history:
+            motion_terms=(('formation_fraction','Selected formation'),('propagation_fraction','Selected propagation'),
+                          ('completed_release_fraction_all','Completed aligned release / all episodes'))
+        if excitation_history:
+            motion_terms=(('world_speed_at_q','World tip speed at selected sample (m/s)'),
+                          ('shape_speed_at_q','Nonrigid tip speed at selected sample (m/s)'))
         self.mechanics_plot.set_series([(label,[(e['round'],e['components'].get(key)) for e in rounds],False)
             for key,label in motion_terms])
         speed_outreach_history=any('outreach_credit' in e.get('components',{}) for e in rounds+evaluations)
         base_key=('outreach_credit' if speed_outreach_history else
             'base_mechanics_credit' if any('base_mechanics_credit' in e.get('components',{}) for e in rounds+evaluations) else 'mechanics_credit')
         base_label='Outreach credit before path' if speed_outreach_history else 'Base mechanics credit'
+        if unified_history:base_key,base_label='unified_fold_score','Unified attempt utility before workspace cost'
+        if excitation_history:base_key,base_label='excitation_score','Excitation guide before workspace cost'
         self.reward_plot.set_series([(label,[(e['round'],scale*e['components'][key] if e['components'].get(key) is not None else None) for e in rounds],False)
             for key,label in ((base_key,base_label),('outreach_reach_credit','Outreach contribution'),('outreach_height_credit','Height contribution'),('outreach_joint_credit','Joint outreach/height contribution'),('reach_bonus','Reach bonus'),('level_outreach_bonus','Level outreach credit'),('preparation_cost','Preparation reduction'),('approach_reward','Approach'),('center_reward','Center guidance'),('recovery_credit','Recovery credit'),('strike_bonus','Strike bonus'),('hit_speed_bonus','Hit speed bonus'),('hit_straightness_bonus','Hit straightness bonus'),('time_cost','Time cost'),('workspace_cost','Workspace cost'))])
         if any('crossing_reward' in e.get('components',{}) for e in rounds+evaluations):
@@ -659,7 +795,55 @@ class TrainingWindow(QtWidgets.QMainWindow):
                 ('whip_support_reward','Whip support'),('crossing_center_reward','Crossing center guidance'),
                 ('crossing_geometric_bonus','Geometric hit bonus'),('crossing_strict_bonus','Strict hit bonus'),
                 ('workspace_cost','Workspace cost'))])
+        if any('shape_release_score' in e.get('components',{}) for e in rounds+evaluations):
+            self.mechanics_plot.set_series([(label,[(e['round'],e['components'].get(key)) for e in rounds],False)
+                for key,label in (('q_shape_mps','Selected peak shape speed (m/s)'),
+                                  ('shape_gain_mps','Selected shape speed gain (m/s)'),
+                                  ('geometric_hit_success','Geometric hit diagnostic'))])
+            self.reward_plot.set_series([(label,[(e['round'],e['components'].get(key)) for e in rounds],False)
+                for key,label in (('shape_release_score','Raw shape release'),('shape_delivery_score','Same-event delivery utility'),('selected_event_geometric_hit_success','Selected release broad hit'),('movement_cost','Movement cost (subtracted)'))])
+        if any('fold_formation_score' in e.get('components',{}) or 'fold_release_score' in e.get('components',{}) for e in rounds+evaluations):
+            self.reward_plot.set_series([(label,[(e['round'],e['components'].get(key)) for e in rounds],False)
+                for key,label in (('fold_formation_score','Formation guide (rad)'),('fold_release_score','Full fold release'),('movement_cost','Movement cost (subtracted)'))])
+            self.mechanics_plot.set_series([(label,[(e['round'],e['components'].get(key)) for e in rounds],False)
+                for key,label in (('root_fold_formed','Persistent root fold fraction'),('release_direction_alignment','Release direction alignment'))])
         self.valid_plot.set_series([('Fraction',[(e['round'],e['valid_fraction']) for e in rounds],False)])
+        if retained_progress_mode:
+            self.mechanics_plot.title='Fold phases · fraction of all attempts'
+            self.mechanics_plot.set_series([(label,[(e['round'],e['components'].get(key)) for e in rounds],False)
+                for key,label in (('fold_formed','Formed'),('fold_propagated','Travelled'),
+                                  ('fold_opened','Opened'),('qualified_hit','Hit'))])
+            self.reward_plot.title='Retained progress and terminal outcome'
+            self.reward_plot.set_series([(label,[(e['round'],scale*e['components'][key]
+                if e['components'].get(key) is not None else None) for e in rounds],False)
+                for key,label in (('progress_credit','Progress'),('outcome_credit','Outcome'),
+                                  ('net_episode_return','Net return'))])
+            self.valid_plot.title='Validity and mean progress · all attempts'
+            self.valid_plot.set_series([
+                ('Valid',[(e['round'],e['valid_fraction']) for e in rounds],False),
+                ('Mean P',[(e['round'],e['components'].get('progress')) for e in rounds],False),
+                ('Failure',[(e['round'],e['components'].get('failure')) for e in rounds],False)])
+            self.evaluations.setHorizontalHeaderLabels(['Collection',f'Return ×{scale:g}','Progress P',
+                'Verified hit','Valid','Outside workspace (s)',f'Workspace cost ×{scale:g}'])
+        else:
+            self.mechanics_plot.title='Whipping event'
+            self.valid_plot.title='Valid episodes'
+        if continuous_mode:
+            self.mechanics_plot.title='Continuous output diagnostics · not success rate'
+            self.mechanics_plot.set_series([(label,[(e['round'],e['components'].get(key)) for e in rounds],False)
+                for key,label in (('peak_reward_rate','Peak rate'),('fold_support_integral_s','Fold support (s)'),
+                                  ('positive_output_duration_s','Output duration (s)'))])
+            self.reward_plot.set_series([(label,[(e['round'],e['components'].get(key)) for e in rounds],False)
+                for key,label in (('continuous_whip_credit','Accrued output'),('workspace_cost','Workspace cost'),('return_transform_adjustment','Return transform (legacy modes)'),('failure_adjustment','Failure cost / correction'),('net_episode_return','Net return'))])
+            self.valid_plot.set_series([('Valid',[(e['round'],e['valid_fraction']) for e in rounds],False),
+                ('Full horizon',[(e['round'],e['components'].get('completed_horizon')) for e in rounds],False)])
+            self.evaluations.setHorizontalHeaderLabels(['Collection',f'Return ×{scale:g}','Accrued output',
+                'Full horizon','Valid','Outside workspace (s)','Workspace cost'])
+            if selected_snapshot['task']['matching'].get('reward_mode') in ('continuous_horizontal_whip_full_horizon_v4','continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6'):
+                self.valid_plot.title='Completion and physical-envelope diagnostics'
+                self.valid_plot.set_series([(label,[(e['round'],e['components'].get(key)) for e in rounds],False)
+                    for key,label in (('completed_horizon','Full horizon'),('physical_violation','Physical violation'),
+                                      ('numerically_valid','Numerically valid'))])
         self.loss_plot.set_series([(label,[(e['round'],e.get(key)) for e in rounds],False) for key,label in (('critic_loss','Critic'),('actor_loss','Actor'))])
         exploration=[e for e in history if e['phase']=='exploration']
         self.entropy_plot.set_series([(label,[(e['round'],e.get(key)) for e in exploration],dashed)
@@ -673,8 +857,12 @@ class TrainingWindow(QtWidgets.QMainWindow):
             outside=e.get('workspace',{}).get('outside_duration_s')
             iteration=f"{e['round']} · Lane {e['lane']}" if 'lane' in e else e['round']
             charge=e['components'].get('workspace_cost')
-            values=(iteration,scale*e['evaluation_return'],e['components'].get('mechanical'),e['components'].get('strike_success'),e['valid'],
+            values=(iteration,scale*e['evaluation_return'],e['components'].get('progress' if retained_progress_mode else 'mechanical'),
+                    e['components'].get('qualified_hit' if retained_progress_mode else 'strike_success'),e['valid'],
                     outside,scale*charge if charge is not None else None)
+            if continuous_mode:
+                values=(iteration,scale*e['evaluation_return'],e['components'].get('continuous_whip_credit'),
+                        e['components'].get('completed_horizon'),e['valid'],outside,charge)
             for j,value in enumerate(values):
                 text='—' if value is None else (f'{value:.4g}' if isinstance(value,float) else str(value))
                 self.evaluations.setItem(i,j,QtWidgets.QTableWidgetItem(text))
@@ -697,13 +885,54 @@ class TrainingWindow(QtWidgets.QMainWindow):
         def number(value): return '—' if value is None else f'{value:.5g}'
         c=latest.get('components',{}); ws=latest.get('workspace',{})
         raw=latest.get('evaluation_return'); scale=settings.get('reward_scale',1.)
+        if 'continuous_whip_credit' in c:
+            outcome=('Full horizon completed' if latest.get('valid') else 'Full horizon completed · physical violation') if c.get('completed_horizon')==1 else 'Aborted / saved prefix'
+            self.latest_result.setText(
+                f"Stage1 · collection {latest['round']} · {outcome}\nReturn: {number(raw)}\n"
+                f"Accrued output: {number(c['continuous_whip_credit'])}\nWorkspace cost: {number(c.get('workspace_cost'))}\nFailure correction: {number(c.get('failure_adjustment'))}\n"
+                f"Peak reward rate: {number(c.get('peak_reward_rate'))}\nFold support: {number(c.get('fold_support_integral_s'))} s\n"
+                f"Positive output duration: {number(c.get('positive_output_duration_s'))} s\n"
+                "No target or binary whip success gate. See Whipping diagnostics for recorded rate and fold support.")
+            self.latest_summary.setText(f"Stage1 · collection {latest['round']} · {outcome} · return {number(raw)} · continuous score is not success")
+            return
+        if 'progress_credit' in c and 'outcome_credit' in c:
+            valid=latest.get('valid')
+            hit=c.get('qualified_hit')==1
+            outcome=('VERIFIED useful hit' if hit and valid else 'INVALID attempt' if valid is False
+                     else 'Safe timeout' if valid and c.get('timeout')==1
+                     else 'Completed miss' if valid and c.get('event_completed')==1
+                     else 'No verified outcome recorded')
+            self.latest_result.setText(
+                f"Stage 2 · collection {latest['round']} · {outcome}\n\n"
+                f"Task return: {number(raw)}\nOptimizer return (×{scale:g}): {number(None if raw is None else scale*raw)}\n"
+                f"Best coherent progress P: {number(c.get('progress'))}\n"
+                f"Retained progress credit: {number(c.get('progress_credit'))}\n"
+                f"Terminal outcome adjustment: {number(c.get('outcome_credit'))}\n\n"
+                f"Formed / propagated / opened: {number(c.get('fold_formed'))} / {number(c.get('fold_propagated'))} / {number(c.get('fold_opened'))}\n"
+                f"Verified same-opening useful hit: {number(c.get('qualified_hit'))}\n"
+                f"Elapsed episode time: {number(c.get('executed_duration_s'))} s\n"
+                "No elapsed-time, effort or path cost. Partial progress is not hit success.\n"
+                "One saved deterministic motion; not a robustness test or scientific promotion.")
+            self.latest_summary.setText(f"Stage 2 · collection {latest['round']} · return {number(raw)} · "
+                f"progress {number(c.get('progress'))} · {outcome}")
+            return
         hit_label='Geometric target hit' if 'geometric_hit_success' in c else 'Qualified strike'
         text=(f"Stage {training_stage(settings)} · iteration {latest['round']}\n"
               f"{'Valid numerical rollout' if latest.get('valid') else 'Numerical failure / invalid rollout'}\n\n"
               f"Task return: {number(raw)}\nOptimizer return (×{scale:g}): {number(None if raw is None else scale*raw)}\n\n"
               f"{hit_label}: {number(c.get('geometric_hit_success', c.get('strike_success')))}\nMechanics diagnostic: {number(c.get('mechanical'))}\nMatching: {number(c.get('matching'))}\n"
               f"Outside workspace: {number(ws.get('outside_duration_s'))} s\nWorkspace cost (raw): {number(c.get('workspace_cost'))}")
-        if 'geometric_hit_success' in c and 'unfolding_fraction' not in c:
+        if 'excitation_score' in c:
+            text+=(f"\nExcitation guide: {number(c.get('excitation_score'))}"
+                   f"\nSame-sample world / nonrigid tip speed: {number(c.get('world_speed_at_q'))} / {number(c.get('shape_speed_at_q'))} m/s"
+                   '\nTarget crossings are diagnostic only. Positive guide is not whipping success; full motion review remains required.')
+        elif 'unified_fold_score' in c:
+            text+=(f"\nUnified attempt utility: {number(c.get('unified_fold_score'))}"
+                   f"\nFormation / propagation: {number(c.get('formation_fraction'))} / {number(c.get('propagation_fraction'))}"
+                   f"\nAligned release output: {number(c.get('aligned_release_score'))}"
+                   f"\nCompleted aligned release: {number(c.get('completed_release_fraction_all'))}"
+                   '\nPreparation credit is not whipping success; motion review remains required.')
+        elif 'geometric_hit_success' in c and 'unfolding_fraction' not in c:
             angle=c.get('direction_error_rad')
             text+=f"\nStrict 3 m/s / 30° diagnostic: {number(c.get('strict_strike_success'))}"
             text+=f"\nSelected event forward speed: {number(c.get('forward_mps'))} m/s"
@@ -773,7 +1002,7 @@ class TrainingWindow(QtWidgets.QMainWindow):
                 QtWidgets.QMessageBox.StandardButton.Yes|QtWidgets.QMessageBox.StandardButton.No)
             if answer==QtWidgets.QMessageBox.StandardButton.Yes: self.close_pending=True; self.stop()
             event.ignore(); return
-        self.timer.stop(); self.preview.dispose(); super().closeEvent(event)
+        self.timer.stop(); self.whip_diagnostics.pause(); self.preview.dispose(); super().closeEvent(event)
 
 
 def configure_resume(window, checkpoint, saved, requested_settings=None):

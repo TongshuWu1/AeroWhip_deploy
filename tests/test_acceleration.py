@@ -17,7 +17,7 @@ from tasks.whip.deterministic_evaluation import DeterministicEvaluationEnvironme
 from tasks.whip.sac_environment import Stage1Environment
 from training.artifacts import (identity, validate_actor_source, create_run,
                                 checkpoint_replay, replay_from_checkpoint)
-from training.configuration import DEFAULT, CURRENT_PRESETS, FROZEN_PRESETS, load, validate
+from training.configuration import FROZEN_PRESETS, load, validate
 from training.demonstration import load_demonstration
 from training.ppo import PPO
 from viewer.replay import StateReplay
@@ -27,7 +27,7 @@ class AccelerationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         torch.set_num_threads(2)
-        cls.settings, cls.snapshot, cls.cfg, cls.scene = load(DEFAULT)
+        cls.settings, cls.snapshot, cls.cfg, cls.scene = load('configs/learning/whip_stage1_ppo_acceleration_v1.json')
 
     def env(self, native=False):
         settings = dict(self.settings, device='cpu', parallel_environments=1, evaluation_environments=1)
@@ -48,7 +48,7 @@ class AccelerationTests(unittest.TestCase):
         return dict(schema='ppo_stage1_checkpoint_v1',snapshot=snap,identity=snap['identity'],
                     agent=self.agent().state_dict(),round=0,episodes=0,steps=0)
 
-    def test_new_default_preserves_task_and_legacy_presets(self):
+    def test_acceleration_preset_preserves_task_and_legacy_presets(self):
         old,snap,cfg,_=load(FROZEN_PRESETS[1])
         self.assertEqual(self.snapshot['task'],snap['task'])
         self.assertEqual(self.snapshot['model'],snap['model'])
@@ -61,7 +61,7 @@ class AccelerationTests(unittest.TestCase):
     def test_acceleration_stage_handoffs_keep_action_units_and_rewards(self):
         previous=self.agent()
         for stage in (2,3):
-            settings,snapshot,cfg,scene=load(CURRENT_PRESETS[stage])
+            settings,snapshot,cfg,scene=load(f'configs/learning/whip_stage{stage}_ppo_acceleration_v1.json')
             old,old_snapshot,_,_=load(FROZEN_PRESETS[stage])
             self.assertEqual(snapshot['task'],old_snapshot['task'])
             self.assertEqual(settings.get('target_curriculum'),old.get('target_curriculum'))
@@ -81,7 +81,7 @@ class AccelerationTests(unittest.TestCase):
         from PySide6 import QtWidgets
         from training.ui.window import TrainingWindow, SettingsDialog
         app=QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
-        window=TrainingWindow()
+        window=TrainingWindow('configs/learning/whip_stage1_ppo_acceleration_v1.json')
         try:
             self.assertIn('50 Hz acceleration',window.config_label.text())
             self.assertIn('m/s²',window.description_details)

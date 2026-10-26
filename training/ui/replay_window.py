@@ -58,12 +58,44 @@ def vector_text(vector, digits=3):
     return '   '.join(f'{axis} {value:+.{digits}f}' for axis, value in zip('XYZ', vector))
 
 
+class MeasurementSlider(QtWidgets.QSlider):
+    """Timeline annotation only; candidate marks never change playback states."""
+    def __init__(self, candidate):
+        super().__init__(QtCore.Qt.Orientation.Horizontal)
+        self.candidate = candidate
+        self.setMinimumHeight(25)
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        if self.candidate is None or self.maximum() == self.minimum():
+            return
+        option = QtWidgets.QStyleOptionSlider()
+        self.initStyleOption(option)
+        style = self.style()
+        groove = style.subControlRect(QtWidgets.QStyle.ComplexControl.CC_Slider, option,
+                                      QtWidgets.QStyle.SubControl.SC_SliderGroove, self)
+        handle = style.subControlRect(QtWidgets.QStyle.ComplexControl.CC_Slider, option,
+                                      QtWidgets.QStyle.SubControl.SC_SliderHandle, self)
+        def x(index):
+            return groove.x()+handle.width()//2+QtWidgets.QStyle.sliderPositionFromValue(
+                self.minimum(), self.maximum(), index, max(0, groove.width()-handle.width()), option.upsideDown)
+        painter = QtGui.QPainter(self)
+        painter.setPen(QtGui.QPen(QtGui.QColor('#b67312'), 3))
+        y = self.height()-4
+        painter.drawLine(x(self.candidate['start_index']), y, x(self.candidate['end_index']), y)
+        painter.drawLine(x(self.candidate['peak_index']), y-4, x(self.candidate['peak_index']), y+2)
+
+
 class ReplayWindow(QtWidgets.QMainWindow):
-    def __init__(self, directory, filename=None, event=None, parent=None, *, off_screen=False):
+    def __init__(self, directory=None, filename=None, event=None, parent=None, *, off_screen=False,
+                 presentation_data=None):
         super().__init__(parent)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
-        data = PresentationData.load(directory, filename, event)
+        data = presentation_data or PresentationData.load(directory, filename, event)
         self.data, self.replay = data, data.replay
+        self.continuous_whip=data.snapshot['task']['matching'].get('reward_mode')in ('continuous_horizontal_whip_v1', 'continuous_horizontal_whip_soft_workspace_v2','continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6')
+        review = data.measurement_event
+        self.measurement_candidate = review['event'] if review is not None else None
         self.setWindowTitle(f'AeroWhip Replay · Stage {data.stage} · {data.directory.name}')
         self.resize(1440, 940)
         self.setMinimumSize(0, 0)
@@ -80,10 +112,15 @@ class ReplayWindow(QtWidgets.QMainWindow):
         title_row.addLayout(heading, 1)
         for text, callback in (('3D view', self.overview_camera), ('Target view', self.target_camera),
                                ('Details', self.show_details)):
+            if self.continuous_whip and text=='Target view':continue
             button = QtWidgets.QPushButton(text)
             button.clicked.connect(callback)
             title_row.addWidget(button)
         layout.addLayout(title_row)
+        if review is not None:
+            self.review_label = label(f"Offline measurement review · {review['case_name']} · "
+                f"{review['evidence_kind']} · UNREVIEWED / uncertain", wrap=True)
+            layout.addWidget(self.review_label)
         body = QtWidgets.QHBoxLayout()
         body.setSpacing(16)
         self.plotter = QtInteractor(central, off_screen=off_screen, auto_update=False)
@@ -98,8 +135,9 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.viewer._toggle_world_axes()
         self.plotter.add_axes(interactive=False, color='#344958', line_width=2)
         add_cylinder_boundary(self.plotter, **data.config.workspace.description(data.scene.initial_state.position_world_m))
-        corners = add_strike_surface(self.plotter, **{key: data.surface[key] for key in
-                                                    ('center_world_m', 'normal_world', 'width_m', 'height_m')})
+        corners = (np.empty((0,3)) if self.continuous_whip else
+                   add_strike_surface(self.plotter, **{key: data.surface[key] for key in
+                                                    ('center_world_m', 'normal_world', 'width_m', 'height_m')}))
         self.strike_arrow = None
         if data.strike is not None:
             add_event_marker(self.plotter, data.strike['position'])
@@ -107,6 +145,15 @@ class ReplayWindow(QtWidgets.QMainWindow):
                 self.strike_arrow = self.plotter.add_mesh(pv.Arrow(start=data.strike['position'],
                     direction=data.strike['direction'], scale=.32), name='recorded_strike_velocity',
                     color='#df3c4b', lighting=False, pickable=False)
+        candidate = self.measurement_candidate
+        if candidate is not None:
+            positions = self.replay.arrays['cable_positions'][:, -1]
+            points = positions[candidate['start_index']:candidate['end_index']+1]
+            if len(points) > 1:
+                self.plotter.add_mesh(pv.lines_from_points(points), color='#b67312', line_width=5,
+                    name='measurement_candidate_interval', lighting=False, pickable=False)
+            self.plotter.add_mesh(pv.Sphere(radius=.013, center=positions[candidate['peak_index']]),
+                color='#b67312', name='measurement_candidate_peak', lighting=False, pickable=False)
         self.tip_arrow = self.plotter.add_mesh(pv.Arrow(), name='live_tip_velocity',
             color='#087d79', lighting=False, pickable=False)
         self._points = np.vstack((self.replay.arrays['cable_positions'].reshape(-1, 3), corners,
@@ -120,6 +167,18 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self.viewer._overlays.visible[key] = False
             self.viewer._overlays.actors[key].SetVisibility(False)
 
+        if review is not None:
+            review_card = self.card(cards, 'OFFLINE CANDIDATE · UNREVIEWED')
+            if candidate is None:
+                review_card.addWidget(label('No candidate event selected; inspect the full saved replay.', wrap=True))
+            else:
+                review_card.addWidget(label(f"Candidate {candidate['id']} · {candidate['start_s']:.3f}–"
+                    f"{candidate['end_s']:.3f} s", 'smallMetric', True))
+                review_card.addWidget(label(f"Measurement peak {candidate['peak_s']:.3f} s"))
+                for note in candidate['notes']:
+                    review_card.addWidget(label(note, 'subtle', True))
+            review_card.addWidget(label('Candidate evidence is uncertain. No whip, strike or training '
+                                         'success is inferred from these marks.', 'subtle', True))
         s = data.strike
         strike_card = self.card(cards, 'RECORDED EVENT · CABLE TIP')
         strike_card.addWidget(label('—' if s is None else f"{s['speed']:.2f} m/s", 'metric'))
@@ -141,7 +200,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
         else:
             position_card.addWidget(label('No recorded event position', 'subtle'))
         width, height = data.surface['width_m'], data.surface['height_m']
-        position_card.addWidget(label(f'Target {width * 100:g} × {height * 100:g} cm · '
+        position_card.addWidget(label('Continuous full-horizon task; no target.' if self.continuous_whip else
+                                     f'Target {width * 100:g} × {height * 100:g} cm · '
                                      f'±{width * 50:g} / ±{height * 50:g} cm', 'subtle'))
         live_card = self.card(cards, 'LIVE PLAYBACK · CABLE TIP')
         self.live_speed = label('', 'smallMetric')
@@ -180,6 +240,13 @@ class ReplayWindow(QtWidgets.QMainWindow):
             button = QtWidgets.QPushButton(text)
             button.clicked.connect(callback)
             controls.addWidget(button)
+        if candidate is not None:
+            self.measurement_jump = QtWidgets.QPushButton('Jump to candidate peak')
+            self.measurement_jump.clicked.connect(self.jump_to_measurement)
+            controls.addWidget(self.measurement_jump)
+            button = QtWidgets.QPushButton('Candidate start')
+            button.clicked.connect(lambda: self.seek(candidate['start_index']))
+            controls.addWidget(button)
         self.speed = QtWidgets.QComboBox()
         self.speed.setMinimumWidth(70)
         for value in (.1, .25, .5, 1):
@@ -188,7 +255,8 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.replay.speed = .5
         self.speed.currentIndexChanged.connect(lambda _: setattr(self.replay, 'speed', self.speed.currentData()))
         controls.addWidget(self.speed)
-        self.slider = QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.slider = (MeasurementSlider(candidate) if candidate is not None
+                       else QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal))
         self.slider.setRange(0, len(self.replay.time) - 1)
         self.slider.sliderPressed.connect(self.pause)
         self.slider.valueChanged.connect(self.seek)
@@ -210,7 +278,10 @@ class ReplayWindow(QtWidgets.QMainWindow):
         layout.addLayout(lower)
         layout.addWidget(label('Red: recorded event + direction   ·   Teal: current tip direction   ·   Blue: target entry   '
                                '·   Arrows show direction, not speed scale', 'subtle'))
-        layout.addWidget(label('Saved simulation only · virtual target, no contact force · not robustness or flight evidence', 'subtle'))
+        if review is not None:
+            layout.addWidget(label('Amber: unreviewed candidate interval and measurement peak · '
+                'marks are separate from the saved outcome', 'subtle'))
+        layout.addWidget(label('Saved states only · virtual target, no contact force · not robustness or flight evidence', 'subtle'))
         self.shortcuts = []
         for key, callback in (('Space', self.toggle), ('Right', self.step), ('R', self.reset), ('S', self.jump_to_strike)):
             shortcut = QtGui.QShortcut(QtGui.QKeySequence(key), self)
@@ -234,6 +305,19 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
     def outcome_text(self):
         c = self.data.event.get('components', {})
+        if 'continuous_whip_credit' in c:
+            outcome=(('Full horizon completed' if self.data.event.get('valid') else 'Full horizon completed · physical violation')
+                     if c.get('completed_horizon')==1 else 'Aborted · finite saved prefix')
+            return outcome+'\nContinuous reward, not a binary whip-success test.'
+        if 'progress_credit' in c and 'outcome_credit' in c:
+            valid=self.data.event.get('valid')
+            hit=c.get('qualified_hit')==1
+            outcome=('Verified same-opening hit' if hit and valid else 'INVALID attempt' if valid is False
+                     else 'Safe timeout' if valid and c.get('timeout')==1
+                     else 'Completed miss' if valid and c.get('event_completed')==1
+                     else 'No verified outcome recorded')
+            progress=c.get('progress')
+            return outcome + (f' · progress P={progress:.3f}' if isinstance(progress,(int,float)) else '') + '\nPartial progress is not hit success.'
         items = [('Geometric hit', 'geometric_hit_success'), ('Strict strike', 'strict_strike_success')]
         if self.data.stage == 4:
             items += [('Recovery', 'recovery_success'), ('Cable settling', 'cable_settling_success')]
@@ -292,6 +376,13 @@ class ReplayWindow(QtWidgets.QMainWindow):
         recovery_start = self.data.event.get('components', {}).get('recovery_start_s')
         phase = ('Recovery' if recovery_start is not None and self.replay.state.time_s >= recovery_start
                  else 'Whip motion')
+        if self.data.measurement_event is not None:
+            phase = 'Saved motion'
+        if self.measurement_candidate is not None:
+            candidate = self.measurement_candidate
+            location = ('inside' if candidate['start_index'] <= index <= candidate['end_index']
+                        else 'before' if index < candidate['start_index'] else 'after')
+            phase += f' · {location} unreviewed candidate'
         self.live_status.setText(phase)
         if self.strike_arrow is not None:
             self.strike_arrow.SetVisibility(self.arrows_toggle.isChecked())
@@ -343,6 +434,10 @@ class ReplayWindow(QtWidgets.QMainWindow):
     def jump_to_strike(self):
         if self.data.strike is not None:
             self.seek(min(len(self.replay.time) - 1, int(np.searchsorted(self.replay.time, self.data.strike['time_s']))))
+
+    def jump_to_measurement(self):
+        if self.measurement_candidate is not None:
+            self.seek(self.measurement_candidate['peak_index'])
 
     def closeEvent(self, event):
         self.timer.stop()

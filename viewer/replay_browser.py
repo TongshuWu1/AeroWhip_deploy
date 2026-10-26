@@ -238,10 +238,28 @@ def main():
     parser.add_argument('--audit', action='store_true', help='Read saved event metrics without a GUI')
     parser.add_argument('--snapshot', type=Path, help='Render the selected saved replay and exit')
     parser.add_argument('--flight-view', action='store_true', help='Open saved states in the docked flight viewer')
+    parser.add_argument('--measurement-report', type=Path,
+                        help='Open a hash-pinned offline measurement review in the existing replay viewer')
+    parser.add_argument('--case', type=int, dest='case_index',
+                        help='Zero-based measurement case index (default: 0)')
+    parser.add_argument('--event', type=int, dest='event_index',
+                        help='Zero-based measurement event index (default: report selection)')
     args = parser.parse_args()
+    measurement = None
+    if args.measurement_report is not None:
+        if args.selected or args.replay or args.flight_view:
+            parser.error('--measurement-report selects its own saved replay; do not combine with --run/--file/--replay/--flight-view')
+        measurement = PresentationData.load_measurement(args.measurement_report,
+            0 if args.case_index is None else args.case_index, args.event_index)
+    elif args.case_index is not None or args.event_index is not None:
+        parser.error('--case and --event require --measurement-report')
     if args.audit:
-        directory, filename = resolve_selection(args.selected or DEFAULT_RUN)
-        print(json.dumps(PresentationData.load(directory, args.replay or filename).evidence()), flush=True)
+        if measurement is None:
+            directory, filename = resolve_selection(args.selected or DEFAULT_RUN)
+            measurement_data = PresentationData.load(directory, args.replay or filename)
+        else:
+            measurement_data = measurement
+        print(json.dumps(measurement_data.evidence()), flush=True)
         return 0
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     if args.flight_view:
@@ -262,16 +280,24 @@ def main():
             QtCore.QTimer.singleShot(700, capture_flight)
         return app.exec()
     app.setFont(QtGui.QFont('Segoe UI', 10))
-    window = ReplayBrowser(args.selected, args.replay)
+    if measurement is None:
+        window = ReplayBrowser(args.selected, args.replay)
+    else:
+        from training.ui.replay_window import ReplayWindow
+        window = ReplayWindow(presentation_data=measurement)
+        window.jump_to_measurement()
     window.show()
     if args.snapshot:
         def save():
-            motion = window.motion
+            motion = window.motion if measurement is None else window
             if motion is None:
                 print(window.message.text(), flush=True)
                 app.exit(1)
                 return
-            motion.jump_to_strike()
+            if measurement is None:
+                motion.jump_to_strike()
+            else:
+                motion.jump_to_measurement()
             pixels = np.ascontiguousarray(motion.plotter.screenshot(return_img=True))
             frame = window.grab()
             child = motion.plotter.interactor

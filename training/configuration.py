@@ -19,6 +19,9 @@ FROZEN_PRESETS[1] = ROOT / 'configs/learning/whip_stage1_ppo_compact_v5.json'
 DEFAULT = ROOT / 'configs/learning/whip_stage1_ppo_acceleration_v1.json'
 CURRENT_PRESETS = dict(FROZEN_PRESETS)
 CURRENT_PRESETS.update({i: ROOT / f'configs/learning/whip_stage{i}_ppo_acceleration_v1.json' for i in (1, 2, 3)})
+CURRENT_PRESETS[2] = ROOT / 'configs/learning/whip_stage2_ppo_retained_fold_delivery_v1.json'
+CURRENT_PRESETS[1] = ROOT / 'configs/learning/whip_stage1_ppo_continuous_directional_four_second_v6.json'
+DEFAULT = CURRENT_PRESETS[1]
 RUN_SCHEMA = 'sac_stage1_velocity_v2'
 CHECKPOINT_SCHEMA = 'sac_stage1_checkpoint_v7'
 
@@ -76,6 +79,13 @@ def iteration_budget(settings):
     return (total+width-1)//width
 
 
+def collection_limit(settings):
+    """Stop formation at its review boundary while retaining the full entropy budget."""
+    phase=settings.get('fold_curriculum',{})
+    return (phase['warmup_collections'] if phase.get('phase')=='formation_v1'
+            else iteration_budget(settings))
+
+
 def evaluation_settings(settings):
     return dict(settings, parallel_environments=settings.get(
         'evaluation_environments', settings['parallel_environments']))
@@ -111,10 +121,24 @@ def validate(settings):
     missing = required - settings.keys()
     optional = {'algorithm', 'evaluation_environments', 'reward_scale'}
     if method == 'sac': optional |= {'curriculum', 'exploration'}
-    else: optional |= {'target_curriculum', 'training_stage', 'domain_randomization', 'stage3_role', 'stage4_role', 'stage4_recovery_policy', 'plateau_detection', 'target_observation', 'stage3_actor_training', 'target_sampler'}
+    else: optional |= {'target_curriculum', 'training_stage', 'domain_randomization', 'stage3_role', 'stage4_role', 'stage4_recovery_policy', 'plateau_detection', 'movement_penalty', 'target_observation', 'stage3_actor_training', 'target_sampler', 'fold_curriculum', 'stage1_return_transform', 'stage2_return_transform', 'stage2_first_hit', 'horizontal_fold_contract', 'retained_fold_delivery_contract', 'continuous_whip_contract'}
     unknown = settings.keys() - required - optional
     if missing or unknown:
         raise ValueError(f'Invalid learning settings: missing={sorted(missing)}, unknown={sorted(unknown)}')
+    if 'fold_curriculum' in settings:
+        c=settings['fold_curriculum']
+        if (not isinstance(c,dict) or c.get('phase') not in ('formation_v1','release_v1')
+                or set(c)!=({'phase','warmup_collections','total_collections'} |
+                            ({'motion_review'} if c.get('phase')=='release_v1' else set()))
+                or type(c.get('warmup_collections')) is not int or c['warmup_collections']!=30
+                or type(c.get('total_collections')) is not int or c['total_collections']!=120
+                or settings['parallel_environments']!=128 or training_stage(settings)!=1
+                or 'plateau_detection' in settings or 'curriculum' in settings or 'target_curriculum' in settings):
+            raise ValueError('Fold curriculum requires the approved30/120 Stage1 review plan at128 lanes')
+        if c['phase']=='formation_v1' and settings['training_episodes']!=15360:
+            raise ValueError('Formation keeps the full15360-episode entropy budget and stops at review')
+        if c['phase']=='release_v1' and (not isinstance(c['motion_review'],str) or not c['motion_review']):
+            raise ValueError('Release requires an explicit formation motion review')
     if method == 'ppo':
         from training.ppo import validate_stage3_actor_training
         validate_stage3_actor_training(settings)
@@ -163,6 +187,10 @@ def validate(settings):
     from training.curriculum import validate_target_curriculum
     validate_target_curriculum(settings)
     WorkspacePenalty(**settings['workspace_penalty'])
+    if 'movement_penalty' in settings:
+        from tasks.whip.movement import MovementPenalty
+        MovementPenalty(**settings['movement_penalty'])
+
     if settings['action_interface'] == 'acceleration_direct_v1':
         if method != 'ppo' or training_stage(settings) == 4 or 'stage4_recovery_policy' in settings:
             raise ValueError('Direct acceleration supports PPO Stages 1–3; velocity recovery is incompatible')
@@ -226,6 +254,12 @@ def task_configuration(raw, settings, model, scene):
             raise ValueError('Downward acceleration limit must keep desired vertical force positive')
     recovery_mode = training_stage(settings) == 4 and settings.get('stage4_role') == 'learned_recovery_v1'
     sections = {'episode', 'workspace', 'return', 'mechanics', 'request', 'matching', 'strike_surface'}
+    horizontal_fold = raw['matching']['reward_mode'] == 'horizontal_fold_outreach_v2'
+    retained_fold = raw['matching']['reward_mode'] == 'retained_fold_delivery_v1'
+    continuous_whip = raw['matching']['reward_mode'] in ('continuous_horizontal_whip_v1', 'continuous_horizontal_whip_soft_workspace_v2','continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6')
+    if horizontal_fold: sections.add('horizontal_fold')
+    if retained_fold: sections.add('retained_fold_delivery')
+    if continuous_whip: sections.add('continuous_whip')
     if set(raw) != sections | ({'recovery'} if recovery_mode else set()):
         raise ValueError('Unexpected task sections; use the current episode-based task configuration')
     recovery = LearnedRecoveryConfiguration(**raw['recovery']) if recovery_mode else None
@@ -238,7 +272,7 @@ def task_configuration(raw, settings, model, scene):
         raise ValueError('Episode settings require duration_s, settling_s and optional termination')
     timing = EpisodeTiming(raw['episode']['duration_s'], raw['episode']['settling_s'])
     for t in (timing.duration_s, timing.post_hold_s):
-        if not math.isfinite(t) or t <= 0 or abs(t * settings['policy_rate_hz'] - round(t * settings['policy_rate_hz'])) > 1e-8:
+        if not math.isfinite(t) or (t <= 0 and not (t == timing.post_hold_s == 0 and raw['matching']['reward_mode'] in ('first_hit_flexible_delivery_v2','horizontal_fold_outreach_v2','retained_fold_delivery_v1','continuous_horizontal_whip_v1','continuous_horizontal_whip_soft_workspace_v2','continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6'))) or abs(t * settings['policy_rate_hz'] - round(t * settings['policy_rate_hz'])) > 1e-8:
             raise ValueError('Episode intervals must be positive whole policy periods')
     delay = model['controller']['command_delay_s']
     if abs(delay / .01 - round(delay / .01)) > 1e-8:
@@ -246,22 +280,164 @@ def task_configuration(raw, settings, model, scene):
     workspace = CylinderWorkspace(**raw['workspace'])
     returns = WhipReturnConfiguration(**raw['return'])
     matching = ReleaseMatchingConfiguration(**raw['matching'])
+    if 'stage1_return_transform' in settings and (
+            settings['stage1_return_transform'] != 'negative_net_rational_v1'
+            or matching.reward_mode != 'flexible_excitation_v1'
+            or settings['workspace_penalty'] != dict(mode='squared_excess_v1', weight=.1, distance_scale_m=.1)):
+        raise ValueError('Stage1 return transform requires the approved uncapped excitation profile')
+    if horizontal_fold != (settings.get('horizontal_fold_contract') == 'horizontal_fold_outreach_v2'):
+        raise ValueError('Horizontal-fold preset and task must agree')
+    if retained_fold != (settings.get('retained_fold_delivery_contract') == 'retained_fold_delivery_v1'):
+        raise ValueError('Retained fold-delivery preset and task must agree')
+    if (settings.get('continuous_whip_contract') != raw['matching']['reward_mode'] if continuous_whip
+            else 'continuous_whip_contract' in settings):
+        raise ValueError('Continuous-whip preset and task must agree')
+    if continuous_whip:
+        from tasks.whip.continuous_whip import CONTRACT, SOFT_CONTRACT, SOFT_MODE, PLAIN_CONTRACT, PLAIN_MODE, FULL_CONTRACT, FULL_MODE, DIRECTED_CONTRACT, DIRECTED_MODE, SHORT_CONTRACT, SHORT_MODE
+        plain=raw['matching']['reward_mode'] in (PLAIN_MODE,FULL_MODE,DIRECTED_MODE,SHORT_MODE)
+        soft=plain or raw['matching']['reward_mode']==SOFT_MODE
+        expected_contract=SHORT_CONTRACT if raw['matching']['reward_mode']==SHORT_MODE else DIRECTED_CONTRACT if raw['matching']['reward_mode']==DIRECTED_MODE else FULL_CONTRACT if raw['matching']['reward_mode']==FULL_MODE else PLAIN_CONTRACT if plain else SOFT_CONTRACT if soft else CONTRACT
+        if (raw['continuous_whip'] != expected_contract or training_stage(settings) != 1 or algorithm(settings) != 'ppo'
+                or settings['action_interface'] != 'acceleration_direct_v1' or settings['policy_rate_hz'] != 50
+                or settings['acceleration_limit_mps2'] != [8,8,4] or settings['discount'] != 1
+                or settings.get('reward_scale',1) != 1
+                or settings['workspace_penalty'] != dict(mode='squared_excess_v1',weight=.1 if soft else 0.,distance_scale_m=.1)
+                or raw['workspace'] != dict(radius_m=.55,height_lower_world_m=1.5,height_upper_world_m=2.6)
+                or returns.maximum_tilt_deg != 60 or returns.minimum_cable_height_m != .05
+                or raw['strike_surface']['strike_bonus_weight'] != 0
+                or settings['ppo']['entropy'] != dict(mode='exponential_budget_v1',initial_weight=.02,final_weight=.001,decay_exponent=8.)
+                or settings['ppo'].get('action_noise') != dict(mode='ar1_v1',correlation_time_s=.1)
+                or settings['ppo'].get('transfer_entropy_clock') != ('inherit' if soft and raw['matching']['reward_mode'] not in (DIRECTED_MODE,SHORT_MODE) else 'stage_local')
+                or any(k in settings for k in ('movement_penalty','stage1_return_transform','stage2_return_transform',
+                    'fold_curriculum','target_curriculum','target_observation','horizontal_fold_contract',
+                    'retained_fold_delivery_contract','plateau_detection'))
+                or model['simulation']['segments_per_marker_interval'] != [1]*10):
+            raise ValueError('Continuous Stage1 requires its fixed horizon, control, safety and exploration contract')
+    if retained_fold:
+        from tasks.whip.retained_fold_delivery import CONTRACT
+        if (raw['retained_fold_delivery'] != CONTRACT or training_stage(settings) != 2 or algorithm(settings) != 'ppo'
+                or settings['action_interface'] != 'acceleration_direct_v1' or settings['policy_rate_hz'] != 50
+                or settings['acceleration_limit_mps2'] != [8,8,4] or settings['discount'] != 1
+                or settings.get('reward_scale',1) != 1
+                or settings['workspace_penalty'] != dict(mode='squared_excess_v1',weight=0.,distance_scale_m=.1)
+                or raw['workspace'] != dict(radius_m=.55,height_lower_world_m=1.5,height_upper_world_m=2.6)
+                or returns.maximum_tilt_deg != 60 or returns.minimum_cable_height_m != .05
+                or tuple(raw['request']) != (0,0,2,1)
+                or raw['strike_surface'] != dict(distance_m=1.1,width_m=1,height_m=.6,
+                    maximum_entry_angle_deg=30,approach_width_m=.35,strike_bonus_weight=0)
+                or settings['ppo']['entropy'] != dict(mode='exponential_budget_v1',initial_weight=.02,final_weight=.001,decay_exponent=8.)
+                or settings['ppo'].get('action_noise') != dict(mode='ar1_v1',correlation_time_s=.1)
+                or settings['ppo'].get('transfer_entropy_clock') != 'stage_local'
+                or any(k in settings for k in ('movement_penalty','stage1_return_transform','stage2_return_transform',
+                    'fold_curriculum','target_curriculum','target_observation','horizontal_fold_contract','plateau_detection'))
+                or model['simulation']['segments_per_marker_interval'] != [1]*10):
+            raise ValueError('Retained fold delivery requires its approved fixed-target, control, workspace and exploration contract')
+    if horizontal_fold:
+        from tasks.whip.horizontal_fold import CONTRACT
+        if (raw['horizontal_fold'] != CONTRACT or training_stage(settings) != 1 or algorithm(settings) != 'ppo'
+                or settings['action_interface'] != 'acceleration_direct_v1' or settings['policy_rate_hz'] != 50
+                or settings['acceleration_limit_mps2'] != [8,8,4] or settings['discount'] != 1
+                or settings.get('reward_scale',1) != 1
+                or settings['workspace_penalty'] != dict(mode='squared_excess_v1',weight=0.,distance_scale_m=.1)
+                or raw['workspace'] != dict(radius_m=.55,height_lower_world_m=1.5,height_upper_world_m=2.6)
+                or returns.maximum_tilt_deg != 60 or returns.minimum_cable_height_m != .05
+                or raw['strike_surface']['strike_bonus_weight'] != 0
+                or settings['ppo']['entropy'] != dict(mode='exponential_budget_v1',initial_weight=.02,final_weight=.001,decay_exponent=8.)
+                or settings['ppo'].get('action_noise') != dict(mode='ar1_v1',correlation_time_s=.1)
+                or any(k in settings for k in ('movement_penalty','stage1_return_transform','stage2_return_transform','fold_curriculum','target_curriculum','target_observation'))
+                or model['simulation']['segments_per_marker_interval'] != [1]*10):
+            raise ValueError('Horizontal-fold task requires its approved geometry, control, workspace and exploration contract')
+    bounded_discovery = matching.reward_mode == 'directed_discovery_bounded_v1'
+    bounded_excitation = (matching.reward_mode == 'flexible_excitation_v1'
+        and settings['workspace_penalty'] == dict(mode='bounded_density_v1',
+                                                  weight=5., distance_scale_m=math.sqrt(.5)))
+    if bounded_discovery:
+        if (algorithm(settings) != 'ppo' or training_stage(settings) != 1
+                or settings['action_interface'] != 'acceleration_direct_v1'
+                or settings['policy_rate_hz'] != 50 or settings['discount'] != 1
+                or settings['workspace_penalty'] != dict(weight=.25, distance_scale_m=.1,
+                                                         mode='bounded_density_v1')
+                or returns.failure_return != -1 or returns.acceleration_cost_weight != 0
+                or raw['strike_surface']['strike_bonus_weight'] != 0):
+            raise ValueError('Bounded discovery requires approved Stage1 acceleration/reward settings')
+    elif (settings['workspace_penalty'].get('mode', 'squared_excess_v1') != 'squared_excess_v1'
+          and not bounded_excitation):
+        raise ValueError('Bounded workspace cost requires an approved Stage1 discovery or excitation profile')
+    first_hit_delivery = matching.reward_mode == 'first_hit_flexible_delivery_v2'
+    flexible_delivery = matching.reward_mode in ('first_hit_flexible_delivery_v2','flexible_delivery_v1')
+    if first_hit_delivery != ('stage2_first_hit' in settings):
+        raise ValueError('First-hit settings require the first-hit reward')
+    if first_hit_delivery and settings['stage2_first_hit'] != dict(time_cost_per_second=.1,timeout_penalty=2.,minimum_quality=1.,workspace_reference_samples=450,history_samples=451,time_reference_samples=450):
+        raise ValueError('First-hit settings differ from approved coefficients/history contract')
+    if ('stage2_return_transform' in settings) != flexible_delivery:
+        raise ValueError('Stage2 transform is reserved for flexible delivery')
+    if flexible_delivery and (settings.get('stage2_return_transform') != 'negative_net_rational_v1'
+            or 'stage1_return_transform' in settings or training_stage(settings) != 2
+            or tuple(raw['request']) != (0,0,2,3)
+            or raw['strike_surface'] != dict(distance_m=1.1,width_m=1,height_m=.6,
+                maximum_entry_angle_deg=30,approach_width_m=.35,strike_bonus_weight=0)
+            or settings.get('target_observation') != 'initial_relative_position_v1'
+            or settings['ppo'].get('transfer_entropy_clock') != 'inherit'
+            or settings['ppo']['entropy'] != dict(mode='exponential_episodes_v1',initial_weight=.02,final_weight=.001,decay_episodes=2560)):
+        raise ValueError('Flexible delivery requires the approved fixed-target and inherited exploration contract')
+    shape_delivery = matching.reward_mode == 'directed_shape_delivery_v1'
+    soft_full_horizon_guide = matching.reward_mode in ('directed_unified_fold_v1', 'flexible_excitation_v1', 'first_hit_flexible_delivery_v2', 'flexible_delivery_v1')
+    if soft_full_horizon_guide and ((settings['workspace_penalty'] != dict(mode='squared_excess_v1',weight=.1,distance_scale_m=.1)
+                                    and not bounded_excitation)
+            or 'movement_penalty' in settings or 'fold_curriculum' in settings
+            or settings['parallel_environments'] != 128 or settings['training_episodes'] != (7680 if first_hit_delivery else 15360)
+            or raw['workspace'] != dict(radius_m=.55,height_lower_world_m=1.5,height_upper_world_m=2.6)):
+        raise ValueError('The full-horizon guide requires the approved120-collection soft-workspace contract')
+    shape_release = matching.reward_mode in ('directed_shape_release_v1','directed_unified_fold_v1', 'flexible_excitation_v1', 'directed_fold_formation_v1','directed_fold_release_aligned_v1')
+    fold_phase={'directed_fold_formation_v1':'formation_v1','directed_fold_release_aligned_v1':'release_v1'}.get(matching.reward_mode)
+    if fold_phase != settings.get('fold_curriculum',{}).get('phase'):
+        raise ValueError('Fold reward and explicit internal curriculum phase must agree')
+    soft_fold_formation = (fold_phase == 'formation_v1'
+        and 'movement_penalty' not in settings
+        and settings['workspace_penalty'] == dict(mode='squared_excess_v1', weight=.01, distance_scale_m=.1)
+        and raw['workspace'] == dict(radius_m=.55, height_lower_world_m=1.5, height_upper_world_m=2.6))
+    if fold_phase and not soft_fold_formation and settings.get('movement_penalty')!=dict(mode='path_length_v1',weight_per_cable_length=.25):
+        raise ValueError('Fold curriculum requires the retained path contract or approved soft-boundary formation preset')
+    if 'movement_penalty' in settings and not (shape_release or shape_delivery):
+        raise ValueError('Path-length cost requires shape release or same-event shape delivery')
+    if shape_release or shape_delivery or flexible_delivery:
+        if (algorithm(settings) != 'ppo' or training_stage(settings) != (2 if shape_delivery or flexible_delivery else 1)
+                or settings['action_interface'] != 'acceleration_direct_v1'
+                or settings['policy_rate_hz'] != 50 or settings['discount'] != 1
+                or settings.get('reward_scale', 1) != 1
+                or (settings['workspace_penalty']['weight'] != 0 and not (soft_fold_formation or soft_full_horizon_guide))
+                or returns.failure_return != -10 or returns.acceleration_cost_weight != 0
+                or timing.duration_s != (5 if first_hit_delivery else 4) or timing.post_hold_s != (0 if first_hit_delivery else .5)
+                or settings['acceleration_limit_mps2'] != [8., 8., 4.]
+                or 'plateau_detection' in settings
+                or settings['ppo'].get('action_noise') != dict(mode='ar1_v1', correlation_time_s=.1)):
+            raise ValueError('Shape release/delivery requires the approved reward/exploration contract')
+    if shape_delivery and (tuple(raw['request']) != (0,0,2,3)
+            or raw['strike_surface']['distance_m'] != 1.1
+            or raw['strike_surface']['width_m'] != 1
+            or raw['strike_surface']['height_m'] != .6
+            or matching.delivery_sigma_m != .7
+            or settings.get('movement_penalty') != dict(mode='path_length_v1', weight_per_cable_length=.25)):
+        raise ValueError('Shape delivery v1 requires the recorded fixed broad target and movement contract')
+    if not (shape_release or shape_delivery or flexible_delivery or horizontal_fold or retained_fold or continuous_whip) and 'action_noise' in settings.get('ppo', {}):
+        raise ValueError('Correlated exploration requires shape release or same-event shape delivery')
     # Current first-hit rewards accept crossings throughout the full episode.
     # Retained snapshots without this explicit selection keep old search bounds.
     event_end = (timing.duration_s+timing.post_hold_s-raw['mechanics']['tip_lag_s']
-                 if (matching.strike_mechanics_scale is not None
-                     or matching.reward_mode in ('directed_hit_v1', 'geometric_hit_quality_v1', 'directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1')) else delay+timing.duration_s)
+                 if (horizontal_fold or retained_fold or continuous_whip or matching.strike_mechanics_scale is not None
+                     or matching.reward_mode in ('directed_hit_v1', 'geometric_hit_quality_v1', 'directed_whip_v1', 'directed_discovery_bounded_v1', 'directed_shape_release_v1', 'directed_unified_fold_v1', 'flexible_excitation_v1', 'directed_fold_formation_v1', 'directed_fold_release_aligned_v1', 'first_hit_flexible_delivery_v2', 'flexible_delivery_v1', 'directed_shape_delivery_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1')) else delay+timing.duration_s)
     if recovery is not None:
         event_end = recovery.whip_duration_s-raw['mechanics']['tip_lag_s']
     mechanics = BendReleaseConfiguration(**raw['mechanics'], event_start_s=delay,
                                         event_end_s=event_end)
     cfg = Stage1Configuration(settings['scene'], settings['model'], timing, workspace,
         returns, tuple(raw['request']), mechanics, matching,
-        StrikeSurfaceConfiguration(**raw['strike_surface']), raw['episode'].get('termination', 'full_horizon_v1'), recovery)
-    if matching.reward_mode in ('directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1') and (training_stage(settings) != 1
+        StrikeSurfaceConfiguration(**raw['strike_surface']), raw['episode'].get('termination', 'full_horizon_v1'), recovery,
+        raw.get('horizontal_fold'), raw.get('retained_fold_delivery'), raw.get('continuous_whip'))
+    if matching.reward_mode in ('directed_whip_v1', 'directed_discovery_bounded_v1', 'directed_shape_release_v1', 'directed_unified_fold_v1', 'flexible_excitation_v1', 'directed_fold_formation_v1', 'directed_fold_release_aligned_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1') and (training_stage(settings) != 1
             or 'target_curriculum' in settings or 'curriculum' in settings):
         raise ValueError('Directed-whip discovery is Stage1 only, without automatic target curriculum')
-    if matching.reward_mode in ('directed_delivery_v1', 'directed_outreach_speed_delivery_v1', 'crossing_priority_delivery_v1') and (training_stage(settings) != 2
+    if matching.reward_mode in ('retained_fold_delivery_v1', 'first_hit_flexible_delivery_v2', 'flexible_delivery_v1', 'directed_shape_delivery_v1', 'directed_delivery_v1', 'directed_outreach_speed_delivery_v1', 'crossing_priority_delivery_v1') and (training_stage(settings) != 2
             or 'target_curriculum' in settings or 'curriculum' in settings):
         raise ValueError('Directed delivery is fixed-target Stage2 only, without automatic curriculum')
     precision = training_stage(settings) == 3 and settings.get('stage3_role') == 'precision_v1'
@@ -270,9 +446,9 @@ def task_configuration(raw, settings, model, scene):
     if recovery_mode and (cfg.strike_surface.width_m != .1 or cfg.strike_surface.height_m != .1
             or matching.center_sigma_m != .05):
         raise ValueError('Recovery Stage4 preserves fixed +/-5cm precision target and sigma')
-    if training_stage(settings) == 2 and 'target_curriculum' not in settings and matching.reward_mode not in ('directed_delivery_v1', 'directed_outreach_speed_delivery_v1', 'crossing_priority_delivery_v1'):
+    if training_stage(settings) == 2 and 'target_curriculum' not in settings and matching.reward_mode not in ('retained_fold_delivery_v1', 'first_hit_flexible_delivery_v2', 'flexible_delivery_v1', 'directed_shape_delivery_v1', 'directed_delivery_v1', 'directed_outreach_speed_delivery_v1', 'crossing_priority_delivery_v1'):
         raise ValueError('Stage2 without target curriculum requires a fixed-target directed delivery reward')
-    if ('training_stage' in settings and matching.reward_mode not in ('directed_whip_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1')
+    if ('training_stage' in settings and matching.reward_mode not in ('continuous_horizontal_whip_v1', 'continuous_horizontal_whip_soft_workspace_v2', 'continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6', 'retained_fold_delivery_v1', 'horizontal_fold_outreach_v2', 'directed_whip_v1', 'directed_discovery_bounded_v1', 'directed_shape_release_v1', 'directed_unified_fold_v1', 'flexible_excitation_v1', 'directed_fold_formation_v1', 'directed_fold_release_aligned_v1', 'first_hit_flexible_delivery_v2', 'flexible_delivery_v1', 'directed_shape_delivery_v1', 'directed_compact_whip_v1', 'directed_level_outreach_whip_v1', 'directed_outreach_speed_whip_v1', 'directed_outreach_height_whip_v1', 'crossing_priority_delivery_v1', 'directed_outreach_speed_delivery_v1', 'directed_outreach_speed_precision_v1', 'directed_delivery_v1', 'directed_precision_v1')
             and cfg.termination not in ('first_qualified_hit_v1', 'first_geometric_hit_v1')):
         raise ValueError('Staged presets require explicit first-hit termination')
     from training.curriculum import validate_curriculum
@@ -293,6 +469,11 @@ def load(path=DEFAULT):
     scene_text = project_path(settings['scene']).read_text(encoding='utf-8-sig')
     scene = load_configuration(project_path(settings['scene']))
     cfg = task_configuration(task, settings, model, scene)
-    return settings, dict(schema=run_schema(settings), reward_delivery='causal_best_event_differences_v1',
+    delivery = ('continuous_fold_rate_v1' if settings.get('continuous_whip_contract') else
+                'retained_coherent_progress_v1' if settings.get('retained_fold_delivery_contract') else
+                'terminal_event_zero_potential_v2' if settings.get('horizontal_fold_contract') else
+                'causal_transformed_net_differences_v1' if (settings.get('stage1_return_transform') or settings.get('stage2_return_transform'))
+                else 'causal_best_event_differences_v1')
+    return settings, dict(schema=run_schema(settings), reward_delivery=delivery,
         settings=deepcopy(settings), task=task,
         model=model, model_sources=sources, scene_text=scene_text), cfg, scene

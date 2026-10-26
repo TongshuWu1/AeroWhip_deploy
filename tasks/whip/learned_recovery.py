@@ -12,6 +12,37 @@ from .stage1 import Stage1Scorer, Stage1Score
 
 
 def make_scorer(rest, time, configuration, *, initial_position):
+    if configuration.matching.reward_mode in ('continuous_horizontal_whip_v1', 'continuous_horizontal_whip_soft_workspace_v2','continuous_horizontal_whip_distance_v3','continuous_horizontal_whip_full_horizon_v4', 'continuous_directional_whip_full_horizon_v5', 'continuous_directional_whip_four_second_v6'):
+        from .continuous_whip_environment import ContinuousWhipMetadata
+        return ContinuousWhipMetadata(rest,time,configuration,initial_position=initial_position)
+    if configuration.matching.reward_mode == 'retained_fold_delivery_v1':
+        from .retained_fold_delivery_environment import RetainedFoldDeliveryMetadata
+        return RetainedFoldDeliveryMetadata(rest,time,configuration,initial_position=initial_position)
+    if configuration.matching.reward_mode == 'horizontal_fold_outreach_v2':
+        from .horizontal_fold_environment import HorizontalFoldMetadata
+        return HorizontalFoldMetadata(rest,time,configuration,initial_position=initial_position)
+    if configuration.matching.reward_mode == 'first_hit_flexible_delivery_v2':
+        from .first_hit_delivery import FirstHitDeliveryScorer
+        return FirstHitDeliveryScorer(rest,time,configuration,initial_position=initial_position)
+    if configuration.matching.reward_mode == 'flexible_delivery_v1':
+        from .flexible_delivery import FlexibleDeliveryScorer
+        return FlexibleDeliveryScorer(rest,time,configuration,initial_position=initial_position)
+    if configuration.matching.reward_mode == 'flexible_excitation_v1':
+        from .excitation import ExcitationScorer
+        return ExcitationScorer(rest,time,configuration,initial_position=initial_position)
+    if configuration.matching.reward_mode == 'directed_unified_fold_v1':
+        from .unified_fold import UnifiedFoldScorer
+        return UnifiedFoldScorer(rest,time,configuration,initial_position=initial_position)
+    if configuration.matching.reward_mode in ('directed_fold_formation_v1','directed_fold_release_aligned_v1'):
+        from .fold_formation import FoldFormationScorer,AlignedFoldReleaseScorer
+        cls=FoldFormationScorer if configuration.matching.reward_mode=='directed_fold_formation_v1' else AlignedFoldReleaseScorer
+        return cls(rest,time,configuration,initial_position=initial_position)
+    if configuration.matching.reward_mode == 'directed_shape_delivery_v1':
+        from .shape_delivery import ShapeDeliveryScorer
+        return ShapeDeliveryScorer(rest,time,configuration,initial_position=initial_position)
+    if configuration.matching.reward_mode == 'directed_shape_release_v1':
+        from .shape_release import ShapeReleaseScorer
+        return ShapeReleaseScorer(rest,time,configuration,initial_position=initial_position)
     if configuration.recovery is None:
         return Stage1Scorer(rest,time,configuration,initial_position=initial_position)
     cls = (EventRecoveryScorer if configuration.recovery.timing_mode == 'after_first_geometric_hit_v1'

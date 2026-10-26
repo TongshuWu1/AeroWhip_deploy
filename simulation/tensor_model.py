@@ -200,7 +200,8 @@ class TensorModel:
         state = self.controller_state(state)
         return self.step_unchecked(state, command, controller)
 
-    def step_unchecked(self, state, command, controller, duration_s=None, *, start_s=0., batch=False):
+    def step_unchecked(self, state, command, controller, duration_s=None, *, start_s=0., batch=False,
+                       observer=None):
         """Sample controller on its absolute clock; retain motors and held wrench.
 
         Fitting supplies already-delayed, held packets. Arbitrary event schedules
@@ -225,7 +226,8 @@ class TensorModel:
                 next_tick = (math.floor(cursor/period)+1)*period
             until = min(end,next_tick)
             plant,motors = self.advance_motors_unchecked(state,state.motor_thrust_n,wrench,
-                                                        self.actuator_parameters,until-cursor,batch=batch)
+                                                        self.actuator_parameters,until-cursor,batch=batch,
+                                                        observer=observer,start_s=cursor)
             state = ControlledState(*integration_values(plant),motors,wrench)
             cursor = until
         return state
@@ -257,7 +259,7 @@ class TensorModel:
                                              actuator.tensor_parameters(device=self.device), duration_s)
 
     def advance_motors_unchecked(self, state, motor_thrust_n, requested_wrench,
-                                actuator_parameters, duration_s, *, batch=False):
+                                actuator_parameters, duration_s, *, batch=False, observer=None,start_s=0.):
         count, h = ((self.controller_substeps,self.controller_integration_dt)
                     if duration_s == self.controller_period_s else integration_steps(duration_s,self.physics_dt))
         allocate = lambda request: ops.motor_allocate(request,actuator_parameters)[1]
@@ -276,6 +278,14 @@ class TensorModel:
                     self._parameters(),h,times[i],self.iterations,weights,specification)
             values = self._batch_motor_substep(*args) if batch else ops.motor_substep(*args,False)
             state = IntegratedState(*values)
+            if observer is not None:
+                # Read-only task telemetry. No change to forces, motor integration,
+                # solver history or substep size; callers may retain a terminal prefix.
+                response_now=lambda initial,goal: ops.motor_response(initial,goal,actuator_parameters,(i+1)*h)
+                current_motors=(torch.vmap(response_now)(motor_thrust_n,target) if batch
+                                else response_now(motor_thrust_n,target))
+                observer(ControlledState(*integration_values(state),current_motors,requested_wrench),
+                         start_s+(i+1)*h)
         response = lambda initial,target: ops.motor_response(initial,target,actuator_parameters,duration_s)
         motors = torch.vmap(response)(motor_thrust_n,target) if batch else response(motor_thrust_n,target)
         return state, motors

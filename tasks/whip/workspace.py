@@ -9,8 +9,11 @@ import torch
 class WorkspacePenalty:
     weight: float
     distance_scale_m: float
+    mode: str = 'squared_excess_v1'
 
     def __post_init__(self):
+        if self.mode not in ('squared_excess_v1', 'bounded_density_v1'):
+            raise ValueError('Unknown workspace penalty mode')
         if (isinstance(self.weight, bool) or not math.isfinite(self.weight) or self.weight < 0
                 or isinstance(self.distance_scale_m, bool) or not math.isfinite(self.distance_scale_m)
                 or self.distance_scale_m <= 0):
@@ -30,6 +33,8 @@ class WorkspacePenalty:
         """
         radial, vertical = self.distances(positions, initial_positions, workspace)
         density = self.weight*((radial/self.distance_scale_m).square()+(vertical/self.distance_scale_m).square())
+        if self.mode == 'bounded_density_v1':
+            density = density.clamp_max(self.weight)
         return torch.where(observed[:, 1:], density[:, 1:]/(positions.shape[1]-1), 0.)
 
 @dataclass(frozen=True)

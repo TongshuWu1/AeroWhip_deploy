@@ -36,6 +36,12 @@ def stage_label(snapshot):
 
 
 def scoring_label(snapshot):
+    if snapshot['task'].get('matching', {}).get('reward_mode') == 'flexible_excitation_v1':
+        return 'Flexible distal excitation; target crossings diagnostic, motion review pending'
+    if snapshot['task'].get('matching', {}).get('reward_mode') == 'directed_unified_fold_v1':
+        return 'Unified fold preparation and aligned release; completed release checked separately'
+    if snapshot['task'].get('matching', {}).get('reward_mode') == 'directed_discovery_bounded_v1':
+        return 'Stage1 whip discovery with bounded workspace cost; motion review pending'
     if snapshot['task'].get('matching', {}).get('reward_mode') == 'crossing_priority_delivery_v1':
         return 'Actual target crossings with center guidance and whip support'
     if snapshot['task'].get('matching', {}).get('reward_mode') == 'directed_outreach_height_whip_v1':
