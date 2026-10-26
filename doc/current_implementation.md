@@ -841,6 +841,45 @@ Causal history initializes velocities; twist and initial motors remain assumptio
 where telemetry is absent. Command-driven and measured-boundary replay answer
 different model-validation questions.
 
+[estimate_clock_alignment.py](../take_processing/estimate_clock_alignment.py)
+writes the `<batch>/time_alignment.json` entry that `load_take` requires
+before commands are attached. The entry is keyed by take stem and records
+`offset_s` such that logger `time_s` = Motive `Time (Seconds)` + `offset_s`, plus
+the export and logger SHA-256s. It searches offsets on a 10 ms grid within
+`--max-lag` (default ±30 s) of aligned starts and refines to 0.1 ms. The score is
+the RMS distance between Motive drone positions and logger poses linearly
+interpolated at the shifted times; no interpolation spans a logger gap over 50 ms,
+and source data are not modified. Because the logger stamps receipt time, the
+offset includes transport latency. Entries are saved with `clock_verified: false`
+and the method, residuals and acceptance settings. Nothing is written if the RMS
+exceeds `--max-rms` (0.01 m), if an offset more than 0.25 s away scores within
+2× the best RMS (for example a take with no motion; start each take with a sharp
+vertical bump), or if the best offset is on the search boundary. Existing entries
+need `--replace`. Comparing positions directly assumes the export and the logger's
+`/poses` stream share a frame (Z up); a mismatch fails the RMS check rather than
+being corrected. These thresholds are initial engineering settings. On 2026-10-26
+the script was checked only on synthetic files, which recovered a known offset
+plus the injected 0–4 ms latency to within 1 ms. It has not been run on a
+recorded take.
+
+[check_take.py](../take_processing/check_take.py) is a read-only post-capture
+check of one Motive export. It reports:
+
+- export units, coordinate space and rotation type
+- capture and export rates, required to be exactly 100 Hz
+- frame-number jumps and off-nominal (non-10 ms) steps
+- drone, cable, unlabeled and rigid-body-marker labels
+- per-marker completeness and longest dropout
+- the hanging-cable direction, required to be −Z
+- complete, gap-free 100 Hz runs of at least `--min-window` (default 1.8 s =
+  1.7 s fit window + 0.1 s history)
+- whether `load_take` accepts the file and an alignment is applied
+- which logger sidecars are present
+
+It exits 1 on a blocking problem; a missing alignment is a warning. It does not
+assess command logs, motion content or fit quality. On 2026-10-26 it was also
+checked only on synthetic files.
+
 Handheld OptiTrack demonstrations are a proposed next source of motion evidence;
 no such recording is currently available in the project. The recommended pilot
 uses the same marked cable with a rigid tracked handle and a mounting boundary
@@ -894,3 +933,12 @@ Software and short numerical checks are not learned-policy or real-flight valida
 ## Dated change note — 2026-10-26 branch consolidation
 
 Merged commit 546188e (rigid-body marker exclusion, tag capture-update-2026-10-16) into main; the develop branch was removed. Live Motive validation, partial initialization and simulated-cable failure behavior remain pending. The detailed 2026-10-16 note is in commit 546188e.
+
+## Dated change note — 2026-10-26 take checks
+
+Added `take_processing/estimate_clock_alignment.py` (writes estimated, unverified
+`time_alignment.json` entries) and `take_processing/check_take.py` (read-only
+export check), with synthetic tests in `tests/test_take_checks.py`. `load_take`,
+fitting, splits and physical models are unchanged. Neither script has been run on
+a recorded take: the `backup-2026-10-16` recordings archive contains no flight
+takes. Thresholds remain to be confirmed on the first refit-collection takes.
