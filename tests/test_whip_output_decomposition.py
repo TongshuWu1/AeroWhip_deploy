@@ -2,8 +2,8 @@
 import unittest
 import numpy as np
 
-from evaluation.whip_measurement_examples import _chain
-from evaluation.whip_output_decomposition import decompose
+from aerowhip.evaluation.whip_measurement_examples import _chain
+from aerowhip.evaluation.whip_output_decomposition import decompose
 
 
 class OutputDecompositionTests(unittest.TestCase):

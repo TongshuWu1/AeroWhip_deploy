@@ -8,9 +8,9 @@ import math
 import numpy as np
 import torch
 
-from controllers.full_state_controller.tensor_controller import GeometricController
+from aerowhip.control.tensor_controller import GeometricController
 from helpers import SNAPSHOT
-from simulation.tensor_model import TensorModel
+from aerowhip.physics.tensor_model import TensorModel
 
 G = 9.80665
 

@@ -4,9 +4,9 @@ import tempfile
 
 import torch
 
-from experiment import DEFAULT, load
-from project_paths import ROOT, project_path
-from training.ppo import PPO
+from aerowhip.experiment import DEFAULT, load
+from aerowhip.paths import ROOT, project_path
+from aerowhip.learning.ppo import PPO
 
 # The default experiment file, parsed once.
 EXPERIMENT, SNAPSHOT, SCENE = load(DEFAULT)

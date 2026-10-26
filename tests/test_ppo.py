@@ -10,7 +10,7 @@ import torch
 from torch import nn
 
 from helpers import EXPERIMENT, PPOFixture, exact_state, small_agent
-from training.ppo import PPO, advantages, ar1_distribution, bounded_actor_step, clipped_loss, gaussian_kl, squashed_log_prob
+from aerowhip.learning.ppo import PPO, advantages, ar1_distribution, bounded_actor_step, clipped_loss, gaussian_kl, squashed_log_prob
 
 
 class OptimizerTests(PPOFixture, unittest.TestCase):

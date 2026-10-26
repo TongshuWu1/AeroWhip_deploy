@@ -3,7 +3,7 @@ from copy import deepcopy
 
 import pytest
 
-from experiment import DEFAULT, Experiment, identity, load
+from aerowhip.experiment import DEFAULT, Experiment, identity, load
 from helpers import SNAPSHOT
 
 RAW = SNAPSHOT['experiment']

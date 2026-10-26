@@ -11,7 +11,7 @@ import unittest
 import numpy as np
 
 from helpers import ENVIRONMENT, TASK
-from tasks.whip.fold_transport import FEATURE_SIZE, TRACE_FIELDS, FoldTransportEpisode, output_metrics
+from aerowhip.tasks.whip.fold_transport import FEATURE_SIZE, TRACE_FIELDS, FoldTransportEpisode, output_metrics
 
 
 REST = np.full(10, .1)

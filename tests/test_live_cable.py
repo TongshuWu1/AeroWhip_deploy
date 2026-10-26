@@ -3,9 +3,9 @@ import unittest
 
 import numpy as np
 
-from simulation.configuration import DEFAULT_MODEL
-from simulation.live_cable import LiveCable
-from simulation.model import Model
+from aerowhip.physics.configuration import DEFAULT_MODEL
+from aerowhip.physics.live_cable import LiveCable
+from aerowhip.physics.model import Model
 
 
 class LiveCableTests(unittest.TestCase):

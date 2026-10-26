@@ -3,7 +3,7 @@ import unittest
 
 import numpy as np
 
-from evaluation.whip_peak_timing import describe_speed_peaks
+from aerowhip.evaluation.whip_peak_timing import describe_speed_peaks
 
 
 class WhipPeakTimingTests(unittest.TestCase):

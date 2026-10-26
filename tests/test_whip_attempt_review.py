@@ -8,8 +8,8 @@ import unittest
 
 import numpy as np
 
-from evaluation.whip_attempt_review import evaluate_attempt
-from evaluation.whip_measurement_examples import kinematic_controls
+from aerowhip.evaluation.whip_attempt_review import evaluate_attempt
+from aerowhip.evaluation.whip_measurement_examples import kinematic_controls
 
 
 PROVENANCE = dict(reviewer='analytic_test_fixture', method='construction_interval',

@@ -10,8 +10,8 @@ import unittest
 
 import numpy as np
 
-from evaluation.whip_event_review import evaluate, snapshot_geometry
-from evaluation.whip_measurement_examples import kinematic_controls
+from aerowhip.evaluation.whip_event_review import evaluate, snapshot_geometry
+from aerowhip.evaluation.whip_measurement_examples import kinematic_controls
 from helpers import SNAPSHOT
 
 

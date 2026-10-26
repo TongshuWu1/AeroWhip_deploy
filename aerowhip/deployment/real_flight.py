@@ -1,0 +1,369 @@
+"""Measured OptiTrack display with optional prescribed-motion cable simulation."""
+import json
+from pathlib import Path
+import re
+import socket
+import subprocess
+from threading import Event, RLock, Thread
+from time import perf_counter
+
+import numpy as np
+
+from aerowhip.deployment.ros_bridge import vector
+from aerowhip.deployment.ros_real_bridge import PacketReader, cable_candidate_mask
+from aerowhip.physics.state import DroneState, quaternion_xyzw_to_rotation_matrix
+from aerowhip.viewer.display_state import CableDisplay, CableTrackingDisplay, DisplayFrame, Provenance, RobotDisplay
+from aerowhip.viewer.sources import DisplayFeed
+
+
+def select_real_robots(base, selected=None):
+    if not isinstance(base, dict) or not isinstance(base.get('robots'), dict):
+        raise ValueError('Crazyflies YAML must contain a robots mapping')
+    types = base.get('robot_types', {})
+    robots = []
+    for name, data in base['robots'].items():
+        robot_type = types.get(data.get('type'), {})
+        if data.get('enabled') is not True or robot_type.get('connection', 'crazyflie') != 'crazyflie':
+            continue
+        if selected is not None and name not in selected:
+            continue
+        if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', name):
+            raise ValueError(f'Invalid ROS robot name: {name!r}')
+        tracking = robot_type.get('motion_capture', {}).get('tracking')
+        if tracking not in ('vendor', 'librigidbodytracker'):
+            raise ValueError(f'{name} has no enabled motion-capture pose source')
+        robots.append(dict(name=name, type=data.get('type'),
+            initial_position=vector(data.get('initial_position'), 3), tracking=tracking,
+            provenance='Measured' if tracking == 'vendor' else 'Estimated'))
+    if not robots or (selected is not None and set(selected) != {r['name'] for r in robots}):
+        raise ValueError('Select enabled Crazyflies with motion capture; no matching robots found')
+    return robots
+
+
+class RealFlightFeed(DisplayFeed):
+    def __init__(self, configuration, robots, frame_id, session, *, cable_model=None, tracking_settings=None, capture_only=False):
+        self.robots = {r['name']: r for r in robots}
+        self.frame_id, self.session = frame_id, session
+        self.source_label = 'Hand capture · OptiTrack' if capture_only else 'Real flight · OptiTrack'
+        self.sequence = -1
+        self.generation = 0
+        self.transport = None
+        self.cable_model = cable_model
+        self._record_lock = RLock()
+        self._recorder = None
+        self.recording_directory = None
+        self.recording_metadata = None
+        self.last_recording = None
+        self.last_recording_error = None
+        self.tracker = None
+        self.tracking_display = None
+        self.tracking_generation = 0
+        self.tracking_status = 'awaiting point cloud'
+        self.reconstruction = None
+        if tracking_settings is not None:
+            from aerowhip.deployment.cable_tracking import CableTracker
+            if len(self.robots) != 1:
+                raise ValueError('Experimental cable tracking requires one selected robot (--robot)')
+            self.tracker = CableTracker(tracking_settings)
+        if cable_model is not None:
+            from aerowhip.physics.live_cable import LiveCable
+            if (not np.allclose(configuration.platform.attachment_offset_body_m,
+                    cable_model.attachment_tracking, atol=1e-12, rtol=0)
+                    or not np.array_equal(configuration.platform.cable_segment_lengths_m,
+                        cable_model.config['cable']['marker_interval_lengths_m'])):
+                raise ValueError('Viewer attachment/cable lengths must match the selected cable model')
+            self.cables = {name: LiveCable(cable_model) for name in self.robots}
+        else:
+            self.cables = {}
+        super().__init__(DisplayFrame(0., (), frame_id=frame_id,
+            source_label=self.source_label+' · awaiting capture'), configuration)
+
+    def receive(self, packet):
+        with self._record_lock:
+            recorder = self._recorder
+            if recorder is not None:
+                recorder.event('capture', packet=packet)
+            self._receive(packet)
+            if recorder is not None:
+                if packet.get('kind') == 'markers':
+                    recorder.event('cable_reconstruction', result=self.reconstruction)
+                elif packet.get('kind') == 'state':
+                    recorder.frame(self.latest)
+
+    def configure_recording(self, directory, metadata):
+        with self._record_lock:
+            self.recording_directory = Path(directory)
+            self.recording_metadata = metadata
+
+    def start_recording(self):
+        from aerowhip.viewer.recording import DisplayRecorder
+        with self._record_lock:
+            if self.recording_directory is None:
+                raise RuntimeError('Recording output is not configured')
+            if self._recorder is not None:
+                raise RuntimeError('Stop the current recording before starting another')
+            self._recorder = DisplayRecorder(self.recording_directory, self.configuration,
+                self.recording_metadata, self.latest)
+            self.last_recording_error = None
+            return self._recorder.manifest
+
+    def stop_recording(self):
+        with self._record_lock:
+            if self._recorder is None:
+                return self.last_recording
+            self.last_recording = self._recorder.close()
+            self.last_recording_error = self._recorder.error
+            self._recorder = None
+            return self.last_recording
+
+    @property
+    def recording_status(self):
+        with self._record_lock:
+            recorder = self._recorder
+            return dict(active=recorder is not None, writing=bool(recorder and recorder.active),
+                duration_s=0. if recorder is None else perf_counter()-recorder.started,
+                frames=0 if recorder is None else recorder.frame_count,
+                path=self.last_recording if recorder is None else recorder.manifest,
+                error=self.last_recording_error if recorder is None else recorder.error)
+
+    def report_transport_error(self, error):
+        with self._record_lock:
+            self.publish(self.latest.frame, error=error)
+            if self._recorder is not None:
+                self._recorder.event('transport_error', error=error)
+                self._recorder.frame(self.latest)
+
+    def _receive(self, packet):
+        if packet.get('session') != self.session or packet.get('frame_id') != self.frame_id:
+            raise ValueError('Real-view session/frame mismatch')
+        if packet.get('kind') == 'ready':
+            return
+        if packet.get('kind') == 'markers':
+            self.receive_markers(packet)
+            return
+        if packet.get('kind') != 'state' or type(packet.get('sequence')) is not int or packet['sequence'] <= self.sequence:
+            raise ValueError('Unexpected/regressing real-view packet')
+        time_s = float(packet['time_s'])
+        if not np.isfinite(time_s):
+            raise ValueError('Invalid display timeline')
+        generation = packet.get('generation')
+        if type(generation) is not int or generation < self.generation:
+            raise ValueError('Invalid/regressing capture generation')
+        if generation == self.generation and time_s < self.latest.frame.time_s:
+            raise ValueError('Display clock regressed without a generation change')
+        if generation != self.generation:
+            for cable in self.cables.values():
+                cable.reset()
+            if self.tracker is not None and generation != self.tracking_generation:
+                self.tracker.reset()
+                self.tracking_display = None
+                self.tracking_generation = generation
+        if packet.get('pose_samples_complete', True) is not True:
+            for cable in self.cables.values():
+                cable.fail('Cable capture sample buffer overflowed; restart the real viewer')
+        # Batched samples were verified in the ROS capture callback. Complete
+        # that accepted prefix even if heartbeat verification changes afterward.
+        samples = packet.get('pose_samples')
+        if samples is None:
+            samples = packet.get('robots', []) if packet.get('capture_type') in (
+                'optitrack', 'optitrack_closed_source') else []
+        for data in samples:
+            if data['name'] in self.cables:
+                self.cables[data['name']].observe(float(data['time_s']),
+                    vector(data['position_world_m'], 3), vector(data['quaternion_xyzw'], 4))
+        displays = []
+        for data in packet.get('robots', []):
+            name = data['name']
+            if name not in self.robots:
+                raise ValueError('Unconfigured robot in real-view packet')
+            p = np.asarray(vector(data['position_world_m'], 3))
+            q = np.asarray(vector(data['quaternion_xyzw'], 4))
+            attachment = p+quaternion_xyzw_to_rotation_matrix(q)@self.configuration.platform.attachment_offset_body_m
+            simulated = self.cables.get(name)
+            cable = None if simulated is None or simulated.latest is None else CableDisplay(
+                simulated.latest.time_s, Provenance.SIMULATED,
+                simulated.latest.positions_world_m, self.cable_model.marker_indices)
+            displays.append(RobotDisplay(name, float(data['time_s']),
+                Provenance(self.robots[name]['provenance']), DroneState(p, q, None, None), attachment,
+                cable=cable,
+                cable_tracking=(self.tracking_display if self.tracking_display is not None
+                    and self.tracking_display.time_s <= time_s else None),
+                trajectory_epoch=packet.get('flight_epochs', {}).get(name, 0)))
+        label = self.source_label
+        if self.cables:
+            label += ' · simulated cable'
+        if self.tracker is not None:
+            label += ' · cable estimate: '+self.tracking_status
+            if self.tracking_display is not None and time_s-self.tracking_display.time_s > .25:
+                label += ' (stale)'
+        if packet.get('capture_type') is None:
+            label += ' · awaiting capture source'
+        if packet.get('missing_robots'):
+            label += ' · missing: '+', '.join(packet['missing_robots'])
+        issues = packet.get('issues', {})
+        errors = [f'{name}: {value}' for name, value in issues.items()]
+        errors.extend(f'{name}: {cable.error}' for name, cable in self.cables.items() if cable.error)
+        error = '; '.join(errors) or None
+        frame = DisplayFrame(time_s, tuple(displays), frame_id=self.frame_id, source_label=label)
+        self.publish(frame, error=error)
+        self.sequence, self.generation = packet['sequence'], generation
+
+    def receive_markers(self, packet):
+        if self.tracker is None:
+            raise ValueError('Unexpected cable cloud without tracking enabled')
+        self.reconstruction = None
+        generation = packet['generation']
+        if generation < self.tracking_generation:
+            self.reconstruction = dict(status='late cloud from an old generation', stamp_ns=packet['stamp_ns'])
+            return
+        if generation != self.tracking_generation:
+            self.tracker.reset()
+            self.tracking_display = None
+            self.tracking_generation = generation
+        matching = [r for r in packet['robots'] if r['name'] in self.robots]
+        if len(matching) != 1:
+            self.tracking_status = 'cloud has no matching drone pose'
+            self.tracking_display = None
+            self.reconstruction = dict(status=self.tracking_status, stamp_ns=packet['stamp_ns'])
+            return
+        data = matching[0]
+        if data['stamp_ns'] != packet['stamp_ns']:
+            raise ValueError('Cable cloud/pose timestamp mismatch')
+        root = np.asarray(vector(data['position_world_m'], 3))+quaternion_xyzw_to_rotation_matrix(
+            vector(data['quaternion_xyzw'], 4))@self.configuration.platform.attachment_offset_body_m
+        points = np.asarray(packet['points_world_m'], dtype=float).reshape(-1, 3)
+        try:
+            eligible = np.asarray(cable_candidate_mask(packet.get('point_metadata'), len(points)), dtype=bool)
+            candidates = points.copy()
+            candidates[~eligible] = np.nan
+            result = self.tracker.observe(float(packet['time_s']), root, candidates)
+        except ValueError as exc:
+            self.tracking_status = str(exc)
+            self.tracking_display = None
+            self.reconstruction = dict(status=str(exc), stamp_ns=packet['stamp_ns'])
+            return
+        self.reconstruction = dict(result, stamp_ns=packet['stamp_ns'], generation=generation, robot=data['name'],
+            excluded_point_indices=np.flatnonzero(~eligible).tolist(),
+            candidate_filter='Observed unassociated passive NatNet labeled markers; raw points retained')
+        observed = np.array([p is not None for p in result['positions_world_m']])
+        positions = np.array([p if p is not None else [0., 0., 0.] for p in result['positions_world_m']])
+        self.tracking_status = f'{result["observed_count"]}/{result["marker_count"]} · {result["status"]}'
+        self.tracking_display = CableTrackingDisplay(result['time_s'], root, positions,
+            observed, np.asarray(result['confidence']), points[np.isfinite(points).all(axis=1)], result['status'])
+
+    def close(self):
+        if self.transport:
+            self.transport.close()
+        self.stop_recording()
+        super().close()
+
+
+class RealFlightTransport:
+    def __init__(self, source, evidence, *, port=0):
+        self.source, self.evidence = source, evidence
+        self.stop, self.connected = Event(), Event()
+        self.peer = None
+        self.error = None
+        self.listener = socket.socket()
+        self.listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            self.listener.bind(('127.0.0.1', port))
+            self.listener.listen(1)
+            self.listener.settimeout(.1)
+        except Exception:
+            self.listener.close()
+            raise
+        self.port = self.listener.getsockname()[1]
+        self.thread = Thread(target=self.run, name='OptiTrack display', daemon=True)
+        source.transport = self
+        self.thread.start()
+
+    def run(self):
+        reader = PacketReader()
+        try:
+            while not self.stop.is_set() and self.peer is None:
+                try:
+                    self.peer, _ = self.listener.accept()
+                    self.peer.settimeout(.1)
+                except socket.timeout:
+                    continue
+            while not self.stop.is_set():
+                try:
+                    data = self.peer.recv(65536)
+                except socket.timeout:
+                    continue
+                if not data:
+                    raise ConnectionError('OptiTrack display relay disconnected')
+                for packet in reader.feed(data):
+                    # Retain the input before association so failed/ambiguous
+                    # reconstructions cannot silently remove source evidence.
+                    self.evidence.write('capture_display', packet=packet)
+                    self.source.receive(packet)
+                    if packet['kind'] == 'markers':
+                        self.evidence.write('cable_reconstruction', result=self.source.reconstruction)
+                    if packet['kind'] == 'ready':
+                        self.connected.set()
+        except Exception as exc:
+            if not self.stop.is_set():
+                self.error = str(exc)
+                self.source.report_transport_error(self.error)
+                self.evidence.write('display_error', error=self.error)
+        finally:
+            if self.peer:
+                self.peer.close()
+
+    def close(self):
+        if self.stop.is_set():
+            return
+        self.stop.set()
+        if self.peer:
+            try:
+                self.peer.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+        self.thread.join(5.)
+        self.listener.close()
+        if self.thread.is_alive():
+            raise RuntimeError('OptiTrack display reader did not stop')
+
+
+def stop_real_stack(container, session, signum=2):
+    """Signal only the launch group owned by this session."""
+    script = '''import json,os,signal,sys
+from pathlib import Path
+session,signum=sys.argv[1],int(sys.argv[2])
+record=Path('/tmp')/('aerowhip-real-'+session+'.json')
+active=False
+if record.exists():
+    data=json.loads(record.read_text()); pid=data['pid']
+    try:
+        environment=Path('/proc')/str(pid)/'environ'
+        owned=('AEROWHIP_REAL_SESSION='+session).encode() in environment.read_bytes().split(b'\\0')
+        if data['session'] != session or not owned or os.getpgid(pid) != pid:
+            raise RuntimeError('Refusing to signal an unowned ROS launch')
+        os.killpg(pid,signum)
+        active=True
+    except (ProcessLookupError,FileNotFoundError):
+        pass
+print(json.dumps(active))
+'''
+    result = subprocess.run(['docker', 'exec', '-i', container, 'python3', '-c', script,
+                    session, str(signum)], check=True, capture_output=True, text=True)
+    return json.loads(result.stdout)
+
+
+def existing_real_nodes(container, domain):
+    script = '''import json,time,rclpy
+from rclpy.node import Node
+rclpy.init(args=[])
+n=Node('aerowhip_real_launch_check',enable_rosout=False,start_parameter_services=False)
+end=time.monotonic()+1.5
+while time.monotonic()<end: rclpy.spin_once(n,timeout_sec=.05)
+print(json.dumps(n.get_node_names_and_namespaces()))
+n.destroy_node();rclpy.shutdown()
+'''
+    result = subprocess.run(['docker', 'exec', '-i', '-e', f'ROS_DOMAIN_ID={domain}', container,
+        'bash', '-lc', 'source /opt/ros/jazzy/setup.bash; source /opt/crazyswarm2_ws/install/setup.bash; exec python3 -c "$1"',
+        'aerowhip-real-check', script], check=True, capture_output=True, text=True)
+    return [name for name, namespace in json.loads(result.stdout)
+            if name in ('crazyflie_server', 'motion_capture_tracking', 'motion_capture_tracking_node')]

@@ -3,8 +3,8 @@ import unittest
 
 import numpy as np
 
-from evaluation.whip_measurement_examples import kinematic_controls
-from evaluation.whip_measurements import extract_measurements, track_curvature
+from aerowhip.evaluation.whip_measurement_examples import kinematic_controls
+from aerowhip.evaluation.whip_measurements import extract_measurements, track_curvature
 
 
 class WhipMeasurementTests(unittest.TestCase):
@@ -102,7 +102,7 @@ class WhipEventReviewTests(unittest.TestCase):
                         if c['name'] == 'earlier_wave_later_rigid_crossing')
 
     def test_plane_touches_dwells_and_unfinished_passages_are_not_crossings(self):
-        from evaluation.whip_event_review import measure_crossings
+        from aerowhip.evaluation.whip_event_review import measure_crossings
         surface = dict(normal_world=[1., 0., 0.], center_world_m=[0., 0., 0.],
                        width_m=1., height_m=1.)
 

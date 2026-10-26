@@ -8,7 +8,7 @@ from dataclasses import replace
 import pytest
 import torch
 
-from envs.environment import make_environment
+from aerowhip.envs.environment import make_environment
 from helpers import EXPERIMENT, SCENE, SNAPSHOT, TASK
 
 

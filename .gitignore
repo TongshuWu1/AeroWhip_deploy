@@ -9,8 +9,8 @@ __pycache__/
 /build/
 /dist/
 *.pyd
-/simulation/_native*.so
-/simulation/_tensor_native*.so
+/aerowhip/physics/_native*.so
+/aerowhip/physics/_tensor_native*.so
 /runs/
 /data/take_processing/catalog.json
 /data/recordings/*
@@ -22,5 +22,5 @@ __pycache__/
 /.env.*
 !/.env.example
 
-# Locally regenerated refactoring reference (tools/equivalence_baseline.py --record at 375b44e).
+# Locally regenerated refactoring reference (scripts/equivalence_check.py --record at 375b44e).
 /tests/data/*.pt

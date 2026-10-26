@@ -9,8 +9,8 @@ import unittest
 import numpy as np
 
 from helpers import project_temporary
-from take_processing import check_take, estimate_clock_alignment
-from take_processing.take_data import load_take
+from aerowhip.takes import check_take, estimate_clock_alignment
+from aerowhip.takes.take_data import load_take
 
 OFFSET_S = 3.2173
 
