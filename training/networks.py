@@ -81,4 +81,3 @@ class Actor(nn.Module):
         log_p = (-.5*((raw-mean)/log_std.exp()).square()-log_std-.5*math.log(2*math.pi)
                  -2*(math.log(2)-raw-F.softplus(-2*raw))).sum(-1)
         return action, log_p
-
