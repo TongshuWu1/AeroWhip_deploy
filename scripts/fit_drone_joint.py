@@ -21,6 +21,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aerowhip.fitting import flight_drone
+from aerowhip.fitting.progress import Progress
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from fit_cable_flights import nelder_mead
@@ -89,7 +90,8 @@ def main():
         return rows
     t0 = time.time()
     start = report('start (adopted)', x0)
-    x, value, history = nelder_mead(objective, x0, step, iterations=args.iterations)
+    progress = Progress(args.output, stage='drone', parameters=list(NAMES), x0=x0, unit='m')
+    x, value, history = nelder_mead(objective, x0, step, iterations=args.iterations, progress=progress)
     x = clean(list(x))
     passes = [report('best', x) for _ in range(2)]
     reproduced = passes[0] == passes[1]
@@ -101,8 +103,12 @@ def main():
         windows=dict(duration_s=2., stride_s=1., fit={k: len(v) for k, v in train.items()}, held_out={k: len(v) for k, v in held.items()},
                      cable_fit={k: len(v) for k, v in cable_train.items()}, cable_held_out={k: len(v) for k, v in cable_held.items()}),
         start=dict(x=x0, **start), best=dict(x=list(map(float, x)), **passes[0], reproduced_twice=reproduced),
+        adopt=dict(inertia_xy_kg_m2=float(base['drone']['inertia_body_about_com_kg_m2'][0][0]*x[0]),
+                   arm_scale=float(x[1]), motor_response_s=float(x[2]), command_delay_s=float(x[3]),
+                   body_drag_s_inv=[float(x[4]), float(x[4]), float(x[5])]),
         search=dict(method='Nelder-Mead, raw RMS position error, drone-only flights', step=step, history=history, evaluations=evaluations),
         seconds=time.time()-t0), indent=1))
+    progress.done(x, value)
 
 
 if __name__ == '__main__':

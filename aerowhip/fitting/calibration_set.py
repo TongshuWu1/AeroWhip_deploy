@@ -51,6 +51,9 @@ def flight_windows(folder, *, root=DEFAULT_ROOT, duration_s=2., stride_s=1., min
     flight = load(folder)
     if not cable:
         flight.markers = None
+    elif flight.markers is None and (Path(folder)/'cloud.jsonl').exists():
+        # a cable flight without offline labels would give marker-less windows that every replay fails on
+        raise ValueError(f'{folder}: cable markers not labelled yet (run scripts/label_sequence.py on it)')
     m = manifest(root)
     entry = next((f for f in m.data['flights'] if m.folder(f) == Path(folder)), None)
     until, excluded = m.usable(entry) if entry else (None, ())

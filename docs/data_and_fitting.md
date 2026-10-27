@@ -153,15 +153,33 @@ saved with `clock_verified: false`.
 
 ## Fitting
 
-Fitting uses the calibration flights of one session through the native engine, on 2 s
-windows every 1 s inside each flight's usable span (`aerowhip.fitting.calibration_set`).
+Fitting uses the calibration flights through the native engine, on 2 s windows every 1 s
+inside each flight's usable span (`aerowhip.fitting.calibration_set`). Flights are stored by
+category (`<setup>/<take>/<NNN>/`) and every flight of a category is pooled, whatever the day.
 Which flights exist, their roles (`fit`, `held_out`, `hover`, `excluded`), usable spans and
 logs, the vehicle measurements and the bench tests all come from one manifest beside the
 data, `model_calibration.yaml` (`aerowhip.fitting.manifest`), written during the sessions
 and checked by the data repository's `check_calibration_data.py`; nothing about the data set
-is hard-coded in the fitting code. In the 2026-10-27 session `random_high` and `whip` are held
-out of every fit and scored only with the final parameters. Every reported number is computed
-twice.
+is hard-coded in the fitting code. At present every flight has the role `fit`; evaluation
+motions not used by any fit are to be recorded separately. A cable flight is used only once its
+markers are labelled (`scripts/label_sequence.py` writes `cable_labels.npz`); loading an
+unlabelled cable flight is an error. Every reported number is computed twice.
+
+The stages, their scripts and how a result is adopted into the configuration files are listed
+in `aerowhip.fitting.stages`. The Model Fit window (`python -m aerowhip.ui.fitting`) runs a
+stage as its own process, follows its progress (each fit writes `<result>.progress.jsonl`
+beside its result, `aerowhip.fitting.progress`; fits started from a terminal are followed
+too), compares a result with the configuration and adopts it only on an explicit click; each
+adoption is appended to `runs/fits/adoptions.jsonl`. New results are written to
+`runs/fits/<stage>/`.
+
+0. **Thrust map** (`scripts/fit_thrust_map.py`): from the motor PWM logs of the drone-only
+   flights, the map T = κ(1+β(V−V0))/4 Σ(pwm/massThrust)^p is fitted so that its mean over
+   2500-count PWM bins matches the thrust the measured motion requires (mass × acceleration
+   along the body axis, with the drone drag). The four motors swing several thousand counts
+   about their mean in flight, which the simulated firmware does not reproduce; because the map
+   is convex this raises the real mean thrust, and the measured factor (about 1.07) is folded
+   into the collective κ the simulation uses.
 
 1. **Drone pipeline** (`aerowhip.fitting.flight_drone`, `scripts/fit_drone_flights.py`,
    `scripts/fit_firmware_drone.py`): the sent acceleration commands drive the flight

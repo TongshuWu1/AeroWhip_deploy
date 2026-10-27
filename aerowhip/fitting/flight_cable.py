@@ -164,7 +164,7 @@ def evaluate(native_model, windows, *, state_width=6, threads=None):
 
 def rms(errors):
     """Pooled RMS (m) over every seen marker of every successful window; NaN if any failed."""
-    if any(e is None for e in errors):
+    if not errors or any(e is None for e in errors):
         return math.nan
     values = np.concatenate([e[np.isfinite(e)] for e in errors])
     return float(np.sqrt(np.mean(values**2)))

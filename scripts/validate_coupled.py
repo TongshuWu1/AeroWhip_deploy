@@ -21,6 +21,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aerowhip.fitting import flight_drone
+from aerowhip.fitting.progress import Progress
 from aerowhip.fitting.calibration_set import folders, flight_windows, is_held_out
 from aerowhip.fitting.flight_cable import with_cable
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
@@ -75,24 +76,28 @@ def main():
         models = {'fitted (drone pipeline + cable v2)': coupled_config(base, drone_x, cable_values),
                   'unfitted (previous simulator gains, configured cable)': coupled_config(
                       base, [20., 1., .015, .03], {k: base['cable'][k] for k in cable_values})}
-    flights = {}
+    flights, held = {}, {}
     for motion, folder in folders('cf_2').items():
         flight = load(folder)
         flights[motion] = [(w, flight) for w in flight_windows(folder)]
+        held[motion] = is_held_out(folder)
+    progress = Progress(args.output, stage='coupled', parameters=[], x0=[], unit='m')
     results = {}
     for name, config in models.items():
         rows = {}
         for motion, items in flights.items():
             first, second = score(config, firmware, items), score(config, firmware, items)
             first['reproduced_twice'] = first == second
-            first['held_out'] = is_held_out(folder)
+            first['held_out'] = held[motion]
             rows[motion] = first
-            print(f'{name[:28]:28s} {motion:12s} {"HELD" if is_held_out(folder) else "    "} drone {first["drone_debiased_rms_m"]*1e3:6.1f} mm debiased '
+            progress.write(kind='flight', name=motion, model=name, **{k: v for k, v in first.items() if not isinstance(v, (list, dict))})
+            print(f'{name[:28]:28s} {motion:12s} {"HELD" if held[motion] else "    "} drone {first["drone_debiased_rms_m"]*1e3:6.1f} mm debiased '
                   f'({first["drone_raw_rms_m"]*1e3:5.0f} raw)  cable shape {first["cable_shape_rms_m"]*1e3:5.1f} mm  tip {first["tip_shape_rms_m"]*1e3:5.1f} mm  '
                   f'failed {first["failed"]}  reproduced {first["reproduced_twice"]}', flush=True)
         results[name] = rows
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(dict(drone_x=drone_x, cable=cable_values, firmware=firmware, results=results), indent=1))
+    progress.done([], float('nan'))
 
 
 if __name__ == '__main__':

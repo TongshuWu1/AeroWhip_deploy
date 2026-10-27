@@ -18,6 +18,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aerowhip.fitting import flight_cable
+from aerowhip.fitting.progress import Progress
 from aerowhip.fitting.calibration_set import split
 from aerowhip.physics.model import Model
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
@@ -42,7 +43,16 @@ def score(config, groups, values):
     return pooled, per
 
 
-def nelder_mead(f, x0, step, *, iterations=80, tolerance=2e-5):
+def nelder_mead(f, x0, step, *, iterations=80, tolerance=2e-5, progress=None):
+    """Minimise f from x0. progress (aerowhip.fitting.progress.Progress or None) receives every
+    evaluation and every iteration's best point."""
+    if progress is not None:
+        objective = f
+
+        def f(x):
+            value = objective(x)
+            progress.evaluation(x, value)
+            return value
     n = len(x0)
     simplex = [np.array(x0, float)]+[np.array(x0, float)+np.eye(n)[i]*step[i] for i in range(n)]
     values = [f(x) for x in simplex]
@@ -51,6 +61,8 @@ def nelder_mead(f, x0, step, *, iterations=80, tolerance=2e-5):
         order = np.argsort(values)
         simplex, values = [simplex[i] for i in order], [values[i] for i in order]
         history.append((it, float(values[0]), simplex[0].tolist()))
+        if progress is not None:
+            progress.iteration(it, values[0], simplex[0])
         print(f'  iteration {it:2d}  best {values[0]*1e3:.3f} mm  x {np.round(simplex[0], 4).tolist()}', flush=True)
         if values[-1]-values[0] < tolerance:
             break
@@ -109,7 +121,9 @@ def main():
     initial_train, initial_per = score(config, train, start)
     initial_held, initial_held_per = score(config, held, start)
     print(f'start: fit {initial_train*1e3:.2f} mm, held out {initial_held*1e3:.2f} mm', flush=True)
-    x, value, history = nelder_mead(objective, x0, step, iterations=args.iterations)
+    names = ['log10 EI', 'log10 Cb', 'Cd', 'log10 linear drag']+(['log10 Cb saturation rate'] if len(x0) == 5 else [])
+    progress = Progress(args.output, stage='cable', parameters=names, x0=x0, unit='m')
+    x, value, history = nelder_mead(objective, x0, step, iterations=args.iterations, progress=progress)
     best = to_values(x)
     passes = [score(config, train, best)+score(config, held, best) for _ in range(2)]
     reproduced = passes[0] == passes[1]
@@ -128,6 +142,7 @@ def main():
                            +(', log10 Cb saturation rate)' if len(x0) == 5 else ')'), start=list(map(float, x0)),
                     step=step, history=history,
                     evaluations=evaluations), seconds=time.time()-t0), indent=1))
+    progress.done(x, value)
 
 
 if __name__ == '__main__':

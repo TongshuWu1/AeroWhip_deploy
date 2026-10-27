@@ -175,7 +175,7 @@ def evaluate(config, firmware, items, *, threads=None, delay_s=None):
 
 def rms(errors, *, debiased=False):
     """Pooled RMS position error (m); NaN if any window failed."""
-    if any(e is None for e in errors):
+    if not errors or any(e is None for e in errors):
         return math.nan
     e = np.concatenate([debias(x) if debiased else x for x in errors])
     return float(np.sqrt(np.mean(np.sum(e**2, axis=1))))

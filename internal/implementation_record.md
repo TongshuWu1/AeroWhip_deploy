@@ -1648,3 +1648,42 @@ User's request: one systematic, automated data collection with a single calibrat
   which a random corruption would have broken; that rule must stay. The user was told; BIOS update,
   default power settings and a memory test are recommended.
 - 111 tests pass (twice).
+
+## Dated change note — 2026-10-28 Model Fit window; unlabelled cable flights; fitting audit
+
+- **Model Fit window** ([ui/fitting/model_fit.py](../aerowhip/ui/fitting/model_fit.py),
+  `python -m aerowhip.ui.fitting`): pipeline (thrust map → drone → cable → coupled, residual later)
+  with each stage's status ('in use' when the newest result equals the configuration within 1e-4
+  relative), Progress (best loss and parameters, smooth PCHIP curves through the improving
+  iterations; live for fits started anywhere), Result (errors before/after, parameters vs the
+  configuration, per-flight chart, explicit Adopt with confirmation), Data (manifest measurements,
+  flights by category with cable-label counts, the data checker), Runs (runs/fits and the older
+  runs/calibration_* results). Checked visibly on the desktop; no adoption was made from it.
+- [fitting/progress.py](../aerowhip/fitting/progress.py): `<result>.progress.jsonl` (start, evaluation,
+  iteration, flight, done, failed). Written by fit_thrust_map, fit_drone_joint, fit_cable_flights
+  (via `nelder_mead(progress=...)`) and validate_coupled.
+- [fitting/stages.py](../aerowhip/fitting/stages.py): stage list, current values, result summaries and
+  `adopt` (writes only the stage's keys; JSON keeps CRLF/indent, TOML keeps comments). Drone results
+  written before the `adopt` block are converted only if their absolute start values equal the
+  configuration now. A drone result that refits the arm is refused.
+- `scripts/fit_thrust_map.py` (new, stage 1 from motor logs; see docs). Rerun into
+  `runs/fits/thrust_map/20261027-174424.json`: κ 0.5171, p 2.188, β 0.2489, bins 0.66 %, spread factor
+  1.072 → collective κ 0.5544. The configuration holds 0.5533 (the 1.07 factor set by hand); **not
+  adopted**. `fit_drone_joint.py` now writes an `adopt` block with absolute values.
+- **Unlabelled cable flights:** decay_x/001, line_star_xy/001, strokes/002, random_high/002 and
+  whip/002 (cf_2) had no `cable_labels.npz`. The cable fit started from the window scored every
+  evaluation 1.0 (every window failed, the failure was swallowed); it was stopped, no result was
+  written. `calibration_set.flight_windows` now raises for a cable flight without labels.
+  `scripts/label_sequence.py` was run on the five flights.
+- **Audit of the fitting methods** (independent read of the code; the items below were checked
+  against the code and the retained results): no held-out data at present (all roles `fit`), and
+  when whip and random_high were held out the cable refit lowered the fit error 33.5 → 30.1 mm and
+  raised the held-out error 51.2 → 56.6 mm (`cable_fit_v2.json`); the stage-2 objective is the raw
+  error, and the fixed-arm run lowered it 200.7 → 188.0 mm while the debiased error rose 34.9 →
+  36.2 mm; EI does not move the cable loss (×3.2 → 0.002 mm, `cable_fit_linear_2ms.json`); the
+  thrust-map result depends on the acceleration lag and the 1.2 N floor (lag 0–70 ms: p 1.93–2.19,
+  collective κ 0.55–0.64; floor 0.8 N: p 2.35); the drone stage's cable cross-check starts the cable
+  straight down with the root velocity (`engine.cpp` `initial_state` without markers), not from the
+  measured markers; one failed window makes an evaluation 1.0. Method changes are proposed to the
+  user, none made.
+- Manifest: `plate_coverage_of_prop_discs` removed (the user: negligible).

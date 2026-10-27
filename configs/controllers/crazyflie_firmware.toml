@@ -1,11 +1,12 @@
 # Crazyflie flight pipeline below the host, firmware law: the ported Mellinger controller
 # (native/firmware.hpp) with the gains of the flight configuration, and the delivered-thrust map
-# identified on the 2026-10-27 drone-only flights (shared with crazyflie_flight.toml).
+# identified on the 2026-10-27 drone-only flights' motor logs (stage 1, scripts/fit_thrust_map.py:
+# PWM-bin means with a 40 ms motor lag; runs/calibration_2026-10-27/thrust_map_fit.json).
 law = "firmware"
 firmware_mass_kg = 0.144        # ctrlMel.mass on cf_2 (also in [ctrlMel])
-thrust_scale = 0.5529           # kappa, N^(1-p): delivered = kappa*(1+beta*(V-V0))*T_cmd^p, T_cmd collective-equivalent N
-thrust_exponent = 2.2
-voltage_slope_v_inv = 0.1765
+thrust_scale = 0.5533           # kappa_eff = 0.5171 (per-motor map, stage 1) x 1.07: the real motors swing +-5-6k counts around their mean (attitude loop on gyro noise) and the convex map then delivers 6-8 % more than four motors at the mean; the simulated firmware, on a clean state, does not swing. Until gyro noise is modelled, the collective factor stands in for it.
+thrust_exponent = 2.188
+voltage_slope_v_inv = 0.2489
 reference_voltage_v = 7.2
 tilt_gain = 1.0                 # identified law only
 
