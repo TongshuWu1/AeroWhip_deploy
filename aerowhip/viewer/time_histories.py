@@ -73,10 +73,14 @@ class TimeHistories(PlotCanvas):
         measured = self._vector(drone.linear_acceleration_world_mps2)
         desired = self._vector(getattr(robot, 'desired_acceleration_world_mps2', None))
         commanded = self._vector(getattr(robot, 'commanded_acceleration_world_mps2', None))
-        # Cable-tip speed from successive displayed tip positions (the display carries no velocities).
+        # Cable-tip speed from successive displayed tip positions (the display carries no velocities):
+        # the labelled cable's last marker when the labeller has it, else the simulated cable's tip.
         tip = np.nan
-        cable = robot.cable
-        position = None if cable is None else np.asarray(cable.positions_world_m, float)[-1]
+        cable, tracking = robot.cable, robot.cable_tracking
+        if tracking is not None and tracking.observed[-1]:
+            position = np.asarray(tracking.positions_world_m, float)[-1]
+        else:
+            position = None if cable is None else np.asarray(cable.positions_world_m, float)[-1]
         if position is not None and self.tip is not None and t > self.tip[0]:
             tip = float(np.linalg.norm(position-self.tip[1])/(t-self.tip[0]))
         self.tip = None if position is None else (t, position)
