@@ -1582,3 +1582,24 @@ Approved by the user ("Yes please": flight node for the estimator, while the cab
   without noise and an Observer fed the same frames build identical rows). 111 pass.
 - Not done: the ROS node around `Observer` (subscribe to poses and clouds, run the policy, publish
   commands) — needs the policy; delivery stalls in the sensing model; NatNet frame numbers in the stream.
+
+## Dated change note — 2026-10-28 saturating bending damping (tested, not adopted)
+
+User's decision ("do what you recommend"): keep the linear damping; the option stays in the engine, off.
+
+- Motivation: per-window best Cb on the fitting flights falls with speed (one-off scan: windows with 95th-pct
+  marker speed below 0.75 m/s prefer ≥ 1e-3, above 2.5 m/s 2–3e-4; corr(log Cb, speed) −0.56).
+- Engine: `material::saturation` gives per-joint factors 1/√(1+(|dk/dt|/r_s)²) evaluated at the start of
+  each step (engine `integrate` and prescribed `step`); `operators(g, cb, scale)` applies them; telemetry
+  paths use the current state. Required config key `cable.Cb_saturation_rate_rad_s` (null = linear; the
+  default). A first version re-evaluated the factors inside the Picard loop and failed to converge on up to
+  118 of 241 windows; its grid scores, which silently dropped failed windows, were misleading and are void.
+- Fits (`scripts/fit_cable_flights.py`, new `--saturation`; `runs/calibration_2026-10-27/cable_fit_saturation.json`,
+  `cable_fit_linear_2ms.json`, both reproduced twice): linear refit at the 2 ms step returns to the adopted
+  values (fit 30.04 mm, held out 57.01: random_high 35.09, whip 68.50). Saturating: EI 3.8e-7, Cb 4.04e-4,
+  Cd 0.771, linear drag 0.043, r_s 1.42 rad/s; fit 29.70 mm, held out 54.63 (random_high 35.30, whip 65.01).
+  Not adopted: 3.5 mm on whip for one parameter; the whip error is mostly open-loop growth over the 2 s
+  window (cable alone 21 mm in the first 0.5 s, 93 mm in the last).
+- Diagnostics also run this session (one-off): `CableReplay` supports meshes finer than one segment per
+  marker interval (2–3 segments: whip −1.5 to −1.7 mm).
+- 111 tests pass with the option off; results unchanged (whip cable alone 67.94 mm).

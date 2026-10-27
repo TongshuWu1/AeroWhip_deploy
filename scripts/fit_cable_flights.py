@@ -26,8 +26,11 @@ NAMES = ('EI_n_m2', 'Cb_n_m2_s', 'normal_drag_coefficient', 'external_drag_s_inv
 
 
 def to_values(x):
-    return dict(EI_n_m2=10**x[0], Cb_n_m2_s=10**x[1], normal_drag_coefficient=max(0., x[2]),
-                external_drag_s_inv=10**x[3])
+    values = dict(EI_n_m2=10**x[0], Cb_n_m2_s=10**x[1], normal_drag_coefficient=max(0., x[2]),
+                  external_drag_s_inv=10**x[3])
+    if len(x) == 5:              # saturating bending damping: log10 of the saturation rate (rad/s)
+        values['Cb_saturation_rate_rad_s'] = 10**x[4]
+    return values
 
 
 def score(config, groups, values):
@@ -75,7 +78,9 @@ def main():
     parser.add_argument('--iterations', type=int, default=60)
     parser.add_argument('--start', type=float, nargs=4, metavar=('LOG10_EI', 'LOG10_CB', 'CD', 'LOG10_DRAG'),
                         help='search start (default: the configured values)')
-    parser.add_argument('--step', type=float, nargs=4, default=[.5, .5, .6, .5])
+    parser.add_argument('--step', type=float, nargs='+', default=[.5, .5, .6, .5])
+    parser.add_argument('--saturation', type=float, metavar='LOG10_RATE',
+                        help='also fit a saturating bending damping, starting at this log10 saturation rate (rad/s)')
     args = parser.parse_args()
     config = load_model_configuration(DEFAULT_MODEL)
     train, held = split('cf_2')
@@ -86,6 +91,10 @@ def main():
           math.log10(start['external_drag_s_inv'])]
     if args.start:
         x0 = list(args.start)
+    step = list(args.step)
+    if args.saturation is not None:
+        x0.append(args.saturation)
+        step = step[:4]+[step[4] if len(step) > 4 else .5]
     evaluations = []
 
     def objective(x):
@@ -100,7 +109,7 @@ def main():
     initial_train, initial_per = score(config, train, start)
     initial_held, initial_held_per = score(config, held, start)
     print(f'start: fit {initial_train*1e3:.2f} mm, held out {initial_held*1e3:.2f} mm', flush=True)
-    x, value, history = nelder_mead(objective, x0, args.step, iterations=args.iterations)
+    x, value, history = nelder_mead(objective, x0, step, iterations=args.iterations)
     best = to_values(x)
     passes = [score(config, train, best)+score(config, held, best) for _ in range(2)]
     reproduced = passes[0] == passes[1]
@@ -109,14 +118,15 @@ def main():
           f'held out {held_rms*1e3:.2f} mm {dict((k, round(v*1e3, 2)) for k, v in held_per.items())}\nreproduced: {reproduced}', flush=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(dict(
-        model='der_twist_free_kelvin_voigt_v2', data='calibration flights 2026-10-27, setup cf_2 (cable)',
+        model='der_twist_free_kelvin_voigt_v2'+(' with saturating bending damping' if len(x0) == 5 else ''), data='calibration flights 2026-10-27, setup cf_2 (cable)',
         windows=dict(duration_s=2., stride_s=1., fit={k: len(v) for k, v in train.items()}, held_out={k: len(v) for k, v in held.items()}),
         start=dict(values=start, fit_rms_m=initial_train, fit_per_flight_rms_m=initial_per, held_out_rms_m=initial_held,
                    held_out_per_flight_rms_m=initial_held_per),
         best=dict(values=best, fit_rms_m=fit_rms, fit_per_flight_rms_m=fit_per, held_out_rms_m=held_rms,
                   held_out_per_flight_rms_m=held_per, reproduced_twice=reproduced),
-        search=dict(method='Nelder-Mead on (log10 EI, log10 Cb, Cd, log10 linear drag)', start=list(map(float, x0)),
-                    step=args.step, history=history,
+        search=dict(method='Nelder-Mead on (log10 EI, log10 Cb, Cd, log10 linear drag'
+                           +(', log10 Cb saturation rate)' if len(x0) == 5 else ')'), start=list(map(float, x0)),
+                    step=step, history=history,
                     evaluations=evaluations), seconds=time.time()-t0), indent=1))
 
 

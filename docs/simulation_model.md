@@ -49,7 +49,11 @@ and no material angle is a state (the discrete viscous threads assumption,
 Bergou et al. 2010). Bending energy is (EI/2l)|κb|² per vertex; bending damping is
 Kelvin–Voigt, with dissipation (Cb/2l)|dk/dt|² on the material curvature (k₁, k₂) in that frame,
 which is objective: a rigid motion of drone and cable together dissipates nothing
-([native/material_frame.inc](../native/material_frame.inc)). Air acts on each node through its
+([native/material_frame.inc](../native/material_frame.inc)). An optional saturating form
+(`cable.Cb_saturation_rate_rad_s`, off when null, as in the default model) divides each joint's
+coefficient by √(1 + (|dk/dt|/r_s)²), with the factors taken at the start of each step; fitted
+on the calibration flights it improved the held-out whip flight by 3.5 mm (68.5 → 65.0 mm) for
+one extra parameter and was not adopted. Air acts on each node through its
 tributary length ℓ: a quadratic normal drag −½ρ C_d d ℓ |v_n| v_n on the cylinder (v_n is the
 velocity normal to the local tangent; still air) plus a small linear term. A point clamp
 attaches node 0 to the drone, prescribing its position and the body-down tangent; the first

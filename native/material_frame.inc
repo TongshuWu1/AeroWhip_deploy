@@ -52,15 +52,28 @@ Geometry geometry(const Parameters&p,const Vector&s){
 // Kelvin-Voigt bending damping, Rayleigh dissipation sum_i Cb/(2 l_i) |dk_i/dt|^2 on the
 // material curvature (k1, k2) in the frame parallel transported from the clamp. Objective:
 // a rigid motion of drone and cable together leaves (k1, k2) unchanged. Returns D (nv x nv).
-Matrix operators(const Geometry&g,double cb){int m=g.m,v=g.nv;Matrix damping(v*v);
-    for(int i=0;i<m;++i){double weight=cb/g.dual[i];
+// `scale` (optional, one factor per joint) multiplies each joint's coefficient.
+Matrix operators(const Geometry&g,double cb,const Vector&scale={}){int m=g.m,v=g.nv;Matrix damping(v*v);
+    for(int i=0;i<m;++i){double weight=cb/g.dual[i]*(scale.empty()?1.:scale[i]);
         for(int component=0;component<2;++component){const double*row=&g.jac[(2*i+component)*v];
             for(int r=0;r<v;++r)if(row[r]!=0.)for(int c=0;c<v;++c)damping[r*v+c]+=weight*row[r]*row[c];}}
     return damping;}
+// Saturating bending damping: with a finite saturation rate r_s (rad/s) each joint's coefficient
+// is Cb / sqrt(1 + (|dk_i/dt| / r_s)^2) -- linear for slow bending, a bounded damping moment
+// (Cb r_s / l_i) for fast bending, as friction-like internal damping of a braided cable behaves.
+// The factors are evaluated on a given state (the start of an integration step: the damping stays
+// implicit in velocity with lagged coefficients). Empty when the damping is linear.
+Vector saturation(const Parameters&p,const Vector&s){
+    if(!std::isfinite(p.bending_damping_saturation))return {};
+    auto g=geometry(p,s);int m=g.m,v=g.nv;auto u=velocity(s,m);Vector scale(m);
+    for(int i=0;i<m;++i){double r2=0.;for(int component=0;component<2;++component){const double*row=&g.jac[(2*i+component)*v];
+            double r=0.;for(int c=0;c<v;++c)r+=row[c]*u[c];r2+=r*r;}
+        scale[i]=1./std::sqrt(1.+r2/(p.bending_damping_saturation*p.bending_damping_saturation));}
+    return scale;}
 // Continuous material contribution for telemetry, not a separate integration kick.
 Vector instantaneous(const Parameters&p,const Vector&s){
-    auto g=geometry(p,s); auto D=operators(g,p.bending_damping);
-    int v=g.nv,m=g.m; auto u=velocity(s,m); Vector f(v);
+    auto g=geometry(p,s); int v=g.nv,m=g.m; auto u=velocity(s,m);
+    auto D=operators(g,p.bending_damping,saturation(p,s)); Vector f(v);
     for(int i=0;i<v;++i)for(int j=0;j<v;++j)f[i]-=D[i*v+j]*u[j];
     auto L=factor(g.mass,v),a=cholsolve(L,f,v); Matrix response(v*m),schur(m*m);
     for(int j=0;j<m;++j){Vector col(v);for(int i=0;i<v;++i)col[i]=g.constraint[j*v+i];

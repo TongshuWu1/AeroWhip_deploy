@@ -38,6 +38,7 @@ Parameters parameters(const py::dict& d) {
     Parameters p;
     p.mass=d["mass"].cast<double>(); p.stiffness=d["stiffness"].cast<double>(); p.drag=d["drag"].cast<double>();
     p.bending_damping=d["bending_damping"].cast<double>();p.air_density=d["air_density"].cast<double>();
+    if(d.contains("bending_damping_saturation")&&!d["bending_damping_saturation"].is_none()) p.bending_damping_saturation=d["bending_damping_saturation"].cast<double>();
     p.normal_drag_coefficient=d["normal_drag_coefficient"].cast<double>();p.diameter=d["diameter"].cast<double>();
     p.maximum_step=d["maximum_step"].cast<double>(); p.projections=d["projections"].cast<int>();
     p.inertia=fixed<9>(d["inertia"],2); p.arm=fixed<3>(d["arm"]); p.gravity=fixed<3>(d["gravity"]);
@@ -89,6 +90,8 @@ Model model(const py::dict& c,const py::object& residual) {
     if(cable.contains("GJ_n_m2")||cable.contains("Ct_n_m2_s"))
         throw py::value_error("The twist-free cable has no torsion parameters; remove GJ_n_m2/Ct_n_m2_s");
     p.bending_damping=cable["Cb_n_m2_s"].cast<double>();p.diameter=cable["diameter_m"].cast<double>();
+    if(!cable.contains("Cb_saturation_rate_rad_s")) throw py::value_error("cable.Cb_saturation_rate_rad_s is required (null: linear bending damping)");
+    if(!cable["Cb_saturation_rate_rad_s"].is_none()) p.bending_damping_saturation=cable["Cb_saturation_rate_rad_s"].cast<double>();
     p.normal_drag_coefficient=cable["normal_drag_coefficient"].cast<double>();
     p.air_density=n["air_density_kg_m3"].cast<double>();
     double iterations=n["constraint_iterations"].cast<double>();
@@ -111,7 +114,7 @@ Model model(const py::dict& c,const py::object& residual) {
         raw["mass"]=v.mass;raw["inertia"]=py::array_t<double>({3,3},v.inertia.data());
         raw["arm"]=v.arm;raw["gravity"]=v.gravity;raw["rest"]=v.rest;raw["node_mass"]=v.node_mass;
         raw["root_tangent_body"]=v.root_tangent_body;raw["body_drag"]=v.body_drag;
-        raw["bending_damping"]=v.bending_damping;raw["air_density"]=v.air_density;
+        raw["bending_damping"]=v.bending_damping;raw["air_density"]=v.air_density;raw["bending_damping_saturation"]=v.bending_damping_saturation;
         raw["normal_drag_coefficient"]=v.normal_drag_coefficient;raw["diameter"]=v.diameter;
         raw["stiffness"]=v.stiffness;raw["drag"]=v.drag;raw["maximum_step"]=v.maximum_step;raw["projections"]=v.projections;
         raw["residual"]=residual;result.parameters=parameters(raw);Engine validate(result.parameters);
@@ -127,7 +130,7 @@ py::dict info(const Model& model) {
     d["root_tangent_body"]=array(Vector(p.root_tangent_body.begin(),p.root_tangent_body.end()));
     d["body_drag"]=array(Vector(p.body_drag.begin(),p.body_drag.end()));
     d["rest"]=array(p.rest);d["node_mass"]=array(p.node_mass);d["ei"]=p.stiffness;d["drag"]=p.drag;
-    d["cb"]=p.bending_damping;d["cd"]=p.normal_drag_coefficient;d["diameter"]=p.diameter;d["air_density"]=p.air_density;
+    d["cb"]=p.bending_damping;d["cb_saturation"]=p.bending_damping_saturation;d["cd"]=p.normal_drag_coefficient;d["diameter"]=p.diameter;d["air_density"]=p.air_density;
     d["dt"]=model.output_step;d["delay_s"]=model.delay;d["physics_dt"]=p.maximum_step;d["iterations"]=p.projections;
     d["marker_indices"]=model.marker_indices;d["n"]=p.node_mass.size();return d;
 }

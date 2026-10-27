@@ -82,6 +82,7 @@
     ],
     "EI_n_m2": 1.143126926082729e-07,
     "Cb_n_m2_s": 0.000301738720745531,
+    "Cb_saturation_rate_rad_s": null,
     "external_drag_s_inv": 0.052557924242295904,
     "normal_drag_coefficient": 0.689441841506958,
     "constitutive_model": "der_twist_free_kelvin_voigt_v2"

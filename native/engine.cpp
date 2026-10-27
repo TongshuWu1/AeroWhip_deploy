@@ -346,6 +346,7 @@ Engine::Engine(Parameters parameters) : p_(std::move(parameters)) {
     require(std::isfinite(p_.maximum_step) && p_.maximum_step>0. && p_.projections>0, "Invalid integration settings");
     require(std::isfinite(p_.stiffness) && p_.stiffness>=0. && std::isfinite(p_.drag) && p_.drag>=0., "Invalid stiffness or drag");
     require(std::isfinite(p_.bending_damping) && p_.bending_damping>=0.,"Bending damping Cb must be finite and nonnegative");
+    require(p_.bending_damping_saturation>0.,"Bending damping saturation rate must be positive (infinite: linear)");
     require(std::isfinite(p_.air_density) && p_.air_density>=0. && std::isfinite(p_.normal_drag_coefficient)
             && p_.normal_drag_coefficient>=0. && std::isfinite(p_.diameter) && p_.diameter>=0.,"Invalid quadratic air drag");
     require(6+3*p_.rest.size()<=material::capacity,"Material derivative capacity exceeded");
@@ -445,6 +446,7 @@ Vector Engine::integrate(const Vector& s, const Vector& previous, double previou
     // Projected Lie-BDF2 endpoint. Backward Euler only for explicit order startup.
     using namespace material;int m=int(p_.rest.size()),v=6+3*m;
     auto coefficient=bdf_coefficients(h,previous_step);double beta=coefficient.beta,b=coefficient.memory;
+    auto scale=saturation(p_,s);   // saturating bending damping: factors from the step start
     auto u0=velocity(s,m),prior_u=velocity(previous,m);Vector x=u0,offset(v);
     for(int i=0;i<v;++i)u0[i]+=b*(u0[i]-prior_u[i]);
     put(offset,0,(at(s,0)-at(previous,0))*b);
@@ -459,7 +461,7 @@ Vector Engine::integrate(const Vector& s, const Vector& previous, double previou
             out=displaced(out,impulse(p_,c,solve(c,rhs)),m);}
         cable(p_,out,q,qv);for(int i=0;i<m;++i)require(std::abs(norm(q[i+1]-q[i])-p_.rest[i])<=1e-10,"Implicit position projection failed");
         with_velocity(out,x,m);validate_state(out,false);
-        auto g=geometry(p_,out);auto A=operators(g,p_.bending_damping);
+        auto g=geometry(p_,out);auto A=operators(g,p_.bending_damping,scale);
         auto w=control(out,start+h);validate_wrench(w);auto f=generalized_load(out,w);
         // (M + beta D) u = M u0 + beta f, subject to the velocity-level length constraints.
         for(auto&a:A)a*=beta;

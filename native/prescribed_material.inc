@@ -55,10 +55,10 @@ Vector constrained(const Matrix&A,const Vector&rhs,const Matrix&J,const Vector&t
     auto lambda=material::cholsolve(material::factor(S,m),violation,m);
     for(int i=0;i<n;++i)for(int j=0;j<m;++j)x[i]-=response[i*m+j]*lambda[j];return x;
 }
-Vector endpoint_solve(const Parameters&p,const Vector&s,const Vector&old,const BoundarySample&b,double h) {
+Vector endpoint_solve(const Parameters&p,const Vector&s,const Vector&old,const BoundarySample&b,double h,const Vector&scale) {
     auto full=supported(p,s,b);auto g=material::geometry(p,full);
-    auto D=material::operators(g,p.bending_damping);
     int m=g.m,v=g.nv,nf=v-6;auto u=velocity(full,m);
+    auto D=material::operators(g,p.bending_damping,scale);
     Vector rhs(nf),target(m);
     std::vector<Vec3>q,qv;cable(p,full,q,qv);auto c=system(p,q);
     auto f=cable_forces(p,full,c,qv);
@@ -73,8 +73,8 @@ Vector endpoint_solve(const Parameters&p,const Vector&s,const Vector&old,const B
 }
 Acceleration material_acceleration(const Parameters&p,const Vector&s,const BoundarySample&b) {
     auto full=supported(p,s,b);auto g=material::geometry(p,full);
-    auto D=material::operators(g,p.bending_damping);
     int m=g.m,v=g.nv;auto u=velocity(full,m);Vector f(v);
+    auto D=material::operators(g,p.bending_damping,material::saturation(p,full));
     for(int i=0;i<v;++i)for(int j=0;j<v;++j)f[i]-=D[i*v+j]*u[j];
     std::vector<Vec3>q,qv;cable(p,full,q,qv);auto c=system(p,q);Vector a(3*m);
     for(int i=0;i<m;++i)put(a,3*i,at(f,6+3*i)/p.node_mass[i+1]);
@@ -88,6 +88,7 @@ Vector step(const Parameters&p,const Vector&s,const std::array<BoundarySample,4>
     // Keep the four-sample wire format; only the exact endpoint drives the step.
     int m=int(p.rest.size());Vector x(3*m),bar=s;std::copy_n(s.begin()+3*m,3*m,x.begin());
     auto coefficients=bdf_coefficients(h,previous_step);double beta=coefficients.beta;
+    auto scale=material::saturation(p,supported(p,s,b[0]));   // damping factors from the step start
     for(int i=0;i<6*m;++i)bar[i]+=coefficients.memory*(s[i]-previous[i]);
     for(int iteration=0;iteration<20;++iteration){Vector out=bar;
         for(int i=0;i<3*m;++i){out[i]+=beta*x[i];out[3*m+i]=x[i];}
@@ -97,7 +98,7 @@ Vector step(const Parameters&p,const Vector&s,const std::array<BoundarySample,4>
             for(int i=0;i<3*m;++i)out[i]+=delta[i];}
         cable(p,supported(p,out,b[3]),q,qv);auto c=system(p,q);
         for(int i=0;i<m;++i)require(std::abs(c.lengths[i]-p.rest[i])<=1e-10,"Prescribed implicit position projection failed");
-        auto next=endpoint_solve(p,out,bar,b[3],beta);double err=0.;
+        auto next=endpoint_solve(p,out,bar,b[3],beta,scale);double err=0.;
         for(int i=0;i<3*m;++i)err=std::max(err,std::abs(next[i]-x[i])/(1.+std::max(std::abs(next[i]),std::abs(x[i]))));
         x=std::move(next);if(err>2e-11)continue;
         std::copy_n(x.begin(),3*m,out.begin()+3*m);

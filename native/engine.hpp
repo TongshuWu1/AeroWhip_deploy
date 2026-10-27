@@ -3,6 +3,7 @@
 #include <array>
 #include <atomic>
 #include <functional>
+#include <limits>
 #include <vector>
 
 namespace aerowhip {
@@ -26,6 +27,8 @@ struct AerodynamicResidual {
 struct Parameters {
     double mass = 0., stiffness = 0., drag = 0., maximum_step = 0.;
     double bending_damping = 0.;
+    // Bend-angle rate (rad/s) at which the bending damping saturates; infinite = linear Kelvin-Voigt.
+    double bending_damping_saturation = std::numeric_limits<double>::infinity();
     // Air: linear drag rate (s^-1, mass proportional) plus quadratic normal drag on the
     // cable cylinder, 0.5*rho*Cd*diameter per unit length, with still air.
     double air_density = 0., normal_drag_coefficient = 0., diameter = 0.;
