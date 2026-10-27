@@ -55,6 +55,26 @@ class CalibrationFlight:
         return (self.sent-self.trim)[i] if strip_trim else self.sent[i]
 
 
+def on_frame_grid(stamp):
+    """Mask keeping the frames nearest a DT grid when the capture ran faster than 100 Hz (Motive
+    at 200 Hz gives 5 ms steps); every frame when the capture is at 100 Hz or slower."""
+    keep = np.ones(len(stamp), bool)
+    if len(stamp) < 3 or np.median(np.diff(stamp)) > .75*DT:
+        return keep
+    keep[:] = False
+    i, target = 0, stamp[0]
+    while i < len(stamp):
+        keep[i] = True
+        target += DT
+        j = int(np.searchsorted(stamp, target))
+        candidates = [k for k in (j-1, j) if i < k < len(stamp)]
+        if not candidates:
+            break
+        i = min(candidates, key=lambda k: abs(stamp[k]-target))
+        target = stamp[i]
+    return keep
+
+
 def load(folder):
     folder = Path(folder)
     rows = [json.loads(line) for line in (folder/'flight.jsonl').read_text().splitlines()]
@@ -64,6 +84,7 @@ def load(folder):
     order = np.argsort(stamp, kind='stable')
     stamp = stamp[order]
     keep = np.r_[True, np.diff(stamp) > 1e-6]     # drop repeated frames
+    keep &= on_frame_grid(stamp)                  # a 200 Hz capture is thinned to the 100 Hz grid
     stamp = stamp[keep]
     position = np.array([poses[i]['position'] for i in order])[keep]
     quaternion = np.array([poses[i]['quaternion_xyzw'] for i in order])[keep]
