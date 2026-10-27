@@ -21,16 +21,16 @@ Defined in [configs/physics/drone_cable.json](../configs/physics/drone_cable.jso
 
 | Quantity | Default |
 |---|---|
-| Drone mass (with battery and clamp, without cable) | DRONE_MASS |
+| Drone mass (with battery and clamp, without cable) | 0.146 kg |
 | Cable and marker mass (total) | 0.017 kg |
 | Cable length / mesh | 0.995 m / 10 edges between 11 nodes (the marker intervals: 0.095 m, then 9 × 0.1 m) |
 | Tracking origin → centre of mass / → attachment | (0, 0, −0.018) / (0, 0, −0.0423) m (attachment from the hanging cable in ten flights) |
-| Bending stiffness EI / bending damping Cb | CABLE_EI / CABLE_CB |
-| Cable diameter / normal drag coefficient Cd / air density | 3.5 mm / CABLE_CD / 1.2 kg m⁻³ |
-| Linear drag | CABLE_LINEAR (on node velocity, mass proportional) |
+| Bending stiffness EI / bending damping Cb | 1.14e−7 N m² (not identifiable) / 3.02e−4 N m² s |
+| Cable diameter / normal drag coefficient Cd / air density | 3.5 mm / 0.69 / 1.2 kg m⁻³ |
+| Linear drag | 0.0526 s⁻¹ (on node velocity, mass proportional) |
 | Maximum physics step | 1/600 s |
 | Output / controller rate | 100 / 200 Hz |
-| Attitude loop (x, y) / command delay / motor response | DRONE_ATTITUDE / DRONE_DELAY / DRONE_MOTOR |
+| Attitude loop (x, y) / command delay / motor response | 20 rad/s, ζ = 1 (x, y) / 0.03 s / 0.015 s (not identified) |
 | Thrust map | T = 0.553 (1 + 0.177 (V − 7.2 V)) T_cmd^2.2 N, T_cmd the firmware thrust in N |
 | Motor thrust limit | 0.85 N per motor (peak measured collective thrust 3.39 N) |
 

@@ -1,6 +1,6 @@
 # Current implementation
 
-Last reviewed: 2026-10-27.
+Last reviewed: 2026-10-28.
 
 ## Active training and handoff
 
@@ -1203,3 +1203,85 @@ Hand-painted charts are replaced by matplotlib figures with SI units:
 Behaviour is unchanged except that the policy tester's Run stays disabled until a
 checkpoint is loaded. Checked visually on DISPLAY=:1 (screenshots and the data used are in
 `internal/gui_review.md` and `internal/gui_screenshots/`); live real flight was not tested.
+
+## Dated change note — 2026-10-28 engine v2 (branch `engine-v2`, not merged)
+
+Decided with the user on 2026-10-27 night, implemented overnight. Status: the native engine,
+calibration replays and fits are done and checked; training still uses the tensor engine on
+`main`, which cannot load the v2 configuration, so `engine-v2` is not merged (see "Open").
+
+**Cable (`native/engine.cpp`, `material_frame.inc`, `prescribed_material.inc`).** Twist is
+quasi-static: an isotropic rod with a free end carries no twisting moment, so the material
+frame is the frame parallel-transported from the clamp and the material angles are no longer
+state (packed state 18+6m, `der_twist_free_kelvin_voigt_v2`; `GJ_n_m2`/`Ct_n_m2_s` are
+rejected by the loader). Kelvin–Voigt bending damping acts on the material curvature in that
+frame (objective). Checked: planar bending (horizontal release, quarter-circle release) is
+identical to v1 to 0.00 mm over 3 s; a helical release differs by 46 mm RMS (v1's twist
+coupling, which we have no data to support). Steps are 25–40 % faster than v1. Air: quadratic
+normal drag ½ρC_d d ℓ|v_n|v_n per node (`diameter_m`, `normal_drag_coefficient`,
+`simulation.air_density_kg_m3`) plus the linear term.
+
+**Drone (`native/flight_controller.hpp`).** The real pipeline below the host: firmware thrust
+vector F = m_fw(a_sent + g), m_fw = 0.144 kg; attitude PD towards F/|F|; firmware thrust
+T_cmd = F·z_body mapped to delivered thrust T = κ(1+β(V−V₀))T_cmd^p. Identified directly on
+the drone-only flights (`configs/controllers/crazyflie_flight.toml`): p = 2.2, κ = 0.553,
+β = 0.177/V, V₀ = 7.2 V; residual 57 mN on fitting flights, 41–81 mN held out, against
+120–190 mN for a linear map per flight. The attitude loop fitted on the measured body z-axis:
+ω = 19–20.5 rad/s, ζ = 1.2–1.4, delay 3 ms (2.4–3.0° RMS against 3.3–8.6° for "achieved =
+commanded"). The earlier "tilt factor 0.81" and "110 ms lag" are this overdamped attitude
+response plus the thrust map, not separate effects. `maximum_thrust_n` raised to 0.85 N per
+motor (peak measured collective 3.39 N). A constant world acceleration bias per lane is
+available for randomization (the replay residual is a slow ~0.1 m/s² drift the real host PID
+absorbs).
+
+**Runtime.** `BatchRuntime`: independent lanes with their own `FlightController` (voltage,
+bias), stepped with OpenMP, GIL released; lanes reproduce a single `Runtime` bit for bit
+(`tests/test_native_physics.py`, with free fall, hanging hold and momentum checks: all pass).
+
+**Calibration set and replays (`aerowhip/fitting/calibration_set.py`, `flight_cable.py`,
+`flight_drone.py`).** Windows of 2 s every 1 s inside the usable spans of the take log;
+`random_high` and `whip` held out of every fit. Drone-only `strokes` is cut at t = 104.1 s
+(battery 6.78 V under load, link loss). Cable replay: measured clamp motion, cable from the
+measured markers, hidden markers skipped. Drone replay: sent commands (sideways trims removed)
+through the flight controller, open loop; loss raw and debiased (per-window constant
+acceleration removed).
+
+**Fits (`runs/calibration_2026-10-27/`, each number computed twice, reproduced).**
+- Drone (`drone_fit.json`, Nelder–Mead on attitude ω, ζ, motor τ, delay): 43.2 mm debiased
+  on the fitting flights (237 raw) but 57.6 mm held out, against 52–53 mm held out for both
+  the component fits and the previous simulator gains. Not adopted: the 2 s open-loop
+  position error is dominated by the drift, and the attitude/thrust identification above is
+  the better-conditioned evidence.
+- Cable v2 on the live-filter labels (`cable_fit_v2.json`): 31.1 mm fitting, 65.2 mm held
+  out (whip 83 mm). Superseded by the relabelling below; to be rerun.
+
+**Labels.** The user found wrong labels (c8–c10) in the whip snap: the causal filter lost the
+folding cable. New offline labeller `aerowhip/takes/sequence_labels.py`: per-frame candidate
+chains from the clamp (one skipped marker allowed), a Viterbi pass over the whole recording
+(length errors, marker motion, credit per label), anchored by the hovers; markers on which a
+near-optimal alternative disagrees stay unlabelled (user's rule: "if we are not sure just
+don't use it"). On `whip_01`: 9.80 labelled markers per frame against 8.61, zero links
+outside 20 mm; the final hover, where the filter had latched onto a drone marker, is correct.
+The filter's labels are kept as `cable_labels_filter.npz` to score the live filter.
+
+**Open.** Training environment on the batch runtime (replacing `tensor_model`); the live
+filter's chain search is untested in flight; EI is unidentifiable (gravity-dominated cable).
+
+**Results after relabelling (2026-10-28, `runs/calibration_2026-10-27/`; each computed twice, reproduced).**
+Labels: sequence labeller on all ten cable flights (`cable_labels_report.json` per flight); `circle_01`
+crashed once with an out-of-range point index and passed on an identical rerun (cause not found).
+- Cable v2 refit on the new labels: 30.1 mm on the fitting flights, 56.6 mm held out (random_high
+  35.0, whip 68.0). Values: EI 1.14e-7 (unidentifiable), Cb 3.02e-4, Cd 0.689, linear drag 0.0526 s⁻¹;
+  adopted in `drone_cable.json` (drone mass 0.146 kg, weighed).
+- Previous cable model (v1, twist) on the same windows: configured 47.1 / 52.8 mm (fit / held out);
+  its earlier best (Cb ×4, drag ×4) 32.0 / 59.5 mm. So v2 fits the fitting flights about as well
+  without twist, but held out it is NOT better than v1 at its configured values (56.6 vs 52.8 mm):
+  the held-out gain is unproven; the whip flight is hardest for every cable model.
+- Coupled model (drone pipeline + cable, nothing fitted on these), per flight, fitted vs previous
+  simulator values: cable shape 25.7–90.5 mm vs 28.0–121.1 mm; held out random_high 60.0 vs 74.3,
+  whip 73.7 vs 73.5; tip 40–153 mm. Drone debiased position error 30–79 mm; held out
+  random_high 54.7 vs 49.2 (worse), whip 54.2 vs 62.9 (better). Drone attitude settings in
+  `geometric.toml` are left unchanged.
+- Batch runtime (24 threads, coupled plant, flight controller per lane): 4.3k lane-steps/s at 24
+  lanes, 7.2k at 96 (72 simulated s per s), no lane failures. Not compared with the tensor engine on
+  the GPU in this session.

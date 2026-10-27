@@ -14,26 +14,23 @@ OptiTrack marker cloud, unlabelled, on the same stamps as `poses.jsonl`).
 
 ### Cable labels from the marker cloud
 
-`aerowhip.takes.cable_labels` labels the cable markers c1…c10 from `cloud.jsonl`:
+The flight script records the whole OptiTrack marker cloud (`cloud.jsonl`). Labels are
+assigned offline to the recording as a whole (`aerowhip.takes.sequence_labels`,
+`python scripts/label_sequence.py <flight folders>`): every frame offers candidate cables,
+chains of points from the attachment with each link at its marker interval length (one
+marker may be skipped where it was not seen; the first point must lie below the
+attachment, which excludes the drone's own markers), and the sequence of candidates with the
+lowest total cost over the recording is chosen: link length errors, marker motion between
+frames, and a credit per labelled marker. The steady hovers at both ends, where all ten
+markers are visible, anchor the labels through fast or partly hidden motion. Where a second
+sequence explains the recording almost as well, the markers on which the two disagree are
+left unlabelled rather than guessed. Partial frames are normal data: hidden markers are
+gaps, never filled in the labels.
 
-- **Candidates:** points further than 7 cm from the drone's tracking origin; points
-  closer than 1 cm to each other are merged.
-- **Filter:** `aerowhip.deployment.cable_filter.CableFilter`, the same code meant for live
-  flight. It keeps one cable state (marker positions and velocities), predicts it each
-  frame with a constant-velocity model projected onto the cable's length constraints,
-  associates points by nearest-to-prediction within a gate (one point per marker), drops
-  assignments that violate the cable lengths, re-acquires long-hidden markers by their
-  distances to labelled neighbours, and corrects seen markers to their measurement. It
-  starts from the first frame with at least six unambiguous markers at their arc distances.
-  Markers OptiTrack does not see stay unlabelled. About 0.13 ms per frame.
-- **Flags:** a marker that is unlabelled while an unassigned point lies where it is
-  expected, low tracker confidence, a neighbour further than the cable allows, and labels
-  moving more than 8 cm between frames. OptiTrack often does not see every marker; a
-  missing marker alone is normal and not flagged.
-
-Labels go to `cable_labels.npz` (positions with NaN where a marker was not seen, point
-indices, source, confidence, manual labels, checked frames) and a summary
-`cable_labels.json`. Gaps are kept: the labels are measurements only.
+The live filter (`aerowhip.deployment.cable_filter`), which must be causal, labels the same
+clouds frame by frame and is scored against these labels; its output is kept beside them
+(`cable_labels_filter.npz`). `python scripts/label_cable.py <folders>` opens the review
+window to inspect either labelling and correct it by hand.
 
 ### Reconstruction of hidden markers
 
@@ -104,28 +101,28 @@ saved with `clock_verified: false`.
 
 ## Fitting
 
-Fitting is staged; each stage writes a candidate model and never replaces the
-active `configs/simulation.json` automatically.
+Fitting uses the calibration flights of one session through the native engine, on 2 s
+windows every 1 s inside each flight's usable span (`aerowhip.fitting.calibration_set`);
+two flights (`random_high`, `whip`) are held out of every fit and scored only with the final
+parameters. Every reported number is computed twice.
 
-1. **Cable material** (`aerowhip.fitting.cable_fit`): multipliers on EI, Cb and
-   external drag, with the measured attachment motion driving the cable. Loss:
-   weighted marker RMSE over an early and a late window per take. Search: a
-   log-space grid followed by two local refinements.
-2. **Vehicle response** (`aerowhip.fitting.coupled_fit`, `run_fit`): log-multipliers
-   on the controller's position gain, velocity gain and attitude frequency, with the
-   cable frozen in the coupled plant. Loss: tracked position (2 cm scale) and
-   rotation error over 1.7 s windows. Optimizer: projected Adam on finite-difference
-   or CUDA-graph gradients.
-3. **Aerodynamic residual** (`aerowhip.fitting.residual_fit`, `run_residual_fit`):
-   small non-negative drag-correction networks for cable and drone, fitted after a
-   calibrated physical base. Training currently requires the unfitted residual.
+1. **Drone pipeline** (`aerowhip.fitting.flight_drone`, `scripts/fit_drone_flights.py`): the
+   sent acceleration commands drive the flight controller and plant open loop from the
+   measured state. The thrust map and attitude response are identified directly from the
+   measured thrust (mass × acceleration along the body axis) and body attitude; the
+   open-loop position error over 2 s, after removing a constant acceleration drift per
+   window, checks the result.
+2. **Cable** (`aerowhip.fitting.flight_cable`, `scripts/fit_cable_flights.py`): the measured
+   drone pose drives the clamp; the cable starts from the measured markers and runs open
+   loop. Loss: RMS distance between simulated and measured markers over the markers that were
+   seen. Search: Nelder–Mead on log EI, log Cb, the normal drag coefficient and the linear
+   drag.
+3. **Coupled check** (`scripts/validate_coupled.py`): the full model, driven by the sent
+   commands, scored on the cable flights for drone position and cable shape, with nothing
+   fitted.
 
-`python -m aerowhip.fitting.run_refit --data <collection> [--base-model <model.json>] [--split <split.json>]`
-runs stages 1–2 (the base model defaults to `configs/simulation.json`; the split file
-lists training and comparison takes, decided before fitting) and writes everything
-under `runs/refit/`. Comparison takes are evaluated only after a candidate is
-chosen. A low fitting loss does not establish identifiability or reliable
-prediction of whole manoeuvres.
-
-The take-processing application (`python scripts/take_processing.py`) browses
-collections, replays takes and runs calibration comparisons and cable fits.
+The identified values and their residuals are in `runs/calibration_<session>/`. EI is not
+identifiable from flight data on this cable (its shape is set by gravity, inertia, damping
+and air); the fits report it but it is not a measured property. The earlier take-based
+fitting tools (`aerowhip.fitting.cable_fit`, `coupled_fit`, `run_refit`, the take-processing
+application) remain for the older recordings.

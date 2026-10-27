@@ -1,6 +1,6 @@
 {
   "drone": {
-    "mass_kg": 0.145,
+    "mass_kg": 0.146,
     "tracking_origin": "top_plate_center",
     "center_of_mass_tracking_m": [
       0,
@@ -75,10 +75,10 @@
       0.0009604520191835018,
       0.0009604520191835018
     ],
-    "EI_n_m2": 1.1789398730482201e-08,
-    "Cb_n_m2_s": 8.174015593606011e-05,
-    "external_drag_s_inv": 0.08137620273661342,
-    "normal_drag_coefficient": 1.2,
+    "EI_n_m2": 1.143126926082729e-07,
+    "Cb_n_m2_s": 0.000301738720745531,
+    "external_drag_s_inv": 0.052557924242295904,
+    "normal_drag_coefficient": 0.689441841506958,
     "constitutive_model": "der_twist_free_kelvin_voigt_v2"
   },
   "simulation": {
