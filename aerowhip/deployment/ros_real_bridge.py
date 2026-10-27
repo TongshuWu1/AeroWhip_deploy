@@ -136,7 +136,8 @@ def main():
     from rclpy.qos import qos_profile_sensor_data
     from rclpy.time import Time
     from motion_capture_tracking_interfaces.msg import NamedPoseArray
-    from crazyflie_interfaces.msg import FullState, LogDataGeneric, Status
+    from crazyflie_interfaces.msg import LogDataGeneric, Status
+    from geometry_msgs.msg import Vector3Stamped
     from sensor_msgs.msg import PointCloud2
     from geometry_msgs.msg import Pose
     from tf2_ros import Buffer, TransformListener
@@ -177,13 +178,14 @@ def main():
             self.status_subscriptions = [self.create_subscription(Status, f'/{name}/status',
                 (lambda message, name=name: self.record_status(name, message)), qos_profile_sensor_data)
                 for name in self.names]
-            # Motor PWM and battery (motor_telemetry log block) and the acceleration command the host
-            # sends (cmd_full_state), per drone, display only.
+            # Motor PWM and battery (motor_telemetry log block) and the acceleration the flight script
+            # sends, from its echo topic (never cmd_full_state: the flight script requires the
+            # Crazyflie server to be that topic's only subscriber). Display only.
             self.motors, self.commands = {}, {}
             self.motor_subscriptions = [self.create_subscription(LogDataGeneric, f'/{name}/motor_telemetry',
                 (lambda message, name=name: self.record_motors(name, message)), qos_profile_sensor_data)
                 for name in self.names]
-            self.command_subscriptions = [self.create_subscription(FullState, f'/{name}/cmd_full_state',
+            self.command_subscriptions = [self.create_subscription(Vector3Stamped, f'/{name}/sent_acceleration',
                 (lambda message, name=name: self.record_command(name, message)), 10)
                 for name in self.names]
             if args.point_cloud_topic:
@@ -201,9 +203,8 @@ def main():
             self.motors[name] = dict(pwm=values[:4], battery_v=values[4] if len(values) > 4 else None, time_s=self.now_s())
 
         def record_command(self, name, message):
-            a, v, p = message.acc, message.twist.linear, message.pose.position
-            self.commands[name] = dict(acceleration_mps2=[a.x, a.y, a.z], velocity_mps=[v.x, v.y, v.z],
-                                       position_m=[p.x, p.y, p.z], time_s=self.now_s())
+            a = message.vector
+            self.commands[name] = dict(acceleration_mps2=[a.x, a.y, a.z], time_s=self.now_s())
 
         def record_status(self, name, message):
             self.status[name] = dict(battery_v=float(message.battery_voltage), pm_state=int(message.pm_state),
