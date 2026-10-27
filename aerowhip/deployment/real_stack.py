@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import signal
 import subprocess
+import sys
 import tempfile
 
 
@@ -40,35 +41,40 @@ def stack_command(paths, capture_only=False):
         f'motion_capture_yaml_file:={paths["motion_capture"]}']
 
 
+RADIO_SCAN = r"""
+import sys, time, yaml
+import cflib.crtp
+robots = yaml.safe_load(sys.argv[1])['robots']
+missing = {name: robot['uri'].lower() for name, robot in robots.items() if robot.get('enabled')}
+timeout_s = float(sys.argv[2])
+cflib.crtp.init_drivers()
+deadline, last = time.monotonic()+timeout_s, 0.
+while missing:
+    for name, uri in list(missing.items()):
+        address = int(uri.rsplit('/', 1)[-1], 16)
+        if any(found.lower() == uri for found, _ in cflib.crtp.scan_interfaces(address)):
+            print(f'{name} answers on {uri}', flush=True)
+            del missing[name]
+    if not missing:
+        break
+    if time.monotonic() > deadline:
+        sys.exit('Not answering on the radio: '+', '.join(f'{n} ({u})' for n, u in missing.items())
+                 +'. Power the drone, wait for it to boot, check the Crazyradio, then start again.')
+    if time.monotonic()-last > 5.:
+        print('Waiting for '+', '.join(missing)+' on the radio ...', flush=True); last = time.monotonic()
+    time.sleep(1.)
+"""
+
+
 def wait_for_radios(crazyflies_yaml, timeout_s=90.):
     """Block until every enabled Crazyflie answers a radio scan (a drone that was just powered
-    takes seconds to boot; launching before that makes the server lose the link at once and
-    die). Returns the URIs found; raises after timeout_s with the ones still missing."""
-    import time
-    import yaml
-    import cflib.crtp
-    robots = yaml.safe_load(crazyflies_yaml)['robots']
-    wanted = {name: robot['uri'].lower() for name, robot in robots.items() if robot.get('enabled')}
-    if not wanted:
-        return {}
-    cflib.crtp.init_drivers()
-    deadline, last = time.monotonic()+timeout_s, 0.
-    missing = dict(wanted)
-    while missing:
-        for name, uri in list(missing.items()):
-            address = int(uri.rsplit('/', 1)[-1], 16)
-            if any(found.lower() == uri for found, _ in cflib.crtp.scan_interfaces(address)):
-                print(f'{name} answers on {uri}', flush=True)
-                del missing[name]
-        if not missing:
-            break
-        if time.monotonic() > deadline:
-            raise SystemExit('Not answering on the radio: '+', '.join(f'{n} ({u})' for n, u in missing.items())
-                             +'. Power the drone, wait for it to boot, check the Crazyradio, then start again.')
-        if time.monotonic()-last > 5.:
-            print('Waiting for '+', '.join(missing)+' on the radio ...', flush=True); last = time.monotonic()
-        time.sleep(1.)
-    return wanted
+    takes seconds to boot). The scan runs in a child process: cflib keeps the Crazyradio open for
+    the life of the process that used it, and a second process holding the dongle while the
+    Crazyflie server flies would make the server lose packets. The child has exited, and released
+    the radio, when this returns."""
+    result = subprocess.run([sys.executable, '-c', RADIO_SCAN, crazyflies_yaml, str(timeout_s)])
+    if result.returncode:
+        raise SystemExit(result.returncode)
 
 
 def main():
