@@ -9,6 +9,7 @@ from dataclasses import asdict, replace
 from datetime import datetime, timezone
 import hashlib
 import json
+import os
 import math
 import re
 import signal
@@ -83,14 +84,18 @@ def supervise_viewer(args, argv):
 HEARTBEATS = CRAZYSWARM/'logs'/'aerowhip_heartbeat'     # bind-mounted as /workspace/logs/aerowhip_heartbeat
 
 
-def start_heartbeat(session):
+def start_heartbeat(session, container):
     """Touch a per-session file every 0.5 s for as long as this viewer process lives; the stack it
     launches in the container stops itself when the file goes stale (see real_stack.watch_heartbeat).
     Returns the file's path inside the container."""
     import atexit
     import threading
     import time
-    HEARTBEATS.mkdir(parents=True, exist_ok=True)
+    if not os.access(HEARTBEATS, os.W_OK):
+        # logs/ is created by the container as root: make the heartbeat folder writable from there.
+        subprocess.run(['docker', 'exec', container, 'bash', '-c',
+                        'mkdir -p /workspace/logs/aerowhip_heartbeat && chmod 1777 /workspace/logs/aerowhip_heartbeat'],
+                       check=True, capture_output=True)
     path = HEARTBEATS/session
     path.touch()
 
@@ -256,7 +261,7 @@ def main():
             print(f'Recording: {feed.start_recording()}', flush=True)
         if not args.attach:
             stack_log = (output/'real-stack.log').open('x')
-            heartbeat = start_heartbeat(session)
+            heartbeat = start_heartbeat(session, args.container)
             stack = launch_container_script(args.container, ROOT/'aerowhip/deployment/real_stack.py',
                 ['--session', session, '--configuration', json.dumps(dict(zip(('crazyflies', 'motion_capture'), original_yaml))),
                  '--heartbeat', heartbeat]
