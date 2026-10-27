@@ -34,8 +34,7 @@ class NativeRuntime:
         R = quaternion_xyzw_to_rotation_matrix(initial.quaternion_body_to_world_xyzw)
         state = self.model.initial_state(initial.position_world_m, rotation=R,
             tracking_velocity=initial.linear_velocity_world_mps, omega_body=initial.angular_velocity_body_radps,
-            cable_positions=initial.cable_node_positions_world_m, cable_velocities=initial.cable_node_velocities_world_mps,
-            material_angles=initial.cable_material_angles_rad)
+            cable_positions=initial.cable_node_positions_world_m, cable_velocities=initial.cable_node_velocities_world_mps)
         hold = np.zeros(11)
         hold[:3], hold[9] = initial.position_world_m, np.arctan2(R[1, 0], R[0, 0])
         hold = self.controller.prepare_reference(hold)
@@ -119,5 +118,4 @@ class NativeRuntime:
             rotation_matrix_to_quaternion_xyzw(values[6:15].reshape(3, 3)),
             values[3:6].copy(), values[15:18].copy(), values[end:end+3].copy()),
             points[0].copy(), points, values[18+3*n:end].reshape(n, 3).copy(),
-            self.model.marker_indices.copy(), forces, self.actuation,
-            self.physics.material_angles.copy())
+            self.model.marker_indices.copy(), forces, self.actuation)

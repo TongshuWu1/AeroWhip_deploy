@@ -70,8 +70,8 @@ def load_model_configuration(source, *, with_sources=False, root=ROOT):
         raise ValueError('Controller settings must retain an explicit command_delay_s')
     if not isinstance(result.get('actuator'), dict) or 'controller_period_s' not in result['controller']:
         raise ValueError('Historical model is not an active setup: use the geometric controller and motor configuration')
-    if result["cable"].get("constitutive_model") != "der_material_kelvin_voigt_v1":
-        raise ValueError("Historical model is not the material-frame cable setup; no implicit migration")
+    if result["cable"].get("constitutive_model") != "der_twist_free_kelvin_voigt_v2":
+        raise ValueError("Historical model is not the twist-free cable setup; no implicit migration")
     from aerowhip.control.geometric_controller import load_gains
     load_gains(result['controller'])
     residual = result.get('residual', {})

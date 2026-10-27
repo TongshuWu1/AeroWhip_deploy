@@ -78,12 +78,12 @@
     "EI_n_m2": 1.1789398730482201e-08,
     "Cb_n_m2_s": 8.174015593606011e-05,
     "external_drag_s_inv": 0.08137620273661342,
-    "constitutive_model": "der_material_kelvin_voigt_v1",
-    "GJ_n_m2": 1.1789398730482201e-08,
-    "Ct_n_m2_s": 8.174015593606012e-06
+    "normal_drag_coefficient": 1.2,
+    "constitutive_model": "der_twist_free_kelvin_voigt_v2"
   },
   "simulation": {
     "timestep_s": 0.01,
+    "air_density_kg_m3": 1.2,
     "gravity_world_m_s2": [
       0,
       0,

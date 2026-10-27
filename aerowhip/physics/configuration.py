@@ -23,8 +23,6 @@ class InitialStateConfiguration:
     # Omitted positions hang vertically; omitted velocities equal root velocity.
     cable_node_positions_world_m: FloatArray | None = None
     cable_node_velocities_world_mps: FloatArray | None = None
-    # Relative to the root-transported frame; omitted means explicitly untwisted.
-    cable_material_angles_rad: FloatArray | None = None
 
 
 @dataclass(frozen=True)
@@ -165,8 +163,6 @@ def load_configuration(path: str | Path) -> SimulationConfiguration:
             cable_node_velocities_world_mps=_optional_node_array(
                 initial, "cable_node_velocities_world_mps"
             ),
-            cable_material_angles_rad=(np.asarray(initial['cable_material_angles_rad'], dtype=np.float64)
-                                       if 'cable_material_angles_rad' in initial else None),
         ),
         platform=PlatformConfiguration(
             attachment_offset_body_m=_vector(

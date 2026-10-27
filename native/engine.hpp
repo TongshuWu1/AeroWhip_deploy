@@ -25,7 +25,10 @@ struct AerodynamicResidual {
 };
 struct Parameters {
     double mass = 0., stiffness = 0., drag = 0., maximum_step = 0.;
-    double bending_damping = 0., torsion_stiffness = 0., torsion_damping = 0.;
+    double bending_damping = 0.;
+    // Air: linear drag rate (s^-1, mass proportional) plus quadratic normal drag on the
+    // cable cylinder, 0.5*rho*Cd*diameter per unit length, with still air.
+    double air_density = 0., normal_drag_coefficient = 0., diameter = 0.;
     int projections = 0;
     Mat3 inertia{};
     Vec3 arm{}, gravity{}, root_tangent_body{};
@@ -52,7 +55,8 @@ struct Model {
     Vector observation(const Vector& state, Vec3 acceleration={}) const;
 };
 
-// State v2: COM p(3), R(9), COM v(3), body omega(3), free q(3M), free v(3M), material angles(M).
+// State v3: COM p(3), R(9), COM v(3), body omega(3), free q(3M), free v(3M). Twist-free:
+// the material frame is parallel transported from the clamp (no material angles).
 // Integrator checkpoints are physical state, previous physical state, previous step (0 at reset).
 Vector prescribed_advance(const Model& model,Vector state,const Vector& samples,Vector& previous,double& previous_step);
 Vector prescribed_acceleration(const Model& model,const Vector& state,const Vector& boundary);

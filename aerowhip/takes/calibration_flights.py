@@ -39,6 +39,7 @@ class CalibrationFlight:
     markers: np.ndarray | None   # (F, 10, 3) measured cable markers, NaN where hidden
     yaw: float
     physical: dict
+    battery: np.ndarray | None = None   # (L,) battery voltage under load, V (NaN if not logged)
 
     @property
     def frames(self):
@@ -77,7 +78,8 @@ def load(folder):
     return CalibrationFlight(folder, params['settings']['setup'], [r['phase'] for r in rows],
                              np.array([r['t'] for r in rows]), log_stamp,
                              np.array([r['sent_acceleration'] for r in rows]), np.array([r['trim'] for r in rows]),
-                             stamp, position, quaternion, markers, float(params['yaw_rad']), params['physical'])
+                             stamp, position, quaternion, markers, float(params['yaw_rad']), params['physical'],
+                             np.array([np.nan if r.get('battery_v') is None else r['battery_v'] for r in rows], float))
 
 
 @dataclass

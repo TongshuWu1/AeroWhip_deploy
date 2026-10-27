@@ -1,4 +1,4 @@
-// Objective isotropic material damping; extracted from retained qualified candidate.
+// Objective isotropic bending damping in the twist-free (parallel-transport) material frame.
 // Included inside aerowhip after engine math helpers. No Python dependency.
 namespace material {
 // Forward derivatives with respect to generalized pose increments, not finite differences.
@@ -49,22 +49,19 @@ Geometry geometry(const Parameters&p,const Vector&s){
     for(int i=0;i<3;++i){g.mass[i*nv+i]=p.mass+p.node_mass[0];for(int j=0;j<3;++j){g.mass[i*nv+3+j]=p.node_mass[0]*bound.B[3*i+j];g.mass[(3+j)*nv+i]=g.mass[i*nv+3+j];g.mass[(3+i)*nv+3+j]=p.inertia[3*i+j];for(int k=0;k<3;++k)g.mass[(3+i)*nv+3+j]+=p.node_mass[0]*bound.B[3*k+i]*bound.B[3*k+j];}}
     for(int i=0;i<m;++i)for(int j=0;j<3;++j)g.mass[(6+3*i+j)*nv+6+3*i+j]=p.node_mass[i+1];return g;
 }
-struct Operators {Matrix damping,twist;};
-Operators operators(const Geometry&g,double cb,double gj,double ct){int m=g.m,v=g.nv,n=v+m;Operators op{Matrix(n*n),Matrix(m*m)};
-    for(int i=0;i<m;++i){double z=gj/g.dual[i];op.twist[i*m+i]+=z;if(i){op.twist[(i-1)*m+i-1]+=z;op.twist[i*m+i-1]-=z;op.twist[(i-1)*m+i]-=z;}
-        for(int side=0;side<2;++side)for(int component=0;component<2;++component){Vector row(n);for(int j=0;j<v;++j)row[j]=g.jac[(2*i+component)*v+j];int angle=side?i:i-1;if(angle>=0)row[v+angle]=component?-g.k[2*i]:g.k[2*i+1];double weight=cb/(2*g.dual[i]);for(int r=0;r<n;++r)if(row[r]!=0.)for(int c=0;c<n;++c)op.damping[r*n+c]+=weight*row[r]*row[c];}
-        double w=ct/g.dual[i];op.damping[(v+i)*n+v+i]+=w;if(i){op.damping[(v+i-1)*n+v+i-1]+=w;op.damping[(v+i)*n+v+i-1]-=w;op.damping[(v+i-1)*n+v+i]-=w;}
-    }return op;}
+// Kelvin-Voigt bending damping, Rayleigh dissipation sum_i Cb/(2 l_i) |dk_i/dt|^2 on the
+// material curvature (k1, k2) in the frame parallel transported from the clamp. Objective:
+// a rigid motion of drone and cable together leaves (k1, k2) unchanged. Returns D (nv x nv).
+Matrix operators(const Geometry&g,double cb){int m=g.m,v=g.nv;Matrix damping(v*v);
+    for(int i=0;i<m;++i){double weight=cb/g.dual[i];
+        for(int component=0;component<2;++component){const double*row=&g.jac[(2*i+component)*v];
+            for(int r=0;r<v;++r)if(row[r]!=0.)for(int c=0;c<v;++c)damping[r*v+c]+=weight*row[r]*row[c];}}
+    return damping;}
 // Continuous material contribution for telemetry, not a separate integration kick.
 Vector instantaneous(const Parameters&p,const Vector&s){
-    auto g=geometry(p,s); auto op=operators(g,p.bending_damping,p.torsion_stiffness,p.torsion_damping);
-    int v=g.nv,m=g.m,n=v+m; auto u=velocity(s,m);
-    Vector theta(s.begin()+18+6*m,s.end()),rhs=product(op.twist,theta,m,m); Matrix angular(m*m);
-    for(int i=0;i<m;++i){for(int j=0;j<v;++j)rhs[i]+=op.damping[(v+i)*n+j]*u[j];
-        rhs[i]=-rhs[i];for(int j=0;j<m;++j)angular[i*m+j]=op.damping[(v+i)*n+v+j];}
-    auto rate=cholsolve(factor(angular,m),rhs,m); Vector f(v);
-    for(int i=0;i<v;++i){for(int j=0;j<v;++j)f[i]-=op.damping[i*n+j]*u[j];
-        for(int j=0;j<m;++j)f[i]-=op.damping[i*n+v+j]*rate[j];}
+    auto g=geometry(p,s); auto D=operators(g,p.bending_damping);
+    int v=g.nv,m=g.m; auto u=velocity(s,m); Vector f(v);
+    for(int i=0;i<v;++i)for(int j=0;j<v;++j)f[i]-=D[i*v+j]*u[j];
     auto L=factor(g.mass,v),a=cholsolve(L,f,v); Matrix response(v*m),schur(m*m);
     for(int j=0;j<m;++j){Vector col(v);for(int i=0;i<v;++i)col[i]=g.constraint[j*v+i];
         col=cholsolve(L,col,v);for(int i=0;i<v;++i)response[i*m+j]=col[i];

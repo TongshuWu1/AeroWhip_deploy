@@ -10,7 +10,7 @@ def native_module():
         from aerowhip.physics import _native
     except ImportError as exc:
         raise RuntimeError('C++ engine is not built. Run build_engine.py with this interpreter.') from exc
-    if _native.api_version != 11:
+    if _native.api_version != 12:
         raise RuntimeError('C++ engine version mismatch. Rebuild with build_engine.py.')
     return _native
 
@@ -29,19 +29,17 @@ class PlantState:
     omega_body: object
     free_positions: object
     free_velocities: object
-    material_angles: object
 
 
 def unpack_state(value):
     value = np.asarray(value)
-    if value.ndim != 1 or (len(value)-18)%7 or len(value)<25:
-        raise ValueError("Expected packed material-frame state v2; historical states require explicit reconstruction")
-    count = (len(value)-18)//7
+    if value.ndim != 1 or (len(value)-18)%6 or len(value)<24:
+        raise ValueError("Expected packed twist-free state v3; historical states require explicit reconstruction")
+    count = (len(value)-18)//6
     return PlantState(value[:3].copy(), value[3:12].reshape(3, 3).copy(),
                       value[12:15].copy(), value[15:18].copy(),
                       value[18:18+3*count].reshape(count, 3).copy(),
-                      value[18+3*count:18+6*count].reshape(count, 3).copy(),
-                      value[18+6*count:].copy())
+                      value[18+3*count:18+6*count].reshape(count, 3).copy())
 
 
 def pack_state(state):
@@ -78,17 +76,12 @@ class Model:
 
     def initial_state(self, tracking_position=(0., 0., 2.), *, rotation=None,
                       tracking_velocity=(0., 0., 0.), omega_body=(0., 0., 0.),
-                      cable_positions=None, cable_velocities=None, material_angles=None):
+                      cable_positions=None, cable_velocities=None):
         state = unpack_state(self.native.initial_state(as_array(tracking_position),
             np.eye(3) if rotation is None else as_array(rotation),
             as_array(tracking_velocity), as_array(omega_body),
             None if cable_positions is None else as_array(cable_positions),
             None if cable_velocities is None else as_array(cable_velocities)))
-        if material_angles is not None:
-            angles = as_array(material_angles)
-            if angles.shape != (self.n-1,) or not np.isfinite(angles).all():
-                raise ValueError('Expected one finite relative material angle per cable edge')
-            state = replace(state, material_angles=angles.copy())
         return state
 
     def tracking_pose(self, state):

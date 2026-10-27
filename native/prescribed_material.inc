@@ -13,8 +13,8 @@ BoundarySample sample(const Vector& b,size_t k=0) {
     require(std::abs(determinant(out.R)-1.)<=1e-8,"Improper boundary rotation");return out;
 }
 Vector supported(const Parameters&p,const Vector&s,const BoundarySample&b) {
-    size_t m=p.rest.size();require(s.size()==7*m&&finite(s),"Invalid prescribed material state");
-    Vector full(18+7*m);put(full,0,b.p-mv(b.R,p.arm));std::copy(b.R.begin(),b.R.end(),full.begin()+3);
+    size_t m=p.rest.size();require(s.size()==6*m&&finite(s),"Invalid prescribed material state");
+    Vector full(18+6*m);put(full,0,b.p-mv(b.R,p.arm));std::copy(b.R.begin(),b.R.end(),full.begin()+3);
     put(full,12,b.v-mv(b.R,cross(b.omega,p.arm)));put(full,15,b.omega);
     std::copy(s.begin(),s.end(),full.begin()+18);return full;
 }
@@ -57,32 +57,25 @@ Vector constrained(const Matrix&A,const Vector&rhs,const Matrix&J,const Vector&t
 }
 Vector endpoint_solve(const Parameters&p,const Vector&s,const Vector&old,const BoundarySample&b,double h) {
     auto full=supported(p,s,b);auto g=material::geometry(p,full);
-    auto op=material::operators(g,p.bending_damping,p.torsion_stiffness,p.torsion_damping);
-    int m=g.m,v=g.nv,n=v+m,nf=n-6;auto u=velocity(full,m);
-    Vector theta(old.begin()+6*m,old.end()),kt=material::product(op.twist,theta,m,m),rhs(nf),target(m);
+    auto D=material::operators(g,p.bending_damping);
+    int m=g.m,v=g.nv,nf=v-6;auto u=velocity(full,m);
+    Vector rhs(nf),target(m);
     std::vector<Vec3>q,qv;cable(p,full,q,qv);auto c=system(p,q);
     auto f=cable_forces(p,full,c,qv);
     Matrix A(nf*nf),J(m*nf);
     // Eliminate known root/body velocity from the full implicit system.
-    for(int i=6;i<n;++i){rhs[i-6]=i<v?p.node_mass[(i-6)/3+1]*old[3*m+i-6]+h*f.force[(i-6)/3+1][(i-6)%3]:-h*kt[i-v];
-        for(int j=0;j<6;++j)rhs[i-6]-=h*op.damping[i*n+j]*u[j];
-        for(int j=6;j<n;++j){double a=h*op.damping[i*n+j];
-            if(i<v&&j<v)a+=g.mass[i*v+j];
-            if(i>=v&&j>=v)a+=h*h*op.twist[(i-v)*m+j-v];A[(i-6)*nf+j-6]=a;}}
+    for(int i=6;i<v;++i){rhs[i-6]=p.node_mass[(i-6)/3+1]*old[3*m+i-6]+h*f.force[(i-6)/3+1][(i-6)%3];
+        for(int j=0;j<6;++j)rhs[i-6]-=h*D[i*v+j]*u[j];
+        for(int j=6;j<v;++j)A[(i-6)*nf+j-6]=h*D[i*v+j]+g.mass[i*v+j];}
     for(int i=0;i<m;++i){for(int j=0;j<6;++j)target[i]-=g.constraint[i*v+j]*u[j];
         for(int j=6;j<v;++j)J[i*nf+j-6]=g.constraint[i*v+j];}
     return constrained(A,rhs,J,target,nf,m);
 }
 Acceleration material_acceleration(const Parameters&p,const Vector&s,const BoundarySample&b) {
     auto full=supported(p,s,b);auto g=material::geometry(p,full);
-    auto op=material::operators(g,p.bending_damping,p.torsion_stiffness,p.torsion_damping);
-    int m=g.m,v=g.nv,n=v+m;auto u=velocity(full,m);Vector theta(s.begin()+6*m,s.end());
-    auto rhs=material::product(op.twist,theta,m,m);Matrix angular(m*m);
-    for(int i=0;i<m;++i){for(int j=0;j<v;++j)rhs[i]+=op.damping[(v+i)*n+j]*u[j];rhs[i]=-rhs[i];
-        for(int j=0;j<m;++j)angular[i*m+j]=op.damping[(v+i)*n+v+j];}
-    auto rate=material::cholsolve(material::factor(angular,m),rhs,m);Vector f(v);
-    for(int i=0;i<v;++i){for(int j=0;j<v;++j)f[i]-=op.damping[i*n+j]*u[j];
-        for(int j=0;j<m;++j)f[i]-=op.damping[i*n+v+j]*rate[j];}
+    auto D=material::operators(g,p.bending_damping);
+    int m=g.m,v=g.nv;auto u=velocity(full,m);Vector f(v);
+    for(int i=0;i<v;++i)for(int j=0;j<v;++j)f[i]-=D[i*v+j]*u[j];
     std::vector<Vec3>q,qv;cable(p,full,q,qv);auto c=system(p,q);Vector a(3*m);
     for(int i=0;i<m;++i)put(a,3*i,at(f,6+3*i)/p.node_mass[i+1]);
     auto lambda=solve(c,product(c,a,Vec3{}));Vector support(f.begin(),f.begin()+6);
@@ -93,9 +86,9 @@ Acceleration material_acceleration(const Parameters&p,const Vector&s,const Bound
 Vector step(const Parameters&p,const Vector&s,const std::array<BoundarySample,4>&b,double h,const Vector&previous,double previous_step) {
     // Same projected implicit endpoint, with support coordinates eliminated.
     // Keep the four-sample wire format; only the exact endpoint drives the step.
-    int m=int(p.rest.size());Vector x(4*m),bar=s;std::copy_n(s.begin()+3*m,3*m,x.begin());
+    int m=int(p.rest.size());Vector x(3*m),bar=s;std::copy_n(s.begin()+3*m,3*m,x.begin());
     auto coefficients=bdf_coefficients(h,previous_step);double beta=coefficients.beta;
-    for(int i=0;i<7*m;++i)bar[i]+=coefficients.memory*(s[i]-previous[i]);
+    for(int i=0;i<6*m;++i)bar[i]+=coefficients.memory*(s[i]-previous[i]);
     for(int iteration=0;iteration<20;++iteration){Vector out=bar;
         for(int i=0;i<3*m;++i){out[i]+=beta*x[i];out[3*m+i]=x[i];}
         std::vector<Vec3>q,qv;
@@ -105,10 +98,10 @@ Vector step(const Parameters&p,const Vector&s,const std::array<BoundarySample,4>
         cable(p,supported(p,out,b[3]),q,qv);auto c=system(p,q);
         for(int i=0;i<m;++i)require(std::abs(c.lengths[i]-p.rest[i])<=1e-10,"Prescribed implicit position projection failed");
         auto next=endpoint_solve(p,out,bar,b[3],beta);double err=0.;
-        for(int i=0;i<4*m;++i)err=std::max(err,std::abs(next[i]-x[i])/(1.+std::max(std::abs(next[i]),std::abs(x[i]))));
+        for(int i=0;i<3*m;++i)err=std::max(err,std::abs(next[i]-x[i])/(1.+std::max(std::abs(next[i]),std::abs(x[i]))));
         x=std::move(next);if(err>2e-11)continue;
-        std::copy_n(x.begin(),3*m,out.begin()+3*m);for(int i=0;i<m;++i)out[6*m+i]=bar[6*m+i]+beta*x[3*m+i];
-        require(material::maxabs(product(c,Vector(x.begin(),x.begin()+3*m),b[3].v))<=1e-9,"Prescribed implicit velocity constraint failed");
+        std::copy_n(x.begin(),3*m,out.begin()+3*m);
+        require(material::maxabs(product(c,x,b[3].v))<=1e-9,"Prescribed implicit velocity constraint failed");
         require(finite(out),"Nonfinite prescribed implicit endpoint");return out;
     }
     throw std::runtime_error("Prescribed implicit endpoint iteration failed after 20 iterations");

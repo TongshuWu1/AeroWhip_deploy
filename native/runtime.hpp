@@ -17,6 +17,7 @@ public:
     Runtime(Model model,Vector initial,Command hold,std::optional<double> controller_period,
             std::optional<double> command_delay,std::optional<Actuator> actuator=std::nullopt);
     void reset();
+    void reinitialize(Vector initial) {engine_.reset(initial);initial_=std::move(initial);reset();}
     Vector checkpoint() const;
     void restore(const Vector& checkpoint);
     void step(const std::vector<Event>& events,const Controller& controller);

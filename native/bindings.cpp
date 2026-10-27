@@ -1,5 +1,11 @@
 #include "engine.hpp"
 #include "runtime.hpp"
+#include "flight_controller.hpp"
+#include <exception>
+#include <memory>
+#ifdef _OPENMP
+#include <omp.h>
+#endif
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -30,8 +36,8 @@ py::array_t<double> array(const Vector& v) {
 Parameters parameters(const py::dict& d) {
     Parameters p;
     p.mass=d["mass"].cast<double>(); p.stiffness=d["stiffness"].cast<double>(); p.drag=d["drag"].cast<double>();
-    p.bending_damping=d["bending_damping"].cast<double>();p.torsion_stiffness=d["torsion_stiffness"].cast<double>();
-    p.torsion_damping=d["torsion_damping"].cast<double>();
+    p.bending_damping=d["bending_damping"].cast<double>();p.air_density=d["air_density"].cast<double>();
+    p.normal_drag_coefficient=d["normal_drag_coefficient"].cast<double>();p.diameter=d["diameter"].cast<double>();
     p.maximum_step=d["maximum_step"].cast<double>(); p.projections=d["projections"].cast<int>();
     p.inertia=fixed<9>(d["inertia"],2); p.arm=fixed<3>(d["arm"]); p.gravity=fixed<3>(d["gravity"]);
     p.root_tangent_body=fixed<3>(d["root_tangent_body"]);
@@ -73,10 +79,13 @@ Model model(const py::dict& c,const py::object& residual) {
     input.output_step=n["timestep_s"].cast<double>();
     input.delay=c["controller"].cast<py::dict>()["command_delay_s"].cast<double>();
     p.gravity=fixed<3>(n["gravity_world_m_s2"]);p.stiffness=cable["EI_n_m2"].cast<double>();p.drag=cable["external_drag_s_inv"].cast<double>();
-    if(cable["constitutive_model"].cast<std::string>()!="der_material_kelvin_voigt_v1")
-        throw py::value_error("Expected explicit material cable schema; historical fits are not converted implicitly");
-    p.bending_damping=cable["Cb_n_m2_s"].cast<double>();p.torsion_stiffness=cable["GJ_n_m2"].cast<double>();
-    p.torsion_damping=cable["Ct_n_m2_s"].cast<double>();
+    if(cable["constitutive_model"].cast<std::string>()!="der_twist_free_kelvin_voigt_v2")
+        throw py::value_error("Expected the twist-free cable schema der_twist_free_kelvin_voigt_v2; earlier fits are not converted implicitly");
+    if(cable.contains("GJ_n_m2")||cable.contains("Ct_n_m2_s"))
+        throw py::value_error("The twist-free cable has no torsion parameters; remove GJ_n_m2/Ct_n_m2_s");
+    p.bending_damping=cable["Cb_n_m2_s"].cast<double>();p.diameter=cable["diameter_m"].cast<double>();
+    p.normal_drag_coefficient=cable["normal_drag_coefficient"].cast<double>();
+    p.air_density=n["air_density_kg_m3"].cast<double>();
     double iterations=n["constraint_iterations"].cast<double>();
     if(!std::isfinite(iterations)||iterations<1||std::floor(iterations)!=iterations||iterations>1000000.)
         throw py::value_error("Invalid projection count");
@@ -97,7 +106,8 @@ Model model(const py::dict& c,const py::object& residual) {
         raw["mass"]=v.mass;raw["inertia"]=py::array_t<double>({3,3},v.inertia.data());
         raw["arm"]=v.arm;raw["gravity"]=v.gravity;raw["rest"]=v.rest;raw["node_mass"]=v.node_mass;
         raw["root_tangent_body"]=v.root_tangent_body;
-        raw["bending_damping"]=v.bending_damping;raw["torsion_stiffness"]=v.torsion_stiffness;raw["torsion_damping"]=v.torsion_damping;
+        raw["bending_damping"]=v.bending_damping;raw["air_density"]=v.air_density;
+        raw["normal_drag_coefficient"]=v.normal_drag_coefficient;raw["diameter"]=v.diameter;
         raw["stiffness"]=v.stiffness;raw["drag"]=v.drag;raw["maximum_step"]=v.maximum_step;raw["projections"]=v.projections;
         raw["residual"]=residual;result.parameters=parameters(raw);Engine validate(result.parameters);
     }
@@ -111,7 +121,7 @@ py::dict info(const Model& model) {
     d["arm"]=array(Vector(p.arm.begin(),p.arm.end()));d["gravity"]=array(Vector(p.gravity.begin(),p.gravity.end()));
     d["root_tangent_body"]=array(Vector(p.root_tangent_body.begin(),p.root_tangent_body.end()));
     d["rest"]=array(p.rest);d["node_mass"]=array(p.node_mass);d["ei"]=p.stiffness;d["drag"]=p.drag;
-    d["cb"]=p.bending_damping;d["gj"]=p.torsion_stiffness;d["ct"]=p.torsion_damping;
+    d["cb"]=p.bending_damping;d["cd"]=p.normal_drag_coefficient;d["diameter"]=p.diameter;d["air_density"]=p.air_density;
     d["dt"]=model.output_step;d["delay_s"]=model.delay;d["physics_dt"]=p.maximum_step;d["iterations"]=p.projections;
     d["marker_indices"]=model.marker_indices;d["n"]=p.node_mass.size();return d;
 }
@@ -148,9 +158,40 @@ py::object actuation_info(const Runtime& r) {
     out["target_motor_thrust_n"]=r.has_effort()?py::cast(a.target(r.effort())):py::none();
     return out;
 }
+FlightController flight_controller(const py::dict& firmware,const py::dict& model_config,double voltage) {
+    // Attitude gains from the model's controller section; firmware and thrust map from `firmware`.
+    FlightControllerParameters p;
+    auto controller=model_config["controller"].cast<py::dict>();auto drone=model_config["drone"].cast<py::dict>();
+    p.firmware_mass=firmware["firmware_mass_kg"].cast<double>();
+    p.thrust_scale=firmware["thrust_scale"].cast<double>();p.thrust_exponent=firmware["thrust_exponent"].cast<double>();
+    p.voltage_slope=firmware["voltage_slope_v_inv"].cast<double>();p.reference_voltage=firmware["reference_voltage_v"].cast<double>();
+    p.tilt_gain=firmware["tilt_gain"].cast<double>();
+    auto w=fixed<3>(controller["attitude_frequency_rad_s"]),z=fixed<3>(controller["attitude_damping_ratio"]);
+    for(int i=0;i<3;++i){p.attitude_stiffness[i]=w[i]*w[i];p.attitude_damping[i]=2.*z[i]*w[i];}
+    p.inertia=fixed<9>(drone["inertia_body_about_com_kg_m2"],2);p.com=fixed<3>(drone["center_of_mass_tracking_m"]);
+    p.gravity=fixed<3>(model_config["simulation"].cast<py::dict>()["gravity_world_m_s2"]);
+    return FlightController(p,voltage);
+}
+// Independent lanes of one model, each with its own flight controller (battery voltage),
+// stepped in parallel without the GIL. A lane that raises is marked failed and left as it was.
+struct BatchRuntime {
+    std::vector<std::unique_ptr<Runtime>> lanes;std::vector<FlightController> controllers;std::vector<char> failed;
+    std::vector<std::string> errors;
+    void step(const std::vector<Command>& commands) {
+        if(commands.size()!=lanes.size()) throw py::value_error("One command per lane");
+        #pragma omp parallel for schedule(dynamic,1)
+        for(long i=0;i<long(lanes.size());++i) {
+            if(failed[i]) continue;
+            try {
+                const auto& c=controllers[i];
+                lanes[i]->step({{lanes[i]->time(),commands[i]}},[&c](const Vector& s,const Command& u){return c(s,u);});
+            } catch(const std::exception& e) {failed[i]=1;errors[i]=e.what();}
+        }
+    }
+};
 PYBIND11_MODULE(_native, m) {
     m.doc()="Native float64 coupled drone/DDER plant and event runtime; Python owns control.";
-    m.attr("api_version")=11;
+    m.attr("api_version")=12;
     py::class_<Actuator>(m,"Actuator")
         .def(py::init(&actuator))
         .def("info",&actuator_info)
@@ -185,10 +226,19 @@ PYBIND11_MODULE(_native, m) {
         .def("reset",&Runtime::reset)
         .def("checkpoint",[](const Runtime& r){return array(r.checkpoint());})
         .def("restore",[](Runtime& r,Array checkpoint){r.restore(vector(checkpoint));})
+        .def("step",[](Runtime& r,py::list events,const FlightController& controller){
+            std::vector<Event> checked;
+            for(auto event:events) {auto item=event.cast<py::tuple>();if(item.size()!=2)throw py::value_error("Expected timestamp/command pairs");checked.push_back({item[0].cast<double>(),vector(item[1])});}
+            py::gil_scoped_release release;r.step(checked,[&controller](const Vector& s,const Command& c){return controller(s,c);});
+        })
+        .def("reinitialize",[](Runtime& r,Array s){auto v=vector(s);r.reinitialize(v);})
         .def("step",[](Runtime& r,py::list events,py::object controller){
             std::vector<Event> checked;
             for(auto event:events) {auto item=event.cast<py::tuple>();if(item.size()!=2)throw py::value_error("Expected timestamp/command pairs");checked.push_back({item[0].cast<double>(),vector(item[1])});}
             auto evaluate=callback(std::move(controller));{py::gil_scoped_release release;r.step(checked,evaluate);}
+        })
+        .def("snapshot",[](const Runtime& r,bool forces,const FlightController& controller){
+            Vector out;{py::gil_scoped_release release;out=r.snapshot(forces,[&controller](const Vector& s,const Command& c){return controller(s,c);});}return array(out);
         })
         .def("snapshot",[](const Runtime& r,bool forces,py::object controller){
             auto evaluate=callback(std::move(controller));Vector out;
@@ -204,6 +254,71 @@ PYBIND11_MODULE(_native, m) {
         .def_property_readonly("requested_events",&Runtime::requested_events)
         .def_property_readonly("applied_events",&Runtime::applied_events)
         .def_property_readonly("controller_updates",&Runtime::controller_updates);
+    py::class_<FlightController>(m,"FlightController")
+        .def(py::init(&flight_controller),py::arg("firmware"),py::arg("model_config"),py::arg("battery_voltage"))
+        .def_property("battery_voltage",&FlightController::voltage,&FlightController::set_voltage)
+        .def_property("acceleration_bias",&FlightController::bias,[](FlightController& c,py::object b){c.set_bias(fixed<3>(b));})
+        .def("delivered_thrust",&FlightController::delivered_thrust)
+        .def("__call__",[](const FlightController& c,Array s,Array command){return c(vector(s),vector(command));});
+    py::class_<BatchRuntime>(m,"BatchRuntime")
+        .def(py::init([](const Model& model,Array state,Array hold,double period,double delay,const Actuator& actuator,std::vector<FlightController> controllers){
+            auto b=new BatchRuntime;auto s=vector(state),c=vector(hold);
+            for(size_t i=0;i<controllers.size();++i) b->lanes.push_back(std::make_unique<Runtime>(model,s,c,period,delay,actuator));
+            b->controllers=std::move(controllers);
+            b->failed.assign(b->lanes.size(),0);b->errors.assign(b->lanes.size(),"");return b;}),
+            py::arg("model"),py::arg("state"),py::arg("hold"),py::arg("controller_period"),py::arg("delay"),py::arg("actuator"),py::arg("controllers"))
+        .def_property_readonly("size",[](const BatchRuntime& b){return b.lanes.size();})
+        .def_static("threads",[](){
+#ifdef _OPENMP
+            return omp_get_max_threads();
+#else
+            return 1;
+#endif
+        })
+        .def("reinitialize",[](BatchRuntime& b,py::array_t<double,py::array::c_style|py::array::forcecast> states){
+            if(states.ndim()!=2||size_t(states.shape(0))!=b.lanes.size()) throw py::value_error("Expected one state row per lane");
+            size_t w=states.shape(1);std::vector<Vector> rows(b.lanes.size());
+            for(size_t i=0;i<rows.size();++i) rows[i]=Vector(states.data()+i*w,states.data()+(i+1)*w);
+            py::gil_scoped_release release;
+            #pragma omp parallel for
+            for(long i=0;i<long(rows.size());++i){
+                try{b.lanes[i]->reinitialize(rows[i]);b.failed[i]=0;b.errors[i].clear();}
+                catch(const std::exception& e){b.failed[i]=1;b.errors[i]=e.what();}}
+        })
+        .def("set_voltage",[](BatchRuntime& b,py::array_t<double,py::array::c_style|py::array::forcecast> v){
+            if(size_t(v.size())!=b.lanes.size()) throw py::value_error("One voltage per lane");
+            for(size_t i=0;i<b.lanes.size();++i) b.controllers[i].set_voltage(v.data()[i]);
+        })
+        .def("set_bias",[](BatchRuntime& b,py::array_t<double,py::array::c_style|py::array::forcecast> v){
+            if(v.ndim()!=2||size_t(v.shape(0))!=b.lanes.size()||v.shape(1)!=3) throw py::value_error("One world bias row per lane");
+            for(size_t i=0;i<b.lanes.size();++i) b.controllers[i].set_bias({v.data()[3*i],v.data()[3*i+1],v.data()[3*i+2]});
+        })
+        .def("step",[](BatchRuntime& b,py::array_t<double,py::array::c_style|py::array::forcecast> commands){
+            if(commands.ndim()!=2||size_t(commands.shape(0))!=b.lanes.size()||(commands.shape(1)!=11&&commands.shape(1)!=13))
+                throw py::value_error("Expected one 11- or 13-value command row per lane");
+            size_t w=commands.shape(1);std::vector<Command> rows(b.lanes.size());
+            for(size_t i=0;i<rows.size();++i) rows[i]=Command(commands.data()+i*w,commands.data()+(i+1)*w);
+            py::gil_scoped_release release;b.step(rows);
+        })
+        .def("observations",[](const BatchRuntime& b){
+            // Model observation per lane (tracking P/V, R, body rate, cable P/V, acceleration).
+            size_t width=b.lanes[0]->model().observation(b.lanes[0]->state()).size();
+            py::array_t<double> out({b.lanes.size(),width});double* d=out.mutable_data();
+            {py::gil_scoped_release release;
+            #pragma omp parallel for
+            for(long i=0;i<long(b.lanes.size());++i){auto o=b.lanes[i]->model().observation(b.lanes[i]->state());std::copy(o.begin(),o.end(),d+i*width);}}
+            return out;
+        })
+        .def("states",[](const BatchRuntime& b){
+            size_t width=b.lanes[0]->state().size();py::array_t<double> out({b.lanes.size(),width});double* d=out.mutable_data();
+            for(size_t i=0;i<b.lanes.size();++i){auto s=b.lanes[i]->state();std::copy(s.begin(),s.end(),d+i*width);}return out;
+        })
+        .def("motors",[](const BatchRuntime& b){
+            py::array_t<double> out({b.lanes.size(),size_t(4)});double* d=out.mutable_data();
+            for(size_t i=0;i<b.lanes.size();++i){auto f=b.lanes[i]->motors();std::copy(f.begin(),f.end(),d+4*i);}return out;
+        })
+        .def_property_readonly("failed",[](const BatchRuntime& b){return std::vector<bool>(b.failed.begin(),b.failed.end());})
+        .def_property_readonly("errors",[](const BatchRuntime& b){return b.errors;});
     py::class_<Engine>(m,"Engine")
         .def(py::init([](py::dict p){return new Engine(parameters(p));}))
         .def_property_readonly("node_count",&Engine::node_count)

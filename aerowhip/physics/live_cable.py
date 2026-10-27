@@ -17,7 +17,6 @@ class LiveCableState:
     time_s: float
     positions_world_m: np.ndarray
     velocities_world_mps: np.ndarray
-    material_angles_rad: np.ndarray
 
 
 class LiveCable:
@@ -60,11 +59,11 @@ class LiveCable:
         R = quaternion_xyzw_to_rotation_matrix(q)
         root = p+R@self.model.attachment_tracking
         if self.latest is None:
-            # Explicit prior: hanging, stationary, untwisted cable at the first
+            # Explicit prior: hanging, stationary cable at the first
             # measured tracking pose. Never use the hardware YAML position here.
             initial = self.model.initial_state(p, rotation=R)
             self._packed = np.concatenate((initial.free_positions.ravel(),
-                initial.free_velocities.ravel(), initial.material_angles))
+                initial.free_velocities.ravel()))
             self._previous = self._packed.copy()
         else:
             duration = float(time_s-self.latest.time_s)
@@ -104,8 +103,7 @@ class LiveCable:
         n = self.model.n-1
         self.latest = LiveCableState(float(time_s),
             np.vstack((root, self._packed[:3*n].reshape(n, 3))),
-            np.vstack((self._velocity, self._packed[3*n:6*n].reshape(n, 3))),
-            self._packed[6*n:].copy())
+            np.vstack((self._velocity, self._packed[3*n:6*n].reshape(n, 3))))
         return self.latest
 
     def _samples(self, duration, root, velocity, quaternion, *, refinement=1):

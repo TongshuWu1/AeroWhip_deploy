@@ -15,7 +15,6 @@ def _state_values(state):
         'drone_acceleration_world_mps2': drone.linear_acceleration_world_mps2,
         'cable_node_positions_world_m': state.cable_node_positions_world_m,
         'cable_node_velocities_world_mps': state.cable_node_velocities_world_mps,
-        'cable_material_angles_rad': state.cable_material_angles_rad,
         'motor_thrust_n': state.actuation.motor_thrust_n,
         'delivered_wrench': state.actuation.delivered_wrench,
     }

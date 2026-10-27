@@ -245,6 +245,16 @@ CableForces cable_forces(const Parameters& p,const Vector& s,const Chain& c,cons
             acceleration=parallel*(-along)+perpendicular*(-across);
         }
         f[i]=f[i]+acceleration*p.node_mass[i];
+        // Quadratic normal drag on the cylinder (independence principle): only the velocity
+        // normal to the local tangent loads the cable; tributary length is half of each edge.
+        double coefficient=.5*p.air_density*p.normal_drag_coefficient*p.diameter;
+        if(coefficient>0.) {
+            Vec3 tangent= i==0?ta:c.tangent[i-1];
+            if(i>0 && i<m){tangent=tangent+c.tangent[i];tangent=tangent/norm(tangent);}
+            Vec3 normal=v[i]-tangent*dot(tangent,v[i]);
+            double length=((i?p.rest[i-1]:0.)+(i<m?p.rest[i]:0.))/2.;
+            f[i]=f[i]-normal*(coefficient*length*norm(normal));
+        }
     }
     return {std::move(f),root_moment};
 }
@@ -294,7 +304,7 @@ Model::Model(ModelInput input) : parameters(std::move(input.parameters)),com(inp
 Vector Model::initial_state(Vec3 tracking,Mat3 R,Vec3 tracking_v,Vec3 omega,
                              const Vector& positions,const Vector& velocities) const {
     require(finite(tracking)&&finite(R)&&finite(tracking_v)&&finite(omega),"Nonfinite initial body state");
-    size_t m=parameters.rest.size();Vector s(18+7*m);
+    size_t m=parameters.rest.size();Vector s(18+6*m);
     put(s,0,tracking+mv(R,com));std::copy(R.begin(),R.end(),s.begin()+3);
     put(s,12,tracking_v+mv(R,cross(omega,com)));put(s,15,omega);
     Vec3 root=at(s,0)+mv(R,parameters.arm), root_v=at(s,12)+mv(R,cross(omega,parameters.arm));
@@ -309,7 +319,7 @@ Vector Model::initial_state(Vec3 tracking,Mat3 R,Vec3 tracking_v,Vec3 omega,
     Engine validator(parameters);validator.reset(s);return s;
 }
 Vector Model::observation(const Vector& s,Vec3 acceleration) const {
-    size_t m=parameters.rest.size();require(s.size()==18+7*m&&finite(s),"Invalid observation state");
+    size_t m=parameters.rest.size();require(s.size()==18+6*m&&finite(s),"Invalid observation state");
     Vector out(18+6*(m+1)+3);Mat3 R=rotation(s);
     put(out,0,at(s,0)-mv(R,com));put(out,3,at(s,12)+mv(R,cross(at(s,15),com*-1.)));
     std::copy(R.begin(),R.end(),out.begin()+6);put(out,15,at(s,15));
@@ -331,10 +341,9 @@ Engine::Engine(Parameters parameters) : p_(std::move(parameters)) {
     for(double x:p_.node_mass) require(x>0., "Node masses must be positive");
     require(std::isfinite(p_.maximum_step) && p_.maximum_step>0. && p_.projections>0, "Invalid integration settings");
     require(std::isfinite(p_.stiffness) && p_.stiffness>=0. && std::isfinite(p_.drag) && p_.drag>=0., "Invalid stiffness or drag");
-    require(std::isfinite(p_.bending_damping) && p_.bending_damping>=0.
-            && std::isfinite(p_.torsion_stiffness) && p_.torsion_stiffness>0.
-            && std::isfinite(p_.torsion_damping) && p_.torsion_damping>0.,
-            "Material model requires Cb>=0, GJ>0, Ct>0 (overdamped angle balance)");
+    require(std::isfinite(p_.bending_damping) && p_.bending_damping>=0.,"Bending damping Cb must be finite and nonnegative");
+    require(std::isfinite(p_.air_density) && p_.air_density>=0. && std::isfinite(p_.normal_drag_coefficient)
+            && p_.normal_drag_coefficient>=0. && std::isfinite(p_.diameter) && p_.diameter>=0.,"Invalid quadratic air drag");
     require(6+3*p_.rest.size()<=material::capacity,"Material derivative capacity exceeded");
     Mat3 K=skew(p_.arm), K2=mm(transpose(K),K), inertia=p_.inertia;
     root_mass_=p_.mass+p_.node_mass[0]; double reduced=p_.mass*p_.node_mass[0]/root_mass_;
@@ -358,7 +367,7 @@ Engine::Engine(Parameters parameters) : p_(std::move(parameters)) {
     }
 }
 void Engine::validate_state(const Vector& s, bool constraints) const {
-    size_t m=p_.rest.size(); require(s.size()==18+7*m && finite(s), "State shape or values are invalid");
+    size_t m=p_.rest.size(); require(s.size()==18+6*m && finite(s), "State shape or values are invalid");
     Mat3 R=rotation(s), gram=mm(transpose(R),R), I=identity();
     double tol=constraints?1e-8:1e-6;
     for(int i=0;i<9;++i) require(std::abs(gram[i]-I[i])<=tol, "State rotation is not orthogonal");
@@ -388,7 +397,7 @@ Vector Engine::checkpoint() const {
     out.push_back(previous_step_);return out;
 }
 void Engine::restore(const Vector& saved) {
-    Guard guard(busy_);size_t width=18+7*p_.rest.size();
+    Guard guard(busy_);size_t width=18+6*p_.rest.size();
     require(saved.size()==2*width+1 && finite(saved),"Invalid BDF2 checkpoint");
     Vector current(saved.begin(),saved.begin()+width),previous(saved.begin()+width,saved.end()-1);
     require(saved.back()>=0. && saved.back()<=p_.maximum_step*(1.+1e-9),"Invalid BDF2 history step");
@@ -430,37 +439,33 @@ Vector Engine::generalized_load(const Vector& s, const Wrench& w) const {
 }
 Vector Engine::integrate(const Vector& s, const Vector& previous, double previous_step, double h, const std::function<Wrench(const Vector&,double)>& control, double start) const {
     // Projected Lie-BDF2 endpoint. Backward Euler only for explicit order startup.
-    using namespace material;int m=int(p_.rest.size()),v=6+3*m,n=v+m;
+    using namespace material;int m=int(p_.rest.size()),v=6+3*m;
     auto coefficient=bdf_coefficients(h,previous_step);double beta=coefficient.beta,b=coefficient.memory;
-    auto u0=velocity(s,m),prior_u=velocity(previous,m);Vector theta(s.begin()+18+6*m,s.end()),x(n),offset(v);
-    std::copy(u0.begin(),u0.end(),x.begin());
+    auto u0=velocity(s,m),prior_u=velocity(previous,m);Vector x=u0,offset(v);
     for(int i=0;i<v;++i)u0[i]+=b*(u0[i]-prior_u[i]);
-    for(int i=0;i<m;++i)theta[i]+=b*(theta[i]-previous[18+6*m+i]);
     put(offset,0,(at(s,0)-at(previous,0))*b);
     if(b>0.)put(offset,3,log_rotation(mm(transpose(rotation(previous)),rotation(s)))*b);
     for(int i=0;i<3*m;++i)offset[6+i]=b*(s[18+i]-previous[18+i]);
     for(int iteration=0;iteration<20;++iteration){
-        Vector guess(x.begin(),x.begin()+v),out=displaced(s,add_scaled(offset,guess,beta),m);
+        Vector out=displaced(s,add_scaled(offset,x,beta),m);
         std::vector<Vec3>q,qv;
         for(int k=0;k<p_.projections;++k){auto b=boundary(p_,out);cable(p_,out,q,qv);
             auto c=chain(p_,q,b,root_inverse_,root_mass_);Vector rhs(m);
             for(int i=0;i<m;++i)rhs[i]=p_.rest[i]-c.lengths[i];
             out=displaced(out,impulse(p_,c,solve(c,rhs)),m);}
         cable(p_,out,q,qv);for(int i=0;i<m;++i)require(std::abs(norm(q[i+1]-q[i])-p_.rest[i])<=1e-10,"Implicit position projection failed");
-        with_velocity(out,guess,m);validate_state(out,false);
-        auto g=geometry(p_,out);auto op=operators(g,p_.bending_damping,p_.torsion_stiffness,p_.torsion_damping);
+        with_velocity(out,x,m);validate_state(out,false);
+        auto g=geometry(p_,out);auto A=operators(g,p_.bending_damping);
         auto w=control(out,start+h);validate_wrench(w);auto f=generalized_load(out,w);
-        Matrix A=op.damping;for(auto&a:A)a*=beta;
-        Vector rhs(n),mom=material::product(g.mass,u0,v,v),kt=material::product(op.twist,theta,m,m);
-        for(int i=0;i<v;++i){rhs[i]=mom[i]+beta*f[i];for(int j=0;j<v;++j)A[i*n+j]+=g.mass[i*v+j];}
-        for(int i=0;i<m;++i){rhs[v+i]=-beta*kt[i];for(int j=0;j<m;++j)A[(v+i)*n+v+j]+=beta*beta*op.twist[i*m+j];}
-        Matrix J(m*n);for(int i=0;i<m;++i)for(int j=0;j<v;++j)J[i*n+j]=g.constraint[i*v+j];
-        auto next=prescribed::constrained(A,rhs,J,Vector(m),n,m);double err=0.;
-        for(int i=0;i<n;++i)err=std::max(err,std::abs(next[i]-x[i])/(1.+std::max(std::abs(next[i]),std::abs(x[i]))));
+        // (M + beta D) u = M u0 + beta f, subject to the velocity-level length constraints.
+        for(auto&a:A)a*=beta;
+        Vector rhs=material::product(g.mass,u0,v,v);
+        for(int i=0;i<v;++i){rhs[i]+=beta*f[i];for(int j=0;j<v;++j)A[i*v+j]+=g.mass[i*v+j];}
+        auto next=prescribed::constrained(A,rhs,g.constraint,Vector(m),v,m);double err=0.;
+        for(int i=0;i<v;++i)err=std::max(err,std::abs(next[i]-x[i])/(1.+std::max(std::abs(next[i]),std::abs(x[i]))));
         x=std::move(next);if(err>2e-11)continue;
-        Vector u(x.begin(),x.begin()+v);with_velocity(out,u,m);
-        for(int i=0;i<m;++i)out[18+6*m+i]=theta[i]+beta*x[v+i];
-        require(maxabs(material::product(g.constraint,u,m,v))<=1e-9,"Implicit velocity constraint failed");
+        with_velocity(out,x,m);
+        require(maxabs(material::product(g.constraint,x,m,v))<=1e-9,"Implicit velocity constraint failed");
         validate_state(out,false);return out;
     }
     throw std::runtime_error("Projected implicit endpoint iteration failed after 20 iterations");

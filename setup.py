@@ -8,9 +8,10 @@ from pathlib import Path
 
 extensions = [Pybind11Extension(
     'aerowhip.physics._native', ['native/bindings.cpp', 'native/engine.cpp', 'native/runtime.cpp', 'native/actuator.cpp'],
-    depends=['native/material_frame.inc', 'native/prescribed_material.inc', 'native/engine.hpp', 'native/runtime.hpp', 'native/actuator.hpp'], cxx_std=17,
-    extra_compile_args=(['/O2', '/fp:strict'] if sys.platform == 'win32'
-                        else ['-O3', '-fno-fast-math', '-ffp-contract=off']),
+    depends=['native/material_frame.inc', 'native/prescribed_material.inc', 'native/engine.hpp', 'native/runtime.hpp', 'native/actuator.hpp', 'native/flight_controller.hpp'], cxx_std=17,
+    extra_compile_args=(['/O2', '/fp:strict', '/openmp'] if sys.platform == 'win32'
+                        else ['-O3', '-fno-fast-math', '-ffp-contract=off', '-fopenmp']),
+    extra_link_args=([] if sys.platform == 'win32' else ['-fopenmp']),
 )]
 # The lightweight simulator can be built without LibTorch. Fitting explicitly
 # opts into an extension linked to the installed Torch, not a second download.

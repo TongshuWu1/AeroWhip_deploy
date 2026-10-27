@@ -83,7 +83,6 @@ class SimulationState:
     cable_marker_indices: NDArray[np.int64]
     forces: ForceTelemetry | None = None
     actuation: ActuatorTelemetry | None = None
-    cable_material_angles_rad: FloatArray | None = None
 
 
 def rotation_matrix_to_quaternion_xyzw(rotation: FloatArray) -> FloatArray:
