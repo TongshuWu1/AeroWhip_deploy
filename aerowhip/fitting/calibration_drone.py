@@ -21,13 +21,16 @@ from aerowhip.physics.tensor_model import TensorModel
 NAMES = ('acceleration_gain', 'attitude_frequency_scale', 'extra_delay_s')
 
 
-def drone_only_config(base):
-    """The base model with the cable made negligible (drone-only flights)."""
+def drone_only_config(base, effective_mass_kg=.157):
+    """The base model with the cable made negligible (drone-only flights) and the drone at
+    the effective mass the flight trims encode (the sent command's vertical trim is the
+    thrust the firmware's 0.144 kg mass model lacks: real drone + calibration)."""
     config = deepcopy(base)
     cable = config['cable']
     markers = len(cable['marker_interval_lengths_m'])
     cable['total_mass_kg'] = 1e-4
     cable['moving_marker_masses_kg'] = [1e-6]*markers
+    config['drone']['mass_kg'] = float(effective_mass_kg)
     return config
 
 
@@ -66,7 +69,11 @@ def window_loss(base, window, values, *, return_positions=False):
         j = int(np.clip(np.searchsorted(t, t[i]-delay, 'right')-1, 0, len(t)-1))
         command = np.zeros(11)
         command[:3] = window.position[0]
-        command[6:9] = gain*window.command[j]
+        # The real drone received the full command (trims included); its firmware mass model
+        # (0.144 kg) turned it into thrust. The simulated drone uses the effective mass with
+        # its own exact hover trim, so the vertical trim that compensated the mass error is
+        # removed and only the measured sideways offsets and the planned motion remain.
+        command[6:9] = gain*(window.sent[j]-np.array([0., 0., window.sent[j, 2]-window.command[j, 2]]))
         command[9] = yaw
         runtime.step(command)
         state = runtime.snapshot(runtime.native.time)

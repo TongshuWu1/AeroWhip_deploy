@@ -91,6 +91,7 @@ class Window:
     markers: np.ndarray       # (N+1, 10, 3) NaN where hidden
     seen: np.ndarray          # (N+1, 10) bool
     command: np.ndarray       # (N+1, 3) acceleration command in force, trims stripped
+    sent: np.ndarray          # (N+1, 3) the command actually sent, trims included
     history_position: np.ndarray   # (H+1, 3) samples before the window, for velocities
     history_rotation: np.ndarray
     history_markers: np.ndarray
@@ -123,7 +124,7 @@ def windows(flight, *, duration_s=2., history_s=.1, stride_s=1., phases=None, mi
         t = stamp[sel]-stamp[first]
         out.append(Window(flight.folder.name, phase, float(stamp[first]), np.arange(steps+1)*DT,
                           flight.position[sel][hist:].copy(), R[hist:].copy(), m[hist:].copy(), seen[hist:].copy(),
-                          flight.command_at(stamp[sel][hist:]),
+                          flight.command_at(stamp[sel][hist:]), flight.command_at(stamp[sel][hist:], strip_trim=False),
                           flight.position[sel][:hist+1].copy(), R[:hist+1].copy(), m[:hist+1].copy(), t[:hist+1].copy()))
         first += stride
     return out

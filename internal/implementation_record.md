@@ -1152,3 +1152,21 @@ reference was not re-recorded, and the fit numbers above must be reproduced on a
 machine before use. `scripts/equivalence_check.py` has an untested fresh-process PPO
 variant in `git stash`.
 
+## Dated change note — 2026-10-27 drone response: what the data says
+
+`calibration_drone.window_loss` now feeds the simulated drone the full sent command
+(trims included) minus the vertical mass trim, at the effective mass 0.157 kg, so the
+simulated and real drones receive the same lateral command and hover at the same thrust.
+On a drone-only 8 m/s² line window (`line 45 8`), with the initial state matching to
+0.1 mm and 0.01 m/s: in the first 0.3 s the command averages 4.9 m/s², the simulated
+drone delivers 5.1 (104 %), the real one 3.9 (80 %). Tilt: measured lag behind the
+commanded tilt 110 ms, simulated 90 ms; measured tilt is 0.81 of the commanded, simulated
+0.93. The missing effect is a tilt shortfall of ~15 %, not a delay; neither an
+acceleration gain nor the attitude frequency alone reproduces it (best joint 655 mm over
+2 s against 1058 base). A model decision is needed (tilt gain / attitude limit).
+
+Both retries of the equivalence reference re-record segfaulted (one at interpreter start);
+a cable grid rerun segfaulted in the garbage collector during JSON parsing. The machine
+is faulting; a memory test is the next step before further computation. The cable grid's
+first run (Cb ×4, drag ×4, 37 mm vs 63 mm) stands as indicative only.
+
