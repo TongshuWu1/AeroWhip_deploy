@@ -16,7 +16,7 @@ import traceback
 import numpy as np
 import torch
 
-from aerowhip.envs.environment import ACTION_INTERFACE, make_environment
+from aerowhip.envs.batch_environment import ACTION_INTERFACE, make_batch_environment as make_environment
 from aerowhip.experiment import from_snapshot
 from aerowhip.fitting.artifacts import atomic_save
 from aerowhip.paths import project_path

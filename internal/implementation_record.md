@@ -1285,3 +1285,34 @@ crashed once with an out-of-range point index and passed on an identical rerun (
 - Batch runtime (24 threads, coupled plant, flight controller per lane): 4.3k lane-steps/s at 24
   lanes, 7.2k at 96 (72 simulated s per s), no lane failures. Not compared with the tensor engine on
   the GPU in this session.
+
+## Dated change note — 2026-10-28 training environment on the batch runtime (branch `engine-v2`)
+
+Scope approved by the user ("faithful port"; keep the tensor engine until the real-flight test).
+
+- New [envs/batch_environment.py](../aerowhip/envs/batch_environment.py) (`BatchEnvironment`,
+  `make_batch_environment`) replaces `PlantEnvironment` in the training worker and the frozen-policy
+  test. Same attributes (`frames`, `critic_states`, `history`, `ledger`, `step`, `finish`, ...), so the
+  learner, task and reward are unchanged. Physics: `BatchRuntime` lanes with a native `FlightController`
+  per lane (firmware thrust vector, thrust map with battery voltage, attitude loop, 30 ms delay),
+  stepped in parallel on the CPU; networks stay on `run.device`. The GPU options (CUDA graphs,
+  `capture`, `conditional`) no longer exist for the environment.
+- Zero action means hover: a per-lane vertical feed-forward from the thrust map (at that lane's
+  voltage) makes delivered thrust equal the weight of drone and cable. Without it zero action sags
+  (a probe fell 17 m in 4 s). Voltage is the firmware reference 7.2 V unless `battery_voltage` is given.
+- Differences from the tensor environment: validity guards (workspace, tilt, cable height) are
+  evaluated at the 100 Hz samples, not per physics substep; a numerically failed lane is charged from
+  the end of the failing 10 ms step; the critic's motor/wrench slots hold the four motor thrusts and the
+  applied (delayed) command, and its previous-state slot is the previous 100 Hz sample. The critic
+  vector therefore changed (198 values, free cable nodes only), so old checkpoints' critics do not load.
+  Actor inputs have the same layout.
+- Tests: `tests/test_environment.py` rewritten (schedule, hover holds within 1 mm, runs repeat bit for
+  bit, a lane alone equals the same lane in a batch, validity and failure paths with a synthetic
+  plant, ledger telescopes). The tensor-model tests in `tests/test_physics.py` were removed because the
+  tensor model cannot load v2 configurations; `tests/test_native_physics.py` covers the same checks.
+  Whole suite: 93 passed after removal.
+- Not done / unverified: no training run on the new environment; `scripts/equivalence_check.py` and its
+  reference still target the tensor environment and fail; the reward geometry (`fold_geometry.regions`,
+  Python) now costs about 2.4 ms per lane-sample and takes >95 % of the step time (24 lanes, 4 s: ~25 s),
+  so training throughput is limited by the task, not the physics. Domain randomization of voltage,
+  mass or delay is not added.

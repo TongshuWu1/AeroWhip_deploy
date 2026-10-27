@@ -9,7 +9,7 @@ listed above them:
 | `aerowhip.physics` | Coupled drone–cable plant: C++ engine bindings (`_native`, `_tensor_native`), model files, states, single-flight runtimes and the batched tensor model used for training and fitting. |
 | `aerowhip.control` | Geometric flight controller (NumPy and Torch versions) and gamepad input. |
 | `aerowhip.trajectories` | Full-state reference trajectories, B-splines and presets. |
-| `aerowhip.envs` | `PlantEnvironment`: batched episodes over the plant, command delay, 100 Hz history, validity limits, and the `Task` interface. |
+| `aerowhip.envs` | `BatchEnvironment`: batched episodes over the native plant and its flight controller (lanes stepped in parallel on the CPU), command delay, 100 Hz history, validity limits, and the `Task` interface. |
 | `aerowhip.tasks` | Reward definitions behind the `Task` interface, registered by name (`tasks/__init__.py`). |
 | `aerowhip.experiment` | Experiment files: parsing, validation, run snapshots and run identity. |
 | `aerowhip.learning` | PPO, run folders/checkpoints and the training worker. Independent of the task. |
@@ -49,7 +49,7 @@ experiment file ──load──▶ Experiment + snapshot (experiment, resolved 
                               │
 python -m aerowhip.learning.worker --run <folder>
       │
-      ├─ PlantEnvironment (lanes) ── steps native plant, 200 Hz controller, 30 ms delay
+      ├─ BatchEnvironment (lanes) ── steps native plant + flight controller (OpenMP), 200 Hz controller, 30 ms delay
       │        │ every 100 Hz sample: Task.observe → reward;  on numerical failure: Task.fail
       │        ▼
       │   frames (actor), critic state (privileged), reward ledger
@@ -67,7 +67,10 @@ World axes are Z up; rotations map body to world; quaternions are XYZW. Drone
 position and velocity refer to the tracked top-plate origin. Cable nodes,
 including attachment node 0, are world positions in metres. Actions are
 normalized world accelerations (excluding gravity) scaled by
-`environment.acceleration_limit_mps2`, with yaw fixed at its initial value.
+`environment.acceleration_limit_mps2`, with yaw fixed at its initial value. In the training
+environment a zero action means hover: a vertical feed-forward acceleration, solved per lane from the
+thrust map at that lane's battery voltage, is added so that the delivered thrust equals the weight of
+drone and cable (in flight the host position controller supplies this trim).
 
 ## Equivalence check
 

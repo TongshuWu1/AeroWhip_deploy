@@ -1,20 +1,59 @@
 """Environment schedule, reward ledger, validity and numerical-failure handling.
 
-The plant step is replaced by fixed synthetic states so outcomes are known exactly;
-the first test runs the real plant for one decision.
+Two tests run the real native plant (hover, determinism, lane independence); the validity and
+failure tests replace the plant by fixed synthetic observations so outcomes are known exactly.
 """
-from dataclasses import replace
-
+import numpy as np
 import pytest
 import torch
 
-from aerowhip.envs.environment import make_environment
+from aerowhip.envs.batch_environment import make_batch_environment
 from helpers import EXPERIMENT, SCENE, SNAPSHOT, TASK
+
+
+def make(lanes=1):
+    return make_batch_environment(EXPERIMENT, SNAPSHOT, SCENE, lanes=lanes, device='cpu')
+
+
+def run(env, actions=None):
+    done = False
+    while not done:
+        _, _, done = env.step(torch.zeros(env.batch, 3) if actions is None else actions[:, env.decision])
+    return env.finish()
 
 
 @pytest.fixture
 def env():
-    return make_environment(EXPERIMENT, SNAPSHOT, SCENE, lanes=1, device='cpu', capture=False)
+    return make()
+
+
+class FakePlant:
+    """Stands in for the BatchRuntime: every lane sits at a fixed observation row."""
+    def __init__(self, env, row, fail_at=None):
+        self.real, self.row, self.fail_at, self.steps = env.runtime, row, fail_at, 0
+        self.errors = ['solver diverged']*env.batch
+
+    @property
+    def failed(self):
+        return [self.fail_at is not None and self.steps >= self.fail_at]*len(self.errors)
+
+    def step(self, command):
+        self.steps += 1
+
+    def observations(self):
+        return np.tile(self.row, (len(self.errors), 1))
+
+    def motors(self):
+        return np.full((len(self.errors), 4), .1)
+
+
+def fixed_plant(env, shift=(0., 0., 0.)):
+    row = env.runtime.observations()[0].copy()
+    n = env.nodes
+    row[:3] += shift
+    row[18:18+3*n] += np.tile(shift, n)
+    env.runtime = FakePlant(env, row)
+    return env.runtime
 
 
 def test_schedule_and_real_plant_step(env):
@@ -24,17 +63,27 @@ def test_schedule_and_real_plant_step(env):
     assert bool(env.numerical_valid[0, :3].all())
 
 
-def replace_plant(env, state, elapsed):
-    def fixed(current, command, controller, **kw):
-        kw['observer'](state, elapsed)
-        return state
-    env.model.step_unchecked = fixed
+def test_zero_action_holds_hover():
+    env = make(2)
+    returns, valid, _ = run(env)
+    drift = (env.history['drone_positions']-env.history['drone_positions'][:, :1]).norm(dim=-1).max()
+    assert float(drift) < 1e-3 and bool(valid.all())
+
+
+def test_runs_are_reproducible_and_lanes_independent():
+    generator = torch.Generator().manual_seed(1)
+    actions = (torch.rand(3, 200, 3, generator=generator)*2-1)*.5
+    first, second, alone = make(3), make(3), make(1)
+    returns = run(first, actions)[0]
+    assert torch.equal(returns, run(second, actions)[0])
+    assert torch.equal(first.frames, second.frames) and torch.equal(first.critic_states, second.critic_states)
+    assert torch.equal(run(alone, actions[1:2])[0][0], returns[1])
+    assert torch.equal(alone.frames[0], first.frames[1])
 
 
 def test_physical_violation_is_recorded_but_full_horizon_runs(env):
     # Cable pushed below the floor: invalid episode, but finite, so it continues to 4 s.
-    below = replace(env.state, position_com=env.state.position_com+env.model.tensor([.8, 0, -2.3]))
-    replace_plant(env, below, .01)
+    fixed_plant(env, shift=(0., 0., -2.3))
     for i in range(env.decisions):
         _, _, done = env.step(torch.zeros(1, 3))
         assert done == (i == env.decisions-1)
@@ -49,14 +98,15 @@ def test_physical_violation_is_recorded_but_full_horizon_runs(env):
 
 
 def test_numerical_failure_stops_lane_and_charges_remaining_time(env):
-    corrupt = replace(env.state, position_com=torch.full_like(env.state.position_com, float('nan')))
-    replace_plant(env, corrupt, 1/600)
+    plant = fixed_plant(env)
+    plant.fail_at = 1
     _, _, done = env.step(torch.zeros(1, 3))
     assert done
     returns, valid, components = env.finish()
     assert not bool(valid[0]) and bool(env.failed[0])
-    assert float(components['failure_cost'][0]) == pytest.approx(4-1/600)
+    assert float(components['failure_cost'][0]) == pytest.approx(4-.01)
     assert torch.isfinite(returns).all()
+    assert env.failure_records[0]['error'] == 'solver diverged'
 
 
 def test_rejects_unnormalized_actions(env):

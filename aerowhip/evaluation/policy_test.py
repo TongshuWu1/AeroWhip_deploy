@@ -18,7 +18,7 @@ from aerowhip.fitting.artifacts import atomic_save
 from aerowhip.paths import ROOT, project_path, project_reference
 from aerowhip.physics.configuration import load_configuration
 from aerowhip.physics.state import quaternion_xyzw_to_rotation_matrix, rotation_matrix_to_quaternion_xyzw
-from aerowhip.envs.environment import make_environment
+from aerowhip.envs.batch_environment import make_batch_environment as make_environment
 from aerowhip.experiment import digest, from_snapshot
 from aerowhip.learning.artifacts import EventLog, clean, read_json, save_json
 
@@ -69,7 +69,7 @@ def case_scene(scene, case):
                     and np.array_equal(old.linear_velocity_world_mps,velocity)
                     and np.array_equal(old.angular_velocity_body_radps,omega))
     if modified and any(x is not None for x in (old.cable_node_positions_world_m,
-            old.cable_node_velocities_world_mps,old.cable_material_angles_rad)):
+            old.cable_node_velocities_world_mps)):
         raise ValueError('Explicit cable initial states cannot be silently rebuilt for a new drone state')
     initial = replace(old,position_world_m=position,quaternion_body_to_world_xyzw=q,
                       linear_velocity_world_mps=velocity,angular_velocity_body_radps=omega)
