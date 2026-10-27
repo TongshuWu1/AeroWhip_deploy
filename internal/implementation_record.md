@@ -1764,3 +1764,11 @@ User's request: one systematic, automated data collection with a single calibrat
   open); a table of the parameters in plain words and units (start, best so far, change) instead of
   the per-phase trace plots. Pipeline shows "4 Coupled refinement — planned (not built yet)" before
   the coupled validation, and the residual after it. Checked visibly on the stopped drone run.
+- **Segment fits in worker processes** (same day): `least_squares.ProcessRunner` forks a pool once
+  with the segments (shared copy-on-write) and sends only the parameters per evaluation; only
+  numerical failures are caught, as before. Measured on the full data (i7-13700K, 24 threads), one
+  residual evaluation: drone 3.64 → 2.42 s, cable 19.5 → 11.8 s, residuals bit-identical to the
+  threaded version. Scaling against one core (15.3 ms per drone segment, 24.6 s serial): 8 workers
+  7.9×, 16 workers 9.0×, 24 workers 10.0× (threads gave about 6.7×): the CPU is the limit (8
+  performance cores). A profile puts about 0.5 ms of the 15 ms per segment in Python; the rest is the
+  native physics and firmware (about 30 µs per 2 ms step), so a batched native replay would gain little.

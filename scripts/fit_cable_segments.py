@@ -21,7 +21,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aerowhip.fitting import flight_cable
 from aerowhip.fitting.calibration_set import split
-from aerowhip.fitting.least_squares import Fit, FAILED_RESIDUAL_M, run_all, strong_correlations, uncertainty
+from aerowhip.fitting.least_squares import Fit, FAILED_RESIDUAL_M, ProcessRunner, strong_correlations, uncertainty
 from aerowhip.fitting.progress import Progress
 from aerowhip.physics.model import Model
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
@@ -34,16 +34,21 @@ def to_values(x):
     return dict(EI_n_m2=10**x[0], Cb_n_m2_s=10**x[1], normal_drag_coefficient=float(x[2]), external_drag_s_inv=10**x[3])
 
 
+def _replay(config):
+    replay = flight_cable.CableReplay(Model(config).native)
+    return lambda item: replay.run(item[1])
+
+
 class Residuals:
     def __init__(self, config, groups):
         self.config, self.groups, self.names = config, groups, list(groups)
+        self.items = [(n, w) for n in self.names for w in self.groups[n]]
+        self.runner = ProcessRunner(self.items, _replay)
 
     def errors(self, x):
-        replay = flight_cable.CableReplay(Model(flight_cable.with_cable(self.config, **to_values(x))).native)
-        items = [(n, w) for n in self.names for w in self.groups[n]]
-        results = run_all(lambda item: replay.run(item[1]), items)
+        results = self.runner(flight_cable.with_cable(self.config, **to_values(x)))
         out, messages = {n: [] for n in self.names}, {n: [] for n in self.names}
-        for (name, w), (predicted, message) in zip(items, results):
+        for (name, w), (predicted, message) in zip(self.items, results):
             out[name].append(None if predicted is None else predicted-w.markers[1:])
             if message:
                 messages[name].append(message)
@@ -105,6 +110,7 @@ def main():
     errors, messages = residuals.errors(x_now)
     dropped = {n: m for n, m in messages.items() if m}
     train = {n: [w for w, e in zip(train[n], errors[n]) if e is not None] for n in train}
+    residuals.runner.close()
     residuals = Residuals(config, {n: v for n, v in train.items() if v})
     seen = residuals.seen()
 

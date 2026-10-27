@@ -25,7 +25,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aerowhip.fitting import flight_drone
 from aerowhip.fitting.calibration_set import flight_windows, folders, is_held_out
-from aerowhip.fitting.least_squares import FAILED_RESIDUAL_M, Fit, bias_profile, run_all, strong_correlations, uncertainty
+from aerowhip.fitting.least_squares import FAILED_RESIDUAL_M, Fit, ProcessRunner, bias_profile, strong_correlations, uncertainty
 from aerowhip.fitting.progress import Progress
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
 from aerowhip.takes.calibration_flights import load
@@ -47,10 +47,18 @@ def segments(setup, horizon):
     return train, held
 
 
+def _replay(parameters):
+    config, firmware = parameters
+    replay = flight_drone.DroneReplay(config, firmware)
+    return lambda item: replay.errors(*item[1], pipeline=True)
+
+
 class Residuals:
     def __init__(self, base, firmware, groups):
         self.base, self.firmware, self.groups = base, firmware, groups
         self.names = list(groups)
+        self.items = [(name, i) for name in self.names for i in self.groups[name]]
+        self.runner = ProcessRunner(self.items, _replay)
 
     def config(self, x, delay):
         c = vehicle(base=self.base, x=[x[0], 1., x[1], delay], cable=False)
@@ -59,11 +67,9 @@ class Residuals:
 
     def errors(self, x, delay):
         """{name: [(N, 3) error or None]}, {name: [message]} at physical parameters x."""
-        replay = flight_drone.DroneReplay(self.config(x, delay), self.firmware)
-        items = [(name, i) for name in self.names for i in self.groups[name]]
-        results = run_all(lambda item: replay.errors(*item[1], pipeline=True), items)
+        results = self.runner((self.config(x, delay), self.firmware))
         errors, messages = {n: [] for n in self.names}, {n: [] for n in self.names}
-        for (name, _), (e, message) in zip(items, results):
+        for (name, _), (e, message) in zip(self.items, results):
             errors[name].append(e)
             if message:
                 messages[name].append(message)
@@ -142,6 +148,7 @@ def main():
     dropped = {n: m for n, m in messages.items() if m}
     for name in train:
         train[name] = [item for item, e in zip(train[name], errors[name]) if e is not None]
+    residuals.runner.close()
     residuals = Residuals(base, firmware, {n: v for n, v in train.items() if v})
     count = sum(map(len, residuals.groups.values()))
     print(f'{count} segments of {args.horizon} s from {len(residuals.names)} flights, {sum(map(len, held.values()))} held out; '

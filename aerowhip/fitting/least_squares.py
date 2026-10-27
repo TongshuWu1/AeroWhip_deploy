@@ -19,6 +19,7 @@ residuals, is reported beside it and is much too small. Both are local (linearis
 """
 from concurrent.futures import ThreadPoolExecutor
 import math
+import multiprocessing
 import os
 
 import numpy as np
@@ -37,6 +38,46 @@ def run_all(function, items, *, threads=None):
             return None, f'{type(exc).__name__}: {exc}'
     with ThreadPoolExecutor(threads or os.cpu_count()) as pool:
         return list(pool.map(one, items))
+
+
+# Worker processes. The items (segments) are set as a module global before the pool forks, so every
+# worker has them without copying; each task sends only the parameters and a range of items.
+_ITEMS, _PREPARE = None, None
+
+
+def _chunk(task):
+    parameters, lo, hi = task
+    function = _PREPARE(parameters)
+    out = []
+    for item in _ITEMS[lo:hi]:
+        try:
+            out.append((function(item), None))
+        except NUMERICAL as exc:
+            out.append((None, f'{type(exc).__name__}: {exc}'))
+    return out
+
+
+class ProcessRunner:
+    """Evaluate `prepare(parameters)(item)` for every item of a fixed list in worker processes.
+    Python threads serialise on the interpreter lock (24 threads gave 4–7× here); processes do not.
+    `prepare` builds what the items share (e.g. one replay model) once per chunk. Same results and
+    failure handling as `run_all`, in item order."""
+
+    def __init__(self, items, prepare, *, workers=None, chunks_per_worker=3):
+        global _ITEMS, _PREPARE
+        _ITEMS, _PREPARE = list(items), prepare
+        self.workers = workers or os.cpu_count()
+        self.pool = multiprocessing.get_context('fork').Pool(self.workers)      # forks now, with the items
+        count = max(1, min(len(_ITEMS), self.workers*chunks_per_worker))
+        edges = np.linspace(0, len(_ITEMS), count+1).round().astype(int)
+        self.ranges = [(int(a), int(b)) for a, b in zip(edges[:-1], edges[1:]) if b > a]
+
+    def __call__(self, parameters):
+        parts = self.pool.map(_chunk, [(parameters, a, b) for a, b in self.ranges], chunksize=1)
+        return [r for part in parts for r in part]
+
+    def close(self):
+        self.pool.terminate()
 
 
 def bias_profile(errors):
