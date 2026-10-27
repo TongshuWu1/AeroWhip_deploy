@@ -29,8 +29,9 @@ Defined in [configs/physics/drone_cable.json](../configs/physics/drone_cable.jso
 | Bending stiffness EI / bending damping Cb | 1.14e−7 N m² (not identifiable) / 3.02e−4 N m² s |
 | Cable diameter / normal drag coefficient Cd / air density | 3.5 mm / 0.69 / 1.2 kg m⁻³ |
 | Linear drag | 0.0526 s⁻¹ (on node velocity, mass proportional) |
+| Drone air drag (body x, y / z) | 0.52 / 0.85 s⁻¹ (linear, mass proportional, on the COM velocity in body axes) |
 | Maximum physics step | 1/600 s |
-| Output / controller rate | 100 / 200 Hz |
+| Output / controller rate | 100 / 500 Hz (the firmware attitude rate) |
 | Attitude loop / command delay / motor response | firmware law: Mellinger gains of the flight (kR 70000, kw 20000, kd_omega 200, massThrust 17700) / 0 s / 0.0225 s; roll/pitch inertia 1.877e-4 kg m² and motor arm 0.0613 m fitted together on the drone-only flights (correlated until the arm is measured). Identified law (fallback): 20 rad/s, ζ = 1 / 0.03 s / 0.015 s |
 | Thrust map | T = 0.553 (1 + 0.177 (V − 7.2 V)) T_cmd^2.2 N, T_cmd the firmware thrust in N |
 | Motor thrust limit | 0.85 N per motor (peak measured collective thrust 3.39 N) |
@@ -59,6 +60,15 @@ antiparallel adjacent edges are rejected as invalid states.
 On the identified values the cable is gravity dominated (EI/(m g L²) ≈ 3·10⁻⁷) and its bending
 is strongly damped (Cb/EI of order 10³–10⁴ s): its shape is set by gravity, inertia, bending
 damping and air drag, and EI is not identifiable from flight data (any small value fits).
+
+## Drone air drag
+
+The drone carries a linear air drag per body axis on its centre-of-mass velocity relative to
+still air, F = −m R diag(k_x, k_y, k_z) Rᵀ v (`drone.body_drag_s_inv`), the usual first-order
+model of rotor and body drag on a small quadrotor (horizontal axes share one rate). It was
+identified because the open-loop replay error of the earlier model grew with flight velocity
+along the direction of travel on every flight, with and without cable; the fit is reported on
+the data and fitting page.
 
 ## Integration
 
@@ -120,4 +130,5 @@ by the sent commands) run windows in parallel threads on the same engine.
 `tests/test_native_physics.py` verifies, without fitted parameters: free fall at −g·t with no
 thrust or drag; a weight-equal thrust holding a hanging cable exactly at rest; conservation of
 total momentum (to 1e−12) while a cable bends internally during free fall, with edge lengths
-preserved to 1e−12 m; and batch lanes reproducing a single runtime exactly.
+preserved to 1e−12 m; the drone body drag changing the total momentum by exactly
+−m R diag(k) Rᵀ v; and batch lanes reproducing a single runtime exactly.

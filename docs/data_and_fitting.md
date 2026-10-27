@@ -141,7 +141,14 @@ parameters. Every reported number is computed twice.
    delay (Nelder–Mead on the debiased open-loop position error of the drone-only flights);
    the cable flights are then scored with nothing refitted, raw and debiased, as the
    cross-check. The open-loop position error over 2 s, after removing a constant
-   acceleration drift per window, checks the result.
+   acceleration drift per window, checks the result. The drone's linear air drag
+   (`scripts/fit_drone_drag.py`) is fitted afterwards on the same flights with everything
+   else fixed, on the raw error (it is a slowly varying force): horizontal 0.52 s⁻¹,
+   vertical 0.85 s⁻¹. It roughly halves the raw open-loop error (drone-only held out 265 →
+   134 mm, cable flights held out 250 → 164 mm) and lowers the debiased error (57.7 → 42.2
+   and 54.2 → 45.6 mm). The vertical rate is larger than a regression of the residuals on
+   velocity suggests (0.2–0.33 s⁻¹) and may also absorb vertical thrust dynamics; it should be
+   re-checked once the motor map is identified on the bench.
 2. **Cable** (`aerowhip.fitting.flight_cable`, `scripts/fit_cable_flights.py`): the measured
    drone pose drives the clamp; the cable starts from the measured markers and runs open
    loop. Loss: RMS distance between simulated and measured markers over the markers that were

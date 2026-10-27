@@ -1435,3 +1435,38 @@ No reward, task or physics change.
   estimate is still the true state (attitude bias, design §2.5, not added). No training run on the new
   observations. `scripts/equivalence_check.py` still targets the tensor environment. A C++ port of the
   filter would restore the batch throughput.
+
+## Dated change note — 2026-10-28 drone air drag (branch `engine-v2`)
+
+Approved by the user after the residual analysis ("Yes lets do it").
+
+- **Evidence.** Per 2 s open-loop window (adopted firmware model, 323 drone-only and 287 cable
+  windows) the constant acceleration that explains the error (sim minus real) correlates with the
+  window's velocity along the same axis (corr 0.62 x / 0.48 y drone-only, 0.58 / 0.42 cable): the
+  simulated drone outran the real one in its direction of travel. A linear term fitted on the
+  fitting flights lowered the held-out residual 0.288 → 0.229 m/s² (drone-only), 0.272 → 0.206
+  (cable); a quadratic term added nothing held out; per-flight constants (attitude-estimate bias)
+  only 0.229 → 0.217. One-off analysis, not retained.
+- **Model.** [native/engine.cpp](../native/engine.cpp): `drone_body_drag_acceleration`,
+  F = −m R diag(k) Rᵀ v on the COM velocity (still air), added to the drone load and to
+  `drone_air_force`. New required key `drone.body_drag_s_inv` (three non-negative rates; bindings
+  reject a missing key). The residual-network rebuild path and `Model.info()` carry it.
+- **Fit.** [scripts/fit_drone_drag.py](../scripts/fit_drone_drag.py), Nelder–Mead on the raw 2 s
+  error of the drone-only fitting flights, horizontal rates shared, everything else fixed:
+  k_xy 0.518, k_z 0.846 s⁻¹ (`runs/calibration_2026-10-27/drone_drag_fit.json`, reproduced twice).
+  Raw / debiased mm, before → after: drone-only fit 278/64.9 → 139/37.6, held out 265/57.7 →
+  134/42.2; cable fit 296/60.8 → 179/38.9, cable held out 250/54.2 → 164/45.6. Adopted in
+  `drone_cable.json`.
+- **Coupled validation** with the adopted configuration
+  (`runs/calibration_2026-10-27/coupled_validation_adopted.json`; the previous one is kept as
+  `coupled_validation_adopted_nodrag.json`), every row reproduced twice: drone debiased 27–44 mm
+  (was 32–103; line_star 103 → 44), raw 119–213 mm (was 167–392); held out random_high 41.6 / 133
+  raw (46.6 / 221), whip 40.8 / 174 raw (54.3 / 250). Cable shape improved on seven flights
+  (line_star 66.6 → 50.4, random_high 45.1 → 42.7) and is slightly worse on whip 70.6 → 73.8 (tip
+  130.7 → 135.0) and vertical 25.0 → 25.8.
+- **Checks.** 107 tests pass, including `test_body_drag_is_linear_in_body_frame_velocity` (total
+  momentum change equals −m R diag(k) Rᵀ v to 1e−12, through the clamp).
+- **Open.** k_z is above the residual regression (0.2–0.33) and may absorb vertical thrust
+  dynamics (motor map, stage 1); stage 2 (inertia, arm, motor response) was fitted without drag and
+  has not been refitted jointly; drag proportional to thrust (rotor drag) versus constant was not
+  tested; whip cable shape is not improved.

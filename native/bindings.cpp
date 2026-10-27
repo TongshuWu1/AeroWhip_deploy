@@ -42,6 +42,7 @@ Parameters parameters(const py::dict& d) {
     p.maximum_step=d["maximum_step"].cast<double>(); p.projections=d["projections"].cast<int>();
     p.inertia=fixed<9>(d["inertia"],2); p.arm=fixed<3>(d["arm"]); p.gravity=fixed<3>(d["gravity"]);
     p.root_tangent_body=fixed<3>(d["root_tangent_body"]);
+    if(d.contains("body_drag")) p.body_drag=fixed<3>(d["body_drag"]);
     p.rest=vector(d["rest"]); p.node_mass=vector(d["node_mass"]);
     if(d.contains("residual") && !d["residual"].is_none()) {
         auto r=d["residual"].cast<py::dict>();
@@ -71,6 +72,9 @@ Model model(const py::dict& c,const py::object& residual) {
     ModelInput input;auto& p=input.parameters;
     p.root_tangent_body=fixed<3>(a["tangent_body"]);
     p.mass=d["mass_kg"].cast<double>();p.inertia=fixed<9>(d["inertia_body_about_com_kg_m2"],2);
+    if(!d.contains("body_drag_s_inv")) throw py::value_error("drone.body_drag_s_inv (linear drag rates per body axis, s^-1) is required");
+    p.body_drag=fixed<3>(d["body_drag_s_inv"]);
+    for(double k:p.body_drag) if(!std::isfinite(k)||k<0.) throw py::value_error("drone.body_drag_s_inv must be finite and nonnegative");
     input.tracking_to_com=fixed<3>(d["center_of_mass_tracking_m"]);
     input.tracking_to_attachment=fixed<3>(a["position_tracking_m"]);
     input.intervals=vector(cable["marker_interval_lengths_m"]);
@@ -106,7 +110,7 @@ Model model(const py::dict& c,const py::object& residual) {
         const auto& v=result.parameters;
         raw["mass"]=v.mass;raw["inertia"]=py::array_t<double>({3,3},v.inertia.data());
         raw["arm"]=v.arm;raw["gravity"]=v.gravity;raw["rest"]=v.rest;raw["node_mass"]=v.node_mass;
-        raw["root_tangent_body"]=v.root_tangent_body;
+        raw["root_tangent_body"]=v.root_tangent_body;raw["body_drag"]=v.body_drag;
         raw["bending_damping"]=v.bending_damping;raw["air_density"]=v.air_density;
         raw["normal_drag_coefficient"]=v.normal_drag_coefficient;raw["diameter"]=v.diameter;
         raw["stiffness"]=v.stiffness;raw["drag"]=v.drag;raw["maximum_step"]=v.maximum_step;raw["projections"]=v.projections;
@@ -121,6 +125,7 @@ py::dict info(const Model& model) {
     d["attachment_tracking"]=array(Vector(model.attachment.begin(),model.attachment.end()));
     d["arm"]=array(Vector(p.arm.begin(),p.arm.end()));d["gravity"]=array(Vector(p.gravity.begin(),p.gravity.end()));
     d["root_tangent_body"]=array(Vector(p.root_tangent_body.begin(),p.root_tangent_body.end()));
+    d["body_drag"]=array(Vector(p.body_drag.begin(),p.body_drag.end()));
     d["rest"]=array(p.rest);d["node_mass"]=array(p.node_mass);d["ei"]=p.stiffness;d["drag"]=p.drag;
     d["cb"]=p.bending_damping;d["cd"]=p.normal_drag_coefficient;d["diameter"]=p.diameter;d["air_density"]=p.air_density;
     d["dt"]=model.output_step;d["delay_s"]=model.delay;d["physics_dt"]=p.maximum_step;d["iterations"]=p.projections;

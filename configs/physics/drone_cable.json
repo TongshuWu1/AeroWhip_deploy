@@ -1,6 +1,11 @@
 {
   "drone": {
     "mass_kg": 0.146,
+    "body_drag_s_inv": [
+      0.5179687499999999,
+      0.5179687499999999,
+      0.8457031249999999
+    ],
     "tracking_origin": "top_plate_center",
     "center_of_mass_tracking_m": [
       0,

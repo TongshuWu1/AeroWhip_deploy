@@ -107,3 +107,31 @@ def test_batch_lanes_reproduce_a_single_runtime():
     states = batch.states()
     assert np.array_equal(states[1], single.state())          # bit-identical lane
     assert not np.array_equal(states[0], states[2])           # voltage changes the thrust
+
+
+def test_body_drag_is_linear_in_body_frame_velocity():
+    # Drone-only acceleration change from the body drag: -R diag(k) R^T v, with the cable slack-free
+    # contribution removed by comparing the same state with and without drag.
+    config, model, engine = setup(drag=False)
+    k = np.array([.4, .3, .2])
+    i = model.native.info()
+    raw = dict(mass=i['mass'], stiffness=i['ei'], drag=i['drag'], bending_damping=i['cb'], air_density=i['air_density'],
+               normal_drag_coefficient=i['cd'], diameter=i['diameter'], maximum_step=i['physics_dt'],
+               projections=i['iterations'], inertia=i['inertia'], arm=i['arm'], gravity=i['gravity'],
+               root_tangent_body=i['root_tangent_body'], rest=i['rest'], node_mass=i['node_mass'])
+    dragged = native_module().Engine(dict(raw, body_drag=k))
+    angle = .3
+    R = np.array([[math.cos(angle), -math.sin(angle), 0.], [math.sin(angle), math.cos(angle), 0.], [0., 0., 1.]])
+    v = np.array([1.2, -.5, .3])
+    state = model.native.initial_state(np.array([0., 0., 2.]), R, v, np.zeros(3), None, None)
+    engine.reset(state); dragged.reset(state)
+    w = np.array([(model.mass+model.node_mass.sum())*G, 0., 0., 0.])
+    d = dragged.acceleration(w)-engine.acceleration(w)
+    # The clamp transmits part of the drag to the cable, so the check is on the whole system: its
+    # momentum changes by exactly the drag force. The clamped node 0 moves with the body point at
+    # the arm (zero body rate here): a0 = a_com + R (alpha x arm).
+    force = -model.mass*R@(k*(R.T@v))
+    root = d[:3]+R@np.cross(d[3:6], i['arm'])
+    total = model.mass*d[:3]+model.node_mass[0]*root+(model.node_mass[1:, None]*d[6:].reshape(-1, 3)).sum(0)
+    np.testing.assert_allclose(total, force, rtol=0, atol=1e-12)
+    np.testing.assert_allclose(Model(dict(config, drone=dict(config['drone'], body_drag_s_inv=list(k))), load_weights=False).native.info()['body_drag'], k)

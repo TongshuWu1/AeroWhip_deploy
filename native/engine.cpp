@@ -199,6 +199,10 @@ Vec3 drone_drag_acceleration(const Parameters& p,const Vector& s) {
     for(int j=0;j<3;++j)a[j]=-r.drone_max_rate*.5*(1.+std::tanh(y[j]/2.))*v[j];
     return mv(R,a); // external force at vehicle COM, no learned moment
 }
+Vec3 drone_body_drag_acceleration(const Parameters& p,const Vector& s) {
+    auto R=rotation(s);auto v=mv(transpose(R),at(s,12));
+    return mv(R,Vec3{-p.body_drag[0]*v[0],-p.body_drag[1]*v[1],-p.body_drag[2]*v[2]});
+}
 void validate_wrench(const Wrench& w) {
     require(finite(w) && w[0]>=0., "Wrench must be finite: nonnegative collective N, body XYZ Nm");
 }
@@ -407,7 +411,7 @@ void Engine::restore(const Vector& saved) {
 Vector Engine::state() const { Guard guard(busy_); require(!state_.empty(),"Reset engine before use"); return state_; }
 Vec3 Engine::drone_air_force() const {
     Guard guard(busy_);require(!state_.empty(),"Reset engine before use");
-    return drone_drag_acceleration(p_,state_)*p_.mass;
+    return (drone_drag_acceleration(p_,state_)+drone_body_drag_acceleration(p_,state_))*p_.mass;
 }
 Vector Engine::acceleration(const Wrench& w) const {
     Guard guard(busy_); require(!state_.empty(),"Reset engine before use"); validate_wrench(w); return add_scaled(acceleration_at(state_,w),material::instantaneous(p_,state_),1.);
@@ -431,7 +435,7 @@ Vector Engine::generalized_load(const Vector& s, const Wrench& w) const {
     Vec3 omega=at(s,15), gyro=cross(omega,mv(p_.inertia,omega));
     Vec3 centripetal=mv(R,cross(omega,cross(omega,p_.arm)));
     Vec3 force=p_.gravity*p_.mass+Vec3{R[2],R[5],R[8]}*w[0]+f[0]-centripetal*p_.node_mass[0];
-    force=force+drone_drag_acceleration(p_,s)*p_.mass;
+    force=force+(drone_drag_acceleration(p_,s)+drone_body_drag_acceleration(p_,s))*p_.mass;
     Vec3 torque=Vec3{w[1],w[2],w[3]}-gyro+mv(transpose(b.B),f[0])-mv(transpose(b.B),centripetal)*p_.node_mass[0];
     torque=torque+mv(Rt,root_moment);
     Vector out(6+3*m);put(out,0,force);put(out,3,torque);
