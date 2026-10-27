@@ -19,7 +19,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aerowhip.deployment.observer import Observer, rotation_log
 from aerowhip.envs.observation import frame_row
-from aerowhip.fitting.calibration_set import HELD_OUT, folders
+from aerowhip.fitting.calibration_set import is_held_out, folders
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
 from aerowhip.physics.state import quaternion_xyzw_to_rotation_matrix
 
@@ -89,7 +89,7 @@ def main():
         same = {key: v for key, v in first.items() if key != 'seconds_per_frame'} == {key: v for key, v in second.items() if key != 'seconds_per_frame'}
         if not same:
             raise RuntimeError(f'{motion} did not reproduce')
-        results[motion] = r = dict(first, held_out=motion in HELD_OUT)
+        results[motion] = r = dict(first, held_out=is_held_out(folder))
         if k < args.save_frames:
             np.savez_compressed(args.output.with_name(f'observer_frames_{motion}.npz'), frames=frames)
         print(f"{motion:12s} {r['frames']:5d} frames, {r['seconds_per_frame']*1e3:.2f} ms/frame; drone velocity rms {r['velocity_rms_mps']*1e3:.0f} mm/s "

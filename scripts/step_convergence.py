@@ -21,7 +21,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aerowhip.fitting import flight_drone
-from aerowhip.fitting.calibration_set import HELD_OUT, flight_windows, folders
+from aerowhip.fitting.calibration_set import is_held_out, flight_windows, folders
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
 from aerowhip.takes.calibration_flights import load
 
@@ -99,7 +99,7 @@ def main():
                     raise RuntimeError(f'{key} at {step} s did not reproduce')
                 runs[step], costs[step] = first, (time.time()-start)/2
             reference = runs[args.steps[-1]]
-            out['results'][key] = dict(held_out=motion in HELD_OUT, windows=len(items), seconds=costs,
+            out['results'][key] = dict(held_out=is_held_out(folder), windows=len(items), seconds=costs,
                                        steps={str(s): dict(summary=summary(rows := compare(runs[s], reference)), windows=rows)
                                               for s in args.steps[:-1]})
             for s in args.steps[:-1]:

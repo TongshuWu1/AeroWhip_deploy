@@ -22,7 +22,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aerowhip.fitting import flight_cable, flight_drone
-from aerowhip.fitting.calibration_set import HELD_OUT, flight_windows, folders
+from aerowhip.fitting.calibration_set import is_held_out, flight_windows, folders
 from aerowhip.physics.model import Model
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
 from aerowhip.takes.calibration_flights import load
@@ -94,10 +94,10 @@ def main():
         alone, coupled = [p[0] for p in passes[0]], [p[1] for p in passes[0]]
         worst = sorted(((float(np.sqrt(np.nanmean(c**2))), float(np.sqrt(np.nanmean(a**2))), w.phase, float(w.start_stamp))
                         for a, c, w in zip(alone, coupled, windows) if a is not None and c is not None), reverse=True)[:5]
-        results[motion] = dict(held_out=motion in HELD_OUT, cable_alone=breakdown(alone, windows), coupled=breakdown(coupled, windows),
+        results[motion] = dict(held_out=is_held_out(folder), cable_alone=breakdown(alone, windows), coupled=breakdown(coupled, windows),
                                worst_windows=[dict(coupled_rms_m=c, cable_alone_rms_m=a, phase=p, start_stamp=s) for c, a, p, s in worst])
         r = results[motion]
-        print(f"{motion:12s}{' HELD' if motion in HELD_OUT else '     '} cable alone {r['cable_alone']['rms_m']*1e3:5.1f} mm  coupled {r['coupled']['rms_m']*1e3:5.1f} mm"
+        print(f"{motion:12s}{' HELD' if is_held_out(folder) else '     '} cable alone {r['cable_alone']['rms_m']*1e3:5.1f} mm  coupled {r['coupled']['rms_m']*1e3:5.1f} mm"
               f"  | tip alone {r['cable_alone']['per_marker_rms_m'][-1]*1e3:5.1f} coupled {r['coupled']['per_marker_rms_m'][-1]*1e3:5.1f}"
               f"  | alone by time {[round(v*1e3, 1) for v in r['cable_alone']['by_time_rms_m'].values()]}", flush=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)

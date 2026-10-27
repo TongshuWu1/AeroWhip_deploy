@@ -20,7 +20,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aerowhip.deployment.cable_filter import CableFilter, MARKERS
-from aerowhip.fitting.calibration_set import HELD_OUT, folders
+from aerowhip.fitting.calibration_set import is_held_out, folders
 from aerowhip.takes.cable_labels import load_flight
 
 DT = .01
@@ -107,7 +107,7 @@ def main():
         first, second = flight_check(folder, args.snap, args.clock), flight_check(folder, args.snap, args.clock)
         if json.dumps(first) != json.dumps(second):
             raise RuntimeError(f'{motion} did not reproduce')
-        results[motion] = r = dict(first, held_out=motion in HELD_OUT)
+        results[motion] = r = dict(first, held_out=is_held_out(folder))
         ratios = [e['ratio'] for e in r['snaps']]
         delays = [e['delay_frames'] for e in r['snaps']]
         print(f"{motion:12s} velocity rms {r['rms_mps']:.3f} m/s (tip {r['per_marker_rms_mps'][-1]:.3f}), best lag {r['best_lag_frames']} frames; "

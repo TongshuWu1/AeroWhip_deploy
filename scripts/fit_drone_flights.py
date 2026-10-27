@@ -22,7 +22,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aerowhip.fitting import flight_drone
 from aerowhip.paths import ROOT
-from aerowhip.fitting.calibration_set import folders, flight_windows, HELD_OUT, manifest
+from aerowhip.fitting.calibration_set import folders, flight_windows, is_held_out, manifest
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
 from aerowhip.takes.calibration_flights import load
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -49,7 +49,7 @@ def items_for(setup):
     for motion, folder in folders(setup).items():
         flight = load(folder)
         flight.markers = None
-        (held if motion in HELD_OUT else train)[motion] = [(w, flight) for w in flight_windows(folder, cable=False)]
+        (held if is_held_out(folder) else train)[motion] = [(w, flight) for w in flight_windows(folder, cable=False)]
     return train, held
 
 

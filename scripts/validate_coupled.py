@@ -21,7 +21,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aerowhip.fitting import flight_drone
-from aerowhip.fitting.calibration_set import folders, flight_windows, HELD_OUT
+from aerowhip.fitting.calibration_set import folders, flight_windows, is_held_out
 from aerowhip.fitting.flight_cable import with_cable
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
 from aerowhip.takes.calibration_flights import load
@@ -85,9 +85,9 @@ def main():
         for motion, items in flights.items():
             first, second = score(config, firmware, items), score(config, firmware, items)
             first['reproduced_twice'] = first == second
-            first['held_out'] = motion in HELD_OUT
+            first['held_out'] = is_held_out(folder)
             rows[motion] = first
-            print(f'{name[:28]:28s} {motion:12s} {"HELD" if motion in HELD_OUT else "    "} drone {first["drone_debiased_rms_m"]*1e3:6.1f} mm debiased '
+            print(f'{name[:28]:28s} {motion:12s} {"HELD" if is_held_out(folder) else "    "} drone {first["drone_debiased_rms_m"]*1e3:6.1f} mm debiased '
                   f'({first["drone_raw_rms_m"]*1e3:5.0f} raw)  cable shape {first["cable_shape_rms_m"]*1e3:5.1f} mm  tip {first["tip_shape_rms_m"]*1e3:5.1f} mm  '
                   f'failed {first["failed"]}  reproduced {first["reproduced_twice"]}', flush=True)
         results[name] = rows

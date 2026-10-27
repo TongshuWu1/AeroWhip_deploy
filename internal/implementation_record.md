@@ -1628,3 +1628,23 @@ User's request: one systematic, automated data collection with a single calibrat
   it**; `fit_drone_joint.py --fix-arm` is ready (a run was started and stopped at the user's request: wait
   for the full session's data). Until that refit, the drone model is inconsistent with its own fit.
 - 111 tests pass.
+
+## Dated change note — 2026-10-28 flights by category, pooled across days; machine instability
+
+- User's direction: record flights by category, not by session; one general model fitted on all flights
+  of a category whatever day, with measured per-flight conditions (battery voltage) as inputs and a small
+  residual later for what remains. Companion repo: flights now in `calibration_data/<setup>/<take>/<NNN>/`
+  (22 existing folders moved; manifest `previous_folder` keeps the old names); `collect_series.py` has no
+  `--session` (date is metadata), flies the whole series per setup (`--only`, `--from`, `--one`, `--status`).
+- [fitting/calibration_set.py](../aerowhip/fitting/calibration_set.py): no session filter; `folders`/`split`
+  return every flight of a setup, named by take (or take/NNN when a category has several); `held_out` and
+  `is_held_out(folder)` come from the manifest roles; all scripts use `is_held_out(folder)` instead of the
+  `HELD_OUT` names. Window sets unchanged (257 + 66, 241 + 46), verified six times.
+- **Machine instability observed (i7-13700K, BIOS 0411 of 2022-09, microcode 0x133 loaded by the OS):**
+  three gcc internal compiler errors in different places during clean rebuilds, two random JSON parse
+  failures of intact files (not reproducible on rerun), two Python segfaults; the kernel log shows 23
+  segfaults in 7 days across many cores, including unrelated programs. Consistent with the known 13th/14th
+  generation Intel instability or memory errors. All retained results were reproduced twice identically,
+  which a random corruption would have broken; that rule must stay. The user was told; BIOS update,
+  default power settings and a memory test are recommended.
+- 111 tests pass (twice).
