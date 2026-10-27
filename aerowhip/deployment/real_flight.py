@@ -9,6 +9,7 @@ from time import perf_counter
 
 import numpy as np
 
+from aerowhip.deployment.cable_filter import cable_candidates
 from aerowhip.deployment.observer import rotation_log
 from aerowhip.deployment.ros_bridge import vector
 from aerowhip.deployment.ros_real_bridge import PacketReader, cable_candidate_mask
@@ -109,10 +110,12 @@ class RealFlightFeed(DisplayFeed):
         self.derivatives = {}      # per robot: PoseDerivatives for the displayed velocity/acceleration
         self.tracked = set()       # robots that have had an OptiTrack pose in this session
         if tracking_settings is not None:
-            from aerowhip.deployment.cable_tracking import CableTracker
+            # The online labeller: the same live CableFilter that labels the recordings and runs in
+            # the policy's estimator (deployment.observer), on the cloud the relay forwards.
+            from aerowhip.deployment.cable_filter import CableFilter
             if len(self.robots) != 1:
-                raise ValueError('Experimental cable tracking requires one selected robot (--robot)')
-            self.tracker = CableTracker(tracking_settings)
+                raise ValueError('Cable tracking requires one selected robot (--robot)')
+            self.tracker = CableFilter(np.asarray(tracking_settings.marker_distances_m, float))
         if cable_model is not None:
             from aerowhip.physics.live_cable import LiveCable
             if (not np.allclose(configuration.platform.attachment_offset_body_m,
@@ -299,27 +302,31 @@ class RealFlightFeed(DisplayFeed):
         data = matching[0]
         if data['stamp_ns'] != packet['stamp_ns']:
             raise ValueError('Cable cloud/pose timestamp mismatch')
-        root = np.asarray(vector(data['position_world_m'], 3))+quaternion_xyzw_to_rotation_matrix(
-            vector(data['quaternion_xyzw'], 4))@self.configuration.platform.attachment_offset_body_m
+        drone = np.asarray(vector(data['position_world_m'], 3))
+        root = drone+quaternion_xyzw_to_rotation_matrix(vector(data['quaternion_xyzw'], 4))@self.configuration.platform.attachment_offset_body_m
         points = np.asarray(packet['points_world_m'], dtype=float).reshape(-1, 3)
         try:
             eligible = np.asarray(cable_candidate_mask(packet.get('point_metadata'), len(points)), dtype=bool)
-            candidates = points.copy()
-            candidates[~eligible] = np.nan
-            result = self.tracker.observe(float(packet['time_s']), root, candidates)
+            candidates = cable_candidates(points[eligible], drone)      # as offline: drone markers and duplicates removed
+            state = self.tracker.observe(float(packet['time_s']), root, candidates)
         except ValueError as exc:
             self.tracking_status = str(exc)
             self.tracking_display = None
             self.reconstruction = dict(status=str(exc), stamp_ns=packet['stamp_ns'])
             return
-        self.reconstruction = dict(result, stamp_ns=packet['stamp_ns'], generation=generation, robot=data['name'],
-            excluded_point_indices=np.flatnonzero(~eligible).tolist(),
-            candidate_filter='Observed unassociated passive NatNet labeled markers; raw points retained')
-        observed = np.array([p is not None for p in result['positions_world_m']])
-        positions = np.array([p if p is not None else [0., 0., 0.] for p in result['positions_world_m']])
-        self.tracking_status = f'{result["observed_count"]}/{result["marker_count"]} · {result["status"]}'
-        self.tracking_display = CableTrackingDisplay(result['time_s'], root, positions,
-            observed, np.asarray(result['confidence']), points[np.isfinite(points).all(axis=1)], result['status'])
+        observed = state['index'] >= 0
+        labelled = np.isfinite(state['positions']).all(axis=1)
+        positions = np.where(labelled[:, None], state['positions'], 0.)
+        status = (f'{int(observed.sum())}/{len(observed)} seen · quality {state["quality"]:.2f}' if state['initialized']
+                  else 'waiting for a hanging cable with most markers visible')
+        self.reconstruction = dict(stamp_ns=packet['stamp_ns'], generation=generation, robot=data['name'], time_s=state['time_s'],
+            initialized=bool(state['initialized']), index=state['index'].tolist(), confidence=state['confidence'].tolist(),
+            positions_world_m=[p.tolist() if ok else None for p, ok in zip(state['positions'], labelled)],
+            candidates=int(len(candidates)), excluded_point_indices=np.flatnonzero(~eligible).tolist(),
+            labeller='deployment.cable_filter.CableFilter (the policy estimator and offline labeller)')
+        self.tracking_status = status
+        self.tracking_display = CableTrackingDisplay(float(packet['time_s']), root, positions, observed & labelled,
+            np.asarray(state['confidence']), points[np.isfinite(points).all(axis=1)], status)
 
     def close(self):
         if self.transport:

@@ -120,7 +120,7 @@ def main():
     parser.add_argument('--robot', action='append', help='Display selected enabled robot(s); default is all enabled')
     parser.add_argument('--frame', help='Display frame; default is the OptiTrack YAML frame; other frames require TF')
     parser.add_argument('--poses-topic', default='/poses')
-    parser.add_argument('--track-cable', action='store_true', help='Experimental cable association from the raw cloud; select one robot and initialize hanging')
+    parser.add_argument('--track-cable', action='store_true', help='Run the live cable labeller (CableFilter) on the raw cloud and show its estimate; one robot')
     parser.add_argument('--point-cloud-topic', default='/pointCloud')
     parser.add_argument('--cable-tracking-config', type=Path, help='JSON tracking settings; default marker arc distances come from the selected model')
     parser.add_argument('--capture-node', default='/motion_capture_tracking')
@@ -291,9 +291,9 @@ def main():
         print('Cable simulation follows measured attachment motion; initial cable is assumed hanging/untwisted. '
               'The displayed floor has no contact response. Tracking gaps over 0.25 s freeze the cable.', flush=True)
         if tracking_settings is not None:
-            print('Cable tracking: hold the cable fully visible and approximately vertical to initialize. '
-                  'Gray = raw candidates; blue = estimated cable identities/observed links; green = simulation. '
-                  'Missing/ambiguous nodes are not filled. Cloud and assignment records are in connection.jsonl.', flush=True)
+            print('Cable labeller: the cable initializes when it hangs with most markers visible. '
+                  'Gray = raw candidates; blue = labelled markers (confidence fades while hidden); green = simulation. '
+                  'Cloud and label records are in connection.jsonl.', flush=True)
             print('Candidate filter: rigid-body/asset markers, occluded/model-solved markers and '
                   'unclassified legacy duplicates are excluded; raw observations remain recorded. '
                   'Requires the patched OptiTrack node with marker metadata.', flush=True)
