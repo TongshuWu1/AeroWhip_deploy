@@ -1553,3 +1553,32 @@ Approved by the user ("Yes": cable vs drone split, then filter velocities).
   simulated vs 0.5–6.0 % real, real gaps shorter (1.3–2.1 frames vs 2.9–6.6). Supersedes the earlier
   validation numbers.
 - 109 tests pass (frame clock: jitter and a dropped frame).
+
+## Dated change note — 2026-10-28 flight estimator shared with the training environment
+
+Approved by the user ("Yes please": flight node for the estimator, while the cable refits run).
+
+- New [deployment/observer.py](../aerowhip/deployment/observer.py) `Observer`: per OptiTrack frame
+  (receipt stamp, rigid-body pose, raw cloud) → frame time from `FrameClock` (now its own class in
+  `cable_filter.py`, also used by `CableFilter`), drone velocity and body rate as endpoint derivatives
+  of a quadratic over the last 5 frame poses (40 ms), attachment velocity, and the live `CableFilter` on
+  `cable_candidates(cloud)` fed with frame times. ROS-free.
+- New [envs/observation.py](../aerowhip/envs/observation.py): the frame layout (`frame_size`,
+  `actor_columns`, `frame_row`). `BatchEnvironment` builds its frames with it; the flight node will too.
+- [envs/sensing.py](../aerowhip/envs/sensing.py) `OptiTrackSensor` now feeds the same `Observer`:
+  simulated cloud, drone pose with position noise (0.02 mm) and rotation noise (0.5 mrad, measured at rest
+  on the 2026-10-27 flights: 0.54/0.75/0.23 mrad per body axis), receipt stamps jittered ±3 ms (stalls
+  not modelled), then the latency queue. **Change to the actor input:** drone velocity and body rate were
+  the true (delayed) state and are now estimated from poses as in flight. New sensing keys
+  `drone_position_noise_m`, `drone_rotation_noise_rad`, `receipt_jitter_s` in the v6 experiment file.
+- Evidence: [scripts/replay_observer.py](../scripts/replay_observer.py)
+  (`runs/calibration_2026-10-27/observer_replay.json`, reproduced twice; frames of the circle flight in
+  `observer_frames_circle.npz`): on the nine recorded cable flights, drone velocity vs central
+  differences of the poses 16–55 mm/s RMS (above 1 m/s 24–177, random 618 on few frames), best lag 0–1
+  frame, body rate 0.24–0.36 rad/s, all ten markers labelled in 92.3–99.5 % of frames, 0.38–0.48 ms per
+  frame. In the environment (16 lanes, random smooth actions, one-off): velocity 10 mm/s, body rate
+  0.39 rad/s RMS against the true state.
+- Tests: `tests/test_observer.py` (exact velocity and body rate on jittered stamps; the simulated sensor
+  without noise and an Observer fed the same frames build identical rows). 111 pass.
+- Not done: the ROS node around `Observer` (subscribe to poses and clouds, run the policy, publish
+  commands) — needs the policy; delivery stalls in the sensing model; NatNet frame numbers in the stream.

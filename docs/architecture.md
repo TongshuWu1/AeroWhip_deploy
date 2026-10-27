@@ -16,7 +16,7 @@ listed above them:
 | `aerowhip.evaluation` | Whip measurements on saved motion, offline event review, and frozen-policy tests. |
 | `aerowhip.takes` | Recorded flight takes: loading, checks, clock alignment, catalog. |
 | `aerowhip.fitting` | Cable, vehicle-response and aerodynamic-residual fitting from takes. |
-| `aerowhip.deployment` | ROS 2 / Crazyswarm adapters, OptiTrack relay and cable-marker tracking. |
+| `aerowhip.deployment` | ROS 2 / Crazyswarm adapters, OptiTrack relay, cable-marker tracking, and the flight estimator (`observer`: frame clock, drone velocity, live cable filter) shared with the training environment. |
 | `aerowhip.viewer` | 3D rendering of simulated, replayed and live states. |
 | `aerowhip.ui` | Desktop applications: training, policy tester, take processing, controller editor. |
 

@@ -58,7 +58,8 @@ per-marker, per-frame hazard of disappearing is 8·10⁻⁴ at rest, 1–3·10�
 4 m/s, 7·10⁻⁴ at 4–8 m/s and 0.035 above 8 m/s (22 frames); a hidden marker reappears with
 probability 0.32 per frame (from the filter's labels; the camera-level run length is not
 observable). White position noise of a resting marker is 0.1 mm per axis (drone rigid body
-0.02 mm). The cloud also holds the drone's own markers (two of them 8–9 cm from the tracking
+0.02 mm and 0.5 mrad in rotation); receipt stamps jitter by about ±3 ms around the frame
+times (stalls are not modelled). The cloud also holds the drone's own markers (two of them 8–9 cm from the tracking
 origin, beyond the 7 cm exclusion) and about three static points elsewhere in the room.
 `scripts/validate_sensing.py` scores the model at the level the policy sees: the longest
 physically possible span of each flight's reconstructed cable is turned into synthetic clouds,
@@ -71,6 +72,17 @@ gaps on the flights with clutter near the cable (frames with a gap: decay 1.4 % 
 capture-to-host latency cannot be measured from these files (receipt jitter is below 0.5 ms;
 the clock offset needs the onboard estimate against OptiTrack), so the latency is an assumed
 range of 0–2 frames, drawn per lane and episode.
+
+### The flight estimator on the recordings
+
+`scripts/replay_observer.py` runs the flight estimator over each cable flight as the flight
+node will receive it: receipt stamps, rigid-body pose, unfiltered cloud. Against central
+differences of the recorded poses, its drone velocity is within 16–55 mm/s RMS (whip 55,
+above 1 m/s up to 0.18 m/s) without measurable lag, its body rate within 0.24–0.36 rad/s (pose
+noise alone accounts for about 0.05 rad/s; the rest is attitude motion faster than the 40 ms
+fit), and all ten markers are labelled in 92–99.5 % of the frames; 0.4–0.5 ms per frame. In
+the training environment the same estimator on simulated frames is within 10 mm/s and
+0.39 rad/s of the true state.
 
 ### Reconstruction of hidden markers
 

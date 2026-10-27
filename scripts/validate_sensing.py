@@ -48,7 +48,7 @@ def synthetic(folder, config, arc, attachment, seed):
     sensor.reset()
     labelled, confidence = [], []
     for i in range(b-a):
-        out = sensor.observe(i, flight.drone[a+i], flight.rotation[a+i], np.zeros(3), np.zeros(3), markers[i], velocity[i])
+        out = sensor.observe(i, flight.drone[a+i], flight.rotation[a+i], markers[i], velocity[i])
         labelled.append(out['labelled'].copy()); confidence.append(out['confidence'].copy())
     labelled = np.array(labelled)
     stats = label_statistics(labelled, np.linalg.norm(velocity, axis=2))

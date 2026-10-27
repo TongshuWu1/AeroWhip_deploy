@@ -11,7 +11,8 @@ ATTACHMENT = np.array([0., 0., -.0423])
 
 
 def config(**changes):
-    raw = dict(latency_frames=[0, 2], position_noise_m=1e-4, dropout_hazard=[[0., .01], [1., .1]],
+    raw = dict(latency_frames=[0, 2], position_noise_m=1e-4, drone_position_noise_m=0., drone_rotation_noise_rad=0., receipt_jitter_s=0.,
+               dropout_hazard=[[0., .01], [1., .1]],
                reappear_probability=.3, drone_markers_body_m=[[.09, .01, 0.], [-.08, -.02, 0.]],
                clutter_world_m=[[3., 3., .1]])
     raw.update(changes)
@@ -38,6 +39,8 @@ def test_config_validation():
         config(latency_frames=[2, 1])
     with pytest.raises(ValueError):
         config(reappear_probability=0.)
+    with pytest.raises(ValueError):
+        config(receipt_jitter_s=.006)
 
 
 def test_cloud_contents_and_candidates():
@@ -48,7 +51,7 @@ def test_cloud_contents_and_candidates():
     assert cloud.shape == (MARKERS+2+1, 3)              # markers, two body markers, one clutter point
     candidates = cable_candidates(cloud, p)
     assert len(candidates) == MARKERS+2+1               # body markers at 8-9 cm and the clutter stay
-    out = s.observe(0, p, R, np.zeros(3), np.zeros(3), markers, np.zeros((MARKERS, 3)))
+    out = s.observe(0, p, R, markers, np.zeros((MARKERS, 3)))
     assert (out['confidence'] == 1.).all() and out['labelled'].all()
     assert np.abs(out['cable_positions']-markers).max() < 1e-3
 
@@ -75,7 +78,7 @@ def test_latency_delays_what_the_policy_sees():
     outs = []
     for i in range(6):
         p = np.array([.1*i, 0., 2.])
-        outs.append(s.observe(i, p, R, np.zeros(3), np.zeros(3), hanging(p, R), np.zeros((MARKERS, 3))))
+        outs.append(s.observe(i, p, R, hanging(p, R), np.zeros((MARKERS, 3))))
     assert [o['index'] for o in outs] == [0, 0, 0, 1, 2, 3]
     assert outs[5]['position'][0] == pytest.approx(.3)
     assert np.abs(outs[5]['cable_positions'][:, 0]-.3).max() < 2e-3
@@ -86,11 +89,11 @@ def test_hidden_markers_coast_with_reduced_confidence():
     s = sensor(cfg)
     p, R = np.array([0., 0., 2.]), np.eye(3)
     markers = hanging(p, R)
-    s.observe(0, p, R, np.zeros(3), np.zeros(3), markers, np.zeros((MARKERS, 3)))
+    s.observe(0, p, R, markers, np.zeros((MARKERS, 3)))
     s.hidden[9] = True
     s.hazards[:] = 0.; s.config = config(latency_frames=[0, 0], dropout_hazard=[[0., 0.]], reappear_probability=1e-9)
     for i in range(1, 11):
-        out = s.observe(i, p, R, np.zeros(3), np.zeros(3), markers, np.zeros((MARKERS, 3)))
+        out = s.observe(i, p, R, markers, np.zeros((MARKERS, 3)))
     assert out['confidence'][9] < 1. and out['confidence'][:9].min() == 1.
     assert np.isfinite(out['cable_positions']).all() and not out['labelled'][9]
 

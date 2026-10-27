@@ -35,14 +35,17 @@ The values shown are the file's current values, not constants in code.
 | Policy history | 401 samples; time normalization by 400 observation intervals |
 | Evaluation cadence | First collection, then each 512 completed episodes (collections 8, 16, …), and final |
 
-The actor sees what OptiTrack and the live cable filter would deliver, not the simulator
-state: each 100 Hz frame carries the drone pose and velocities of a frame 0–2 frames earlier
-(the lane's latency), the cable filter's ten marker positions and velocities relative to the
+The actor sees what the flight estimator (`aerowhip.deployment.observer`) computes from
+OptiTrack, not the simulator state, and the same code builds its input in training and in
+flight (`aerowhip.envs.observation`). Each 100 Hz frame carries the drone pose of a frame 0–2
+frames earlier (the lane's latency), the drone velocity and body rate fitted to the last five
+poses (40 ms), the cable filter's ten marker positions and velocities relative to the
 attachment from the marker cloud of that frame (markers the cameras missed coast on the
 filter's prediction), the filter's per-marker confidence, the previous action and time. The
-cloud is synthesized by the sensing model (`environment.sensing`, identified on the
-calibration flights; see the data and fitting page): per-marker dropout with a hazard rising
-with marker speed, white position noise, the drone's own markers and static room points. The
+cloud and the pose are synthesized by the sensing model (`environment.sensing`, identified on
+the calibration flights; see the data and fitting page): per-marker dropout with a hazard
+rising with marker speed, white position noise, the drone's own markers and static room
+points, pose noise and jittered receipt stamps. The
 value function sees the true simulator state and task statistics. The actor input has 98
 selected columns from a 106-column frame; the critic receives 186 privileged values.
 Zero acceleration input does **not** brake or hold position. This is acceleration control,

@@ -28,6 +28,7 @@ from aerowhip.physics.model import Model, native_module
 from aerowhip.physics.state import quaternion_xyzw_to_rotation_matrix
 from aerowhip.tasks import make_task
 from .configuration import OBSERVATION_PERIOD_S
+from .observation import actor_columns, frame_row, frame_size
 from .sensing import OptiTrackSensor
 
 ACTION_INTERFACE = 'acceleration_direct_v1'
@@ -86,12 +87,10 @@ class BatchEnvironment:
         self.delay = round(model['controller']['command_delay_s']/OBSERVATION_PERIOD_S)
         if list(m.marker_indices) != list(range(n)) or n != MARKERS+1:
             raise ValueError('The sensing model expects the attachment node and the ten marker nodes')
-        # Frame: sensed pose (18), sensed cable nodes and velocities (6n, node 0 = attachment),
-        # marker confidences (10), motors and applied command (8, critic only), previous action, time.
+        # Frame layout and actor columns: envs.observation (shared with the flight node).
         self.confidence_offset = 18+6*n
-        self.frame_size = 18+6*n+MARKERS+8+self.action_size+1
-        # Deployable actor inputs: the sensed pose, markers and confidences, previous action, time.
-        self.actor_columns = list(range(18+6*n+MARKERS))+list(range(18+6*n+MARKERS+8, self.frame_size))
+        self.frame_size = frame_size(n)
+        self.actor_columns = actor_columns(n)
         self.sensing = config.sensing
         arc = np.cumsum(model['cable']['marker_interval_lengths_m'])
         attachment = np.asarray(model['attachment']['position_tracking_m'], float)
@@ -155,20 +154,11 @@ class BatchEnvironment:
                 o[:, 18:18+3*n].reshape(-1, n, 3), o[:, 18+3*n:18+6*n].reshape(-1, n, 3))
 
     def _sense(self, observation, lanes):
-        """What OptiTrack and the cable filter give each lane for this frame: the sensed pose
-        (18), node positions relative to the sensed attachment (n, 3), node velocities relative
-        to it (n, 3) and the marker confidences (10). Lanes that are not sensed keep zeros."""
+        """The Observer estimate (deployment.observer) each sensed lane receives for this frame:
+        OptiTrack model, latency, then the same estimator as in flight. None for other lanes."""
         p, v, R, w, q, cv = observation
-        pose = np.zeros((self.batch, 18)); nodes = np.zeros((self.batch, self.nodes, 3))
-        rates = np.zeros((self.batch, self.nodes, 3)); confidence = np.zeros((self.batch, MARKERS))
-        world = np.full((self.batch, MARKERS, 3), np.nan); latency = np.zeros(self.batch, int)
-        for lane in np.flatnonzero(lanes):
-            s = self.sensors[lane].observe(self.index, p[lane], R[lane], v[lane], w[lane], q[lane, 1:], cv[lane, 1:])
-            pose[lane] = np.r_[s['position'], s['rotation'].reshape(9), s['velocity'], s['angular_velocity']]
-            nodes[lane, 1:] = s['cable_positions']-s['root']
-            rates[lane, 1:] = s['cable_velocities']-s['root_velocity']
-            confidence[lane], world[lane], latency[lane] = s['confidence'], s['cable_positions'], s['latency']
-        return dict(pose=pose, nodes=nodes, rates=rates, confidence=confidence, world=world, latency=latency)
+        return [self.sensors[lane].observe(self.index, p[lane], R[lane], q[lane, 1:], cv[lane, 1:]) if lanes[lane] else None
+                for lane in range(self.batch)]
 
     def _envelope(self, q, rotation):
         c = self.config
@@ -213,7 +203,7 @@ class BatchEnvironment:
         self.active_np &= envelope
         hold = np.tile(self.hold.cpu().numpy(), (self.batch, 1))
         sensed = self._sense((p, v, R, w, q, cv), np.ones(self.batch, bool))
-        if not (sensed['confidence'] == 1.).all():
+        if not all((s['confidence'] == 1.).all() for s in sensed):
             raise ValueError('The cable filter must label the complete initial cable')
         self._record((p, v, R, w, q, cv), sensed, hold, hold, self.active_np.copy(), ~inside)
         self.task.reset(dict(cable_positions=q, cable_velocities=cv, drone_positions=p,
@@ -276,21 +266,24 @@ class BatchEnvironment:
         p, v, R, w, q, cv = observation
         i, h = self.index, self.history
         motors = self.runtime.motors()
+        world = np.full((self.batch, MARKERS, 3), np.nan); confidence = np.zeros((self.batch, MARKERS))
+        for lane, s in enumerate(sensed):
+            if s is not None:
+                world[lane], confidence[lane] = s['cable_positions'], s['confidence']
         for name, value in dict(drone_positions=p, drone_velocities=v, drone_rotations=R, drone_angular_velocities=w,
                                 cable_positions=q, cable_velocities=cv, motor_thrust_n=motors,
                                 requested_wrench=applied, command=command, applied_command=applied,
-                                workspace_violation=violation, sensed_cable_positions=sensed['world'],
-                                sensed_confidence=sensed['confidence']).items():
+                                workspace_violation=violation, sensed_cable_positions=world,
+                                sensed_confidence=confidence).items():
             h[name][:, i] = torch.as_tensor(np.asarray(value, float) if name != 'workspace_violation' else value)
         self.numerical_valid[:, i] = torch.as_tensor(valid)
-        scale = self.length
-        pose = sensed['pose']
-        frame = np.concatenate(((pose[:, :3]-self.origin_np)/scale, pose[:, 3:12], pose[:, 12:15]/4, pose[:, 15:18]/4,
-                                (sensed['nodes']/scale).reshape(self.batch, -1), (sensed['rates']/4).reshape(self.batch, -1),
-                                sensed['confidence'],
-                                motors/self.maximum_thrust, applied/self.command_scale.cpu().numpy(),
-                                self.previous_action.double().cpu().numpy(),
-                                np.full((self.batch, 1), i/self.time_samples)), 1)
+        critic = np.concatenate((motors/self.maximum_thrust, applied/self.command_scale.cpu().numpy()), 1)
+        previous = self.previous_action.double().cpu().numpy()
+        frame = np.zeros((self.batch, self.frame_size))
+        for lane, s in enumerate(sensed):
+            if s is not None:
+                frame[lane] = frame_row(s, origin=self.origin_np, length=self.length, previous_action=previous[lane],
+                                        progress=i/self.time_samples, nodes=self.nodes, critic=critic[lane])
         self.frames[:, i] = torch.as_tensor(frame, device=self.device).float()
 
     @torch.no_grad()

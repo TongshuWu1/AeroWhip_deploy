@@ -37,6 +37,30 @@ def cable_candidates(points, drone_position, *, drone_radius_m=DRONE_RADIUS_M, d
     return np.array(kept, float).reshape(-1, 3)
 
 
+class FrameClock:
+    """The cameras' frame time from host receipt stamps. OptiTrack delivers exactly one frame per
+    `dt`, but the stamps are receipt times, jittered by a few ms and occasionally stalled: each
+    stamp advances the clock by the whole number of frames it is ahead (at least one; a dropped
+    frame counts two), and the clock follows slow drift (5 % per frame)."""
+
+    def __init__(self, dt=.01):
+        self.dt = dt
+        self.reset()
+
+    def reset(self):
+        self.time = None
+
+    def advance(self, stamp):
+        """Frame step (s) since the previous stamp (`dt` for the first)."""
+        if self.time is None:
+            self.time = float(stamp)
+            return self.dt
+        step = self.dt*max(1, round((stamp-self.time)/self.dt))
+        self.time += step
+        self.time += .05*(stamp-self.time)
+        return step
+
+
 class CableFilter:
     def __init__(self, arc, *, dt=.01, gate_m=.06, gate_growth_m=.5, noise_m=.004, length_tolerance_m=.015,
                  start_tolerance_m=.02, start_minimum=6, max_hidden_s=.5, projection_iterations=3,
@@ -62,7 +86,7 @@ class CableFilter:
         self.confidence = np.zeros(MARKERS)
         self.initialized = False
         self.time = None
-        self.clock = None                                # camera frame clock (see observe)
+        self.clock = FrameClock(self.dt)
         self.root = None
         self.root_velocity = np.zeros(3)
         self.quality = 0.                                # 0 unreliable .. 1 all markers seen
@@ -103,17 +127,8 @@ class CableFilter:
         """Advance to time_s with the attachment at `root` and the cloud `points` (N, 3)."""
         points = np.asarray(points, float).reshape(-1, 3)
         root = np.asarray(root, float)
-        # The stamps are host receipt times, jittered by a few ms around the cameras' exact 10 ms
-        # frames. A frame clock tracks the camera: each stamp advances it by the whole number of
-        # frames it is ahead (at least one; a dropped frame counts two), and it follows slow drift.
-        # Prediction and velocity use the frame clock, so jitter never enters a velocity.
-        if self.clock is None:
-            dt, self.clock = self.dt, time_s
-        else:
-            frames = max(1, round((time_s-self.clock)/self.dt))
-            dt = self.dt*frames
-            self.clock += dt
-            self.clock += .05*(time_s-self.clock)
+        # Prediction and velocity use the camera frame clock, so receipt jitter never enters a velocity.
+        dt = self.clock.advance(time_s)
         self.time, self.root = time_s, root
         if not self.initialized:
             if self.start(root, points):
@@ -323,12 +338,12 @@ class CableFilter:
     # ------------------------------------------------------------------ offline support
     def get_state(self):
         return dict(positions=self.positions.copy(), velocities=self.velocities.copy(), hidden_s=self.hidden_s.copy(),
-                    initialized=self.initialized, time=self.time, clock=self.clock,
+                    initialized=self.initialized, time=self.time, clock=self.clock.time,
                     root=None if self.root is None else self.root.copy(), index=self.index.copy())
 
     def set_state(self, state):
         self.positions, self.velocities, self.hidden_s = (state[k].copy() for k in ('positions', 'velocities', 'hidden_s'))
-        self.initialized, self.time, self.clock = state['initialized'], state['time'], state['clock']
+        self.initialized, self.time, self.clock.time = state['initialized'], state['time'], state['clock']
         self.root = None if state['root'] is None else state['root'].copy()
         self.index = state['index'].copy()
         self._update_quality()
