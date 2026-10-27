@@ -306,7 +306,12 @@ class RealFlightFeed(DisplayFeed):
         root = drone+quaternion_xyzw_to_rotation_matrix(vector(data['quaternion_xyzw'], 4))@self.configuration.platform.attachment_offset_body_m
         points = np.asarray(packet['points_world_m'], dtype=float).reshape(-1, 3)
         try:
-            eligible = np.asarray(cable_candidate_mask(packet.get('point_metadata'), len(points)), dtype=bool)
+            if packet.get('point_metadata') is None:
+                # No per-marker metadata from the OptiTrack node: the labeller works on the raw cloud,
+                # as the offline labelling of the recordings does.
+                eligible = np.ones(len(points), bool)
+            else:
+                eligible = np.asarray(cable_candidate_mask(packet.get('point_metadata'), len(points)), dtype=bool)
             candidates = cable_candidates(points[eligible], drone)      # as offline: drone markers and duplicates removed
             state = self.tracker.observe(float(packet['time_s']), root, candidates)
         except ValueError as exc:
