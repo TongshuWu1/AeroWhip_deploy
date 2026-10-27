@@ -221,7 +221,7 @@ class ReplayWindow(QMainWindow):
                 dot = self.plotter.add_mesh(pv.Sphere(radius=.012), color=COLORS[name], render=False)
                 self.layers[name].append(dot)
         # Build CAD at the measured top-plate origin, without running physics.
-        self.attachment = np.array([0., 0., -.051])
+        self.attachment = np.array(config.platform.attachment_offset_body_m, float)
         drone = DroneState(np.zeros(3), np.array([0., 0., 0., 1.]), np.zeros(3), np.zeros(3))
         actors, rotors = add_drone_model(self.plotter, pv,
             SimpleNamespace(drone=drone, attachment_position_world_m=self.attachment), config.viewer)

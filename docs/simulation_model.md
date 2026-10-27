@@ -23,7 +23,7 @@ Defined in [configs/physics/drone_cable.json](../configs/physics/drone_cable.jso
 | Drone mass (without cable) | 0.145 kg |
 | Cable and marker mass (total) | 0.017 kg |
 | Cable length / mesh | 0.995 m / 10 edges between 11 nodes (the marker intervals: 0.095 m, then 9 × 0.1 m) |
-| Tracking origin → centre of mass / → attachment | (0, 0, −0.018) / (0, 0, −0.051) m |
+| Tracking origin → centre of mass / → attachment | (0, 0, −0.018) / (0, 0, −0.0423) m (attachment from the hanging cable in ten flights) |
 | Bending stiffness EI / bending damping Cb | 1.179e−8 N m² / 8.174e−5 N m² s |
 | Torsional stiffness GJ / torsional damping Ct | 1.179e−8 N m² / 8.174e−6 N m² s |
 | External cable drag | 0.0814 s⁻¹ (linear in node velocity) |

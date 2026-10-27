@@ -45,7 +45,7 @@ attachment node 0, use world coordinates.
 | Drone mass excluding cable | 0.145 kg |
 | Cable and moving-marker mass (total) | 0.017 kg; markers 10 × 0.96 g (unchanged), bare cable 7.4 g |
 | Cable length / mesh | 0.995 m / 11 nodes, 10 edges (0.095 m, then 9 × 0.1 m) |
-| Tracking-to-COM / attachment offset | (0,0,-0.018) / (0,0,-0.051) m |
+| Tracking-to-COM / attachment offset | (0,0,-0.018) / (0,0,-0.0423) m |
 | Maximum physics step | 1/600 s |
 | Observation / controller / policy rate | 100 / 200 / 50 Hz for current training |
 | Command delay | 0.03 s |
@@ -1111,3 +1111,14 @@ the modelled attachment than its arc distance (attachment offset or first-marker
 off by ~9 mm; model unchanged). Not done: live ROS node (cloud/pose matching by content
 with the Crazyflie's own position as fallback, as the user asked), the window on screen,
 fitting tools reading these files.
+
+## Dated change note — 2026-10-27 attachment offset from the hanging cable
+
+In every one of the ten 2026-10-27 cable flights, in still hover frames, the first cable
+marker hangs 137.3 ± 1.1 mm below the tracking origin along the drone's axis (sideways
+within ±6 mm), where the model gave 146 mm (attachment −0.051 m plus 0.095 m of cable). The
+user chose to correct the model: `attachment.position_tracking_m` −0.051 → −0.0423 m in
+`configs/physics/drone_cable.json`, both scenes, and the replay window (which now reads
+the scene value). The marker spacing along the cable (0.095, then 0.1 m) is unchanged,
+measured on the cable. Checked: tests; equivalence reference re-recorded.
+
