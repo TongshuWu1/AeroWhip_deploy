@@ -104,7 +104,7 @@ class Inspector(QtWidgets.QWidget):
         if tracking is not None:
             count = int(tracking.observed.sum())
             confidence = (f'{tracking.confidence[tracking.observed].min():.2f}' if count else '—')
-            self.tracking.setText(f'Estimated cable · {count}/{len(tracking.observed)} markers\n'
+            self.tracking.setText(f'Labelled cable (blue) · {count}/{len(tracking.observed)} markers\n'
                 f'{tracking.status}\nLag {max(0., frame.time_s-tracking.time_s):.3f} s'
                 f'{" · stale (hidden)" if frame.time_s-tracking.time_s > .25 else ""}\n'
                 f'Min association confidence: {confidence} (heuristic)\n'
@@ -346,13 +346,15 @@ class SimulationWindow(QtWidgets.QMainWindow):
                 self._item(item, robot.provenance.value)
                 self._item(item, 'Body axes', ('robot', 'body_axes', robot.name), False)
                 if robot.cable is not None:
-                    cable = self._item(item, 'Cable · '+robot.cable.provenance.value, ('robot', 'cable', robot.name))
-                    self._item(cable, 'Markers', ('robot', 'markers', robot.name))
+                    kind = robot.cable.provenance.value
+                    cable = self._item(item, f'Cable · {kind} (green tube{", translucent" if robot.cable_tracking is not None else ""})',
+                                       ('robot', 'cable', robot.name))
+                    self._item(cable, 'Simulated markers', ('robot', 'markers', robot.name))
                 else:
                     self._item(item, 'Cable · unavailable')
                 if robot.cable_tracking is not None:
-                    tracking = self._item(item, 'Cable · Estimated (blue)', ('robot', 'tracking', robot.name))
-                    self._item(tracking, 'Raw candidates (gray)', ('robot', 'raw_cloud', robot.name))
+                    tracking = self._item(item, 'Cable · Labelled from OptiTrack (blue spheres, C1-C10)', ('robot', 'tracking', robot.name))
+                    self._item(tracking, 'Raw marker cloud (gray)', ('robot', 'raw_cloud', robot.name))
             overlays = self._item(self.tree, 'Overlays')
             for key, text in (('reference', 'Reference path'), ('trail', 'Drone trail'),
                               ('tip_trail', 'Cable-tip trail'), ('thrust', 'Model thrust'), ('cable', 'Model cable force')):

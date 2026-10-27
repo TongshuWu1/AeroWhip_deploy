@@ -106,6 +106,10 @@ class RobotScene:
                 self.marker_labels.points[:] = markers
         self.overlays.update(state)
 
+    def set_cable_opacity(self, opacity):
+        for actor in ([self.cable_actor] if self.cable_actor is not None else [])+self.marker_actors:
+            actor.GetProperty().SetOpacity(float(opacity))
+
     def visible(self, *, robot=True, cable=True, markers=True, body_axes=False, labels=False):
         for actor in self.drone_actors+[a for r in self.rotors for a in r.actors]:
             actor.SetVisibility(robot)

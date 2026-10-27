@@ -134,6 +134,8 @@ class PyVistaViewer:
                 self._tracking_scenes[robot.name].update(robot.cable_tracking, frame.time_s,
                     visible=flags.get('robot', True) and flags.get('tracking', True),
                     raw_visible=flags.get('raw_cloud', True))
+                # With a labelled cable on screen the simulated cable is drawn translucent.
+                scene.set_cable_opacity(.35 if robot.cable_tracking is not None else 1.)
             if self.follow_robot == robot.name:
                 position = robot.drone.position_world_m
                 if self._follow_position is not None:
