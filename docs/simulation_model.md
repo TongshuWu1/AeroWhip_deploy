@@ -30,7 +30,7 @@ Defined in [configs/physics/drone_cable.json](../configs/physics/drone_cable.jso
 | Cable diameter / normal drag coefficient Cd / air density | 3.5 mm / 0.69 / 1.2 kg m⁻³ |
 | Linear drag | 0.0526 s⁻¹ (on node velocity, mass proportional) |
 | Drone air drag (body x, y / z) | 0.52 / 0.85 s⁻¹ (linear, mass proportional, on the COM velocity in body axes) |
-| Maximum physics step | 1/600 s |
+| Maximum physics step | 2 ms (one step per firmware controller period) |
 | Output / controller rate | 100 / 500 Hz (the firmware attitude rate) |
 | Attitude loop / command delay / motor response | firmware law: Mellinger gains of the flight (kR 70000, kw 20000, kd_omega 200, massThrust 17700) / 0 s / 0.0225 s; roll/pitch inertia 1.877e-4 kg m² and motor arm 0.0613 m fitted together on the drone-only flights (correlated until the arm is measured). Identified law (fallback): 20 rad/s, ζ = 1 / 0.03 s / 0.015 s |
 | Thrust map | T = 0.553 (1 + 0.177 (V − 7.2 V)) T_cmd^2.2 N, T_cmd the firmware thrust in N |
@@ -79,6 +79,15 @@ relative tolerance 2e−11, length tolerance 1e−10 m, velocity-constraint
 tolerance 1e−9 m/s and four position projections per iteration. Failure to
 converge raises an error rather than accepting an approximate step. Solver
 convergence does not by itself establish physical accuracy.
+
+The 2 ms step was chosen by a convergence study on the whip and strokes cable flights
+(`scripts/step_convergence.py`, every 2 s window replayed open loop at 2, 1 and 0.5 ms,
+with the recorded commands and with the commands scaled by 1.5 to drive the tip faster).
+Against 0.5 ms, the 2 ms step differs by at most 2.1 mm in drone position and 2.8 mm in
+marker position over 2 s (median 0.26 mm), and by at most 0.09 % in peak tip speed (peaks up
+to 7.5 m/s) with the peak at the same or the adjacent 10 ms sample; 1 ms differs by about a
+fifth of that, as expected of a second-order method. The remaining model error on these
+flights is 40–74 mm.
 
 ## Controller and actuators
 

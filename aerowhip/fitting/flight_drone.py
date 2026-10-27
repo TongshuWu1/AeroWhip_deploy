@@ -82,7 +82,10 @@ class DroneReplay:
             qv.append(qv[-1]+relative-t*(t@relative))
         return np.array(q), np.array(qv)
 
-    def run(self, window, flight, *, markers=False):
+    def run(self, window, flight, *, markers=False, scale=1.):
+        """Simulated tracking positions (N, 3); with markers, also the marker positions and
+        velocities (N, 10, 3) each. scale multiplies the policy part of the sent commands (the
+        vertical trim is kept), for stress tests beyond the recorded motion."""
         hp, hR, ht = window.history_position, window.history_rotation, window.history_time
         v, w = endpoint_velocity(ht, hp), body_rate(ht, hR)
         q = qv = None
@@ -95,6 +98,9 @@ class DroneReplay:
         # The sideways trims cancel biases of the real drone (hover offsets) that the model
         # does not have; the vertical trim stays (the thrust map models the thrust error).
         sent[:, :2] -= flight.trim[ok][:, :2]
+        if scale != 1.:
+            trim = flight.trim[ok].copy(); trim[:, :2] = 0.
+            sent = trim+scale*(sent-trim)
         frame = np.searchsorted(flight.stamp, stamps-1e-6)
         last = np.r_[frame[1:] != frame[:-1], True]       # one command per frame: the newest
         stamps, sent, frame = stamps[last], sent[last], frame[last]
@@ -114,7 +120,7 @@ class DroneReplay:
         actuator['initial_thrust_n'] = [float(np.clip(thrust/4, actuator['minimum_thrust_n'][i], actuator['maximum_thrust_n'][i])) for i in range(4)]
         runtime = self.native.Runtime(self.model.native, state, hold, self.period, self.delay, self.native.Actuator(actuator))
         events = [(float(t), command(a)) for t, a in zip(command_time, sent) if 0 < t < window.time[-1]]
-        positions, cable = [], []
+        positions, cable, rates = [], [], []
         n = len(self.model.rest)+1
         index = np.asarray(self.model.marker_indices)[1:]
         j = 0
@@ -130,7 +136,8 @@ class DroneReplay:
             positions.append(observation[:3])
             if markers:
                 cable.append(observation[18:18+3*n].reshape(n, 3)[index])
-        return (np.array(positions), np.array(cable)) if markers else np.array(positions)
+                rates.append(observation[18+3*n:18+6*n].reshape(n, 3)[index])
+        return (np.array(positions), np.array(cable), np.array(rates)) if markers else np.array(positions)
 
     def errors(self, window, flight):
         """(N, 3) simulated minus measured tracking position."""
@@ -146,7 +153,7 @@ def debias(error, dt=.01):
 def coupled_errors(replay, window, flight):
     """Drone position error (N, 3) and cable-shape error (N, 10): markers relative to the
     drone's tracking origin, NaN where a marker was not seen."""
-    p, markers = replay.run(window, flight, markers=True)
+    p, markers, _ = replay.run(window, flight, markers=True)
     drone = p-window.position[1:]
     shape = np.linalg.norm((markers-p[:, None])-(window.markers[1:]-window.position[1:, None]), axis=2)
     shape[~window.seen[1:]] = np.nan

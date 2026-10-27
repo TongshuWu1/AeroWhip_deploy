@@ -94,7 +94,7 @@
       0,
       -9.80665
     ],
-    "physics_timestep_s": 0.0016666666666666668,
+    "physics_timestep_s": 0.002,
     "segments_per_marker_interval": [
       1,
       1,

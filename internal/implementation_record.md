@@ -1493,3 +1493,21 @@ Approved by the user after the residual analysis ("Yes lets do it").
   gain is small and mixed, and the parameters moved far along known trade-offs (arm against inertia,
   delay against drag and motor response) — these flights do not identify them separately. Needs the
   measured arm and the acceleration-step flights (design §5) first.
+
+## Dated change note — 2026-10-28 physics step 2 ms (convergence study)
+
+Approved by the user (switch to 2 ms if peak tip speed holds).
+
+- [scripts/step_convergence.py](../scripts/step_convergence.py) (`runs/calibration_2026-10-27/step_convergence.json`,
+  every replay run twice and identical): all 2 s windows of whip (27, held out) and strokes (24), open
+  loop with the sent commands ×1 and ×1.5 (the policy part; trims kept), physics steps 2, 1, 0.5 ms
+  (reference). 2 ms vs 0.5 ms: drone max 1.0–2.1 mm, marker max 1.3–2.8 mm (median 0.23–0.26), peak tip
+  (c10) speed within 0.09 %, peak timing shift ≤ 1 frame, fastest reference peaks 6.1 m/s (×1) and
+  7.5 m/s (×1.5); no failures. 1 ms vs 0.5 ms: about one fifth (second order). `DroneReplay.run`
+  gained `scale` and returns marker velocities with markers.
+- Adopted `simulation.physics_timestep_s` 0.002 (was 1/600 s, which ran as two 1 ms steps per 2 ms
+  controller period). Coupled validation with the adopted configuration re-run: every number within
+  0.1 mm of the 1 ms run (`coupled_validation_adopted_1ms.json` kept). Plant benchmark 2.9k/4.9k →
+  5.2k/9.0k lane-steps/s (24/96 lanes); environment end to end 1.9k/2.1k → 2.4k/2.7k (the Python
+  sensing and task now dominate). `tests/test_live_cable.py` derives its step count from the model.
+  107 tests pass.

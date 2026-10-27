@@ -35,7 +35,7 @@ class LiveCableTests(unittest.TestCase):
             self.assertIsNone(cable.error)
         np.testing.assert_allclose(state.positions_world_m[0],
             np.array([.1,0,1])+cable._rotation@self.model.attachment_tracking, atol=1e-12, rtol=0)
-        self.assertEqual(cable.steps, 600)
+        self.assertEqual(cable.steps, round(1/self.model.physics_dt))      # one second of physics steps
         self.assertGreater(np.linalg.norm(state.velocities_world_mps[1:]), .01)
         self.assertGreater(abs(state.positions_world_m[-1,0]-.1), .001)
         np.testing.assert_allclose(np.linalg.norm(np.diff(state.positions_world_m,axis=0),axis=1),
