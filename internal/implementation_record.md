@@ -43,7 +43,7 @@ attachment node 0, use world coordinates.
 | Quantity | Default |
 |---|---|
 | Drone mass excluding cable | 0.145 kg |
-| Cable and moving-marker mass (total) | 0.016 kg; markers 10 × 0.96 g (unchanged), bare cable 6.4 g |
+| Cable and moving-marker mass (total) | 0.017 kg; markers 10 × 0.96 g (unchanged), bare cable 7.4 g |
 | Cable length / mesh | 0.995 m / 11 nodes, 10 edges (0.095 m, then 9 × 0.1 m) |
 | Tracking-to-COM / attachment offset | (0,0,-0.018) / (0,0,-0.051) m |
 | Maximum physics step | 1/600 s |
@@ -1080,4 +1080,11 @@ command (drift 0); native edge lengths 0.995 m, node masses 0.016 kg. The equiva
 reference was re-recorded with the new model (148 tensors, CPU and CUDA, match); the old
 reference is not kept in the repository. Not checked: any training run, fit or replay with
 the new cable; the 2026-10-26 flights were flown with the old cable.
+
+## Dated change note — 2026-10-27 new cable re-weighed
+
+The user re-weighed the new cable: 17 g with markers, not 16 g. `total_mass_kg` 0.016 → 0.017
+(bare cable 7.4 g with the unchanged 10 × 0.96 g markers) and `initial_thrust_n` back to
+(0.145 + 0.017) kg × g / 4 = 0.39717 N per motor. Geometry unchanged. Checked: tests, the
+hanging-cable rest check on both engines; equivalence reference re-recorded.
 

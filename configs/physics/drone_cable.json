@@ -49,7 +49,7 @@
     ]
   },
   "cable": {
-    "total_mass_kg": 0.016,
+    "total_mass_kg": 0.017,
     "diameter_m": 0.0035,
     "marker_interval_lengths_m": [
       0.095,
