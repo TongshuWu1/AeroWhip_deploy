@@ -69,6 +69,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--iterations', type=int, default=40)
+    parser.add_argument('--start', type=float, nargs=4, metavar=tuple(n.upper() for n in NAMES), default=[1., 1., .015, .03])
+    parser.add_argument('--step', type=float, nargs=4, default=[.5, .3, .01, .015])
     args = parser.parse_args()
     base = load_model_configuration(DEFAULT_MODEL)
     firmware = tomllib.loads(FIRMWARE.read_text())
@@ -79,12 +81,13 @@ def main():
     items = [i for v in train.values() for i in v]
     print(f'{len(items)} fitting windows, {sum(map(len, held.values()))} held out; cable cross-check '
           f'{sum(map(len, cable_train.values()))} + {sum(map(len, cable_held.values()))} windows', flush=True)
-    x0 = [1., 1., .015, .03]
+    x0 = list(args.start)
     evaluations = []
 
     def objective(x):
-        if x[0] <= .1 or x[1] <= .1 or x[2] < 0 or x[3] < 0 or x[3] > .2:
+        if x[0] <= .1 or x[1] <= .1 or x[2] < 0 or x[3] > .2:
             return 1.
+        x = [x[0], x[1], x[2], max(0., x[3])]      # a negative delay is zero delay, not a penalty
         value = flight_drone.rms(flight_drone.evaluate(configured(base, x, cable=False), firmware, items), debiased=True)
         value = 1. if not math.isfinite(value) else value
         evaluations.append((list(map(float, x)), value))
@@ -100,7 +103,8 @@ def main():
         return rows
     t0 = time.time()
     start = report('start', x0)
-    x, value, history = nelder_mead(objective, x0, [.5, .3, .01, .015], iterations=args.iterations)
+    x, value, history = nelder_mead(objective, x0, args.step, iterations=args.iterations)
+    x = [x[0], x[1], x[2], max(0., x[3])]
     passes = [report('best', x) for _ in range(2)]
     reproduced = passes[0] == passes[1]
     print('reproduced twice:', reproduced, flush=True)

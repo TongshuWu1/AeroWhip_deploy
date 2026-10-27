@@ -6,6 +6,7 @@ drone tracking position (raw and debiased RMS) and cable shape (markers relative
 drone's tracking origin, seen markers only). Every number is computed twice.
 
     python scripts/validate_coupled.py --drone-fit runs/.../drone_fit.json --cable-fit runs/.../cable_fit_v2.json --output runs/.../coupled_validation.json
+    python scripts/validate_coupled.py --adopted --output runs/.../coupled_validation_adopted.json   # the configuration files as they are
 """
 import argparse
 from concurrent.futures import ThreadPoolExecutor
@@ -56,18 +57,24 @@ def score(config, firmware, items):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--drone-fit', type=Path, required=True)
-    parser.add_argument('--cable-fit', type=Path, required=True)
+    parser.add_argument('--drone-fit', type=Path)
+    parser.add_argument('--cable-fit', type=Path)
+    parser.add_argument('--adopted', action='store_true', help='score the configuration files as they are (default flight law)')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     base = load_model_configuration(DEFAULT_MODEL)
     base['drone']['mass_kg'] = DRONE_MASS_KG
     firmware = flight_drone.firmware_config()
-    drone_x = json.loads(args.drone_fit.read_text())['best']['x']
-    cable_values = json.loads(args.cable_fit.read_text())['best']['values']
-    models = {'fitted (drone pipeline + cable v2)': coupled_config(base, drone_x, cable_values),
-              'unfitted (previous simulator gains, configured cable)': coupled_config(
-                  base, [20., 1., .015, .03], {k: base['cable'][k] for k in cable_values})}
+    if args.adopted:
+        drone_x, cable_values = None, {k: base['cable'][k] for k in ('EI_n_m2', 'Cb_n_m2_s', 'normal_drag_coefficient', 'external_drag_s_inv')}
+        models = {f'adopted configuration ({firmware.get("law", "identified")} law)': base}
+    else:
+        firmware = flight_drone.firmware_config(flight_drone.ROOT/'configs/controllers/crazyflie_flight.toml')   # identified law
+        drone_x = json.loads(args.drone_fit.read_text())['best']['x']
+        cable_values = json.loads(args.cable_fit.read_text())['best']['values']
+        models = {'fitted (drone pipeline + cable v2)': coupled_config(base, drone_x, cable_values),
+                  'unfitted (previous simulator gains, configured cable)': coupled_config(
+                      base, [20., 1., .015, .03], {k: base['cable'][k] for k in cable_values})}
     flights = {}
     for motion, folder in folders('cf_2').items():
         flight = load(folder)

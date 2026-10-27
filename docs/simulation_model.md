@@ -31,7 +31,7 @@ Defined in [configs/physics/drone_cable.json](../configs/physics/drone_cable.jso
 | Linear drag | 0.0526 s⁻¹ (on node velocity, mass proportional) |
 | Maximum physics step | 1/600 s |
 | Output / controller rate | 100 / 200 Hz |
-| Attitude loop (x, y) / command delay / motor response | 20 rad/s, ζ = 1 (x, y) / 0.03 s / 0.015 s (not identified) |
+| Attitude loop / command delay / motor response | firmware law: Mellinger gains of the flight (kR 70000, kw 20000, kd_omega 200, massThrust 17700) / 0 s / 0.0225 s; roll/pitch inertia 1.877e-4 kg m² and motor arm 0.0613 m fitted together on the drone-only flights (correlated until the arm is measured). Identified law (fallback): 20 rad/s, ζ = 1 / 0.03 s / 0.015 s |
 | Thrust map | T = 0.553 (1 + 0.177 (V − 7.2 V)) T_cmd^2.2 N, T_cmd the firmware thrust in N |
 | Motor thrust limit | 0.85 N per motor (peak measured collective thrust 3.39 N) |
 

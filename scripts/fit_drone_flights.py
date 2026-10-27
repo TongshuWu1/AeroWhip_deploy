@@ -21,6 +21,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aerowhip.fitting import flight_drone
+from aerowhip.paths import ROOT
 from aerowhip.fitting.calibration_set import folders, flight_windows, HELD_OUT
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
 from aerowhip.takes.calibration_flights import load
@@ -67,7 +68,7 @@ def main():
     parser.add_argument('--iterations', type=int, default=50)
     args = parser.parse_args()
     base = load_model_configuration(DEFAULT_MODEL)
-    firmware = flight_drone.firmware_config()
+    firmware = flight_drone.firmware_config(ROOT/'configs/controllers/crazyflie_flight.toml')   # identified law
     train, held = items_for('cf_2_nocable')
     items = [i for v in train.values() for i in v]
     print(f'{len(items)} fitting windows, {sum(map(len, held.values()))} held out', flush=True)

@@ -22,7 +22,7 @@ from aerowhip.fitting.flight_cable import endpoint_velocity
 from aerowhip.paths import ROOT
 from aerowhip.physics.model import Model, native_module
 
-FIRMWARE = ROOT/'configs/controllers/crazyflie_flight.toml'
+FIRMWARE = ROOT/'configs/controllers/crazyflie_firmware.toml'    # the flown firmware (law 'firmware'); crazyflie_flight.toml is the identified fallback
 
 
 def firmware_config(path=FIRMWARE):

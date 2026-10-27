@@ -1316,3 +1316,67 @@ Scope approved by the user ("faithful port"; keep the tensor engine until the re
   Python) now costs about 2.4 ms per lane-sample and takes >95 % of the step time (24 lanes, 4 s: ~25 s),
   so training throughput is limited by the task, not the physics. Domain randomization of voltage,
   mass or delay is not added.
+
+## Dated change note — 2026-10-28 firmware flight law (Mellinger port) and stage-2 identification
+
+Approved design: [simulation_package_design.md](simulation_package_design.md) (committed 5f50dcb). Steps 1–2 of
+its order of work are done on `engine-v2`.
+
+**Why.** Open-loop replay of the cable flights showed the simulated drone leaning away from the cable's
+pull (−5.1° at large swings) and sinking (−0.19 m/s² mean vertical bias), while the drone-only flights
+had no bias. The identified attitude PD was several times too soft; the real firmware has no roll/pitch
+integral (checked in `controller_mellinger.c`: `ki_m_xy = 0`), so the fix was the firmware itself.
+
+**What.**
+- [native/firmware.hpp](../native/firmware.hpp): line-by-line port of `controllerMellinger()`
+  (position branch, `e_R` expression, `e_R.y` flip, rate error, `kd_omega_rp` derivative, yaw integral,
+  ±32000 clamps, reset on non-positive thrust), `powerDistributionLegacy()` and `powerDistributionCap()`
+  of bitcraze/crazyflie-firmware b48aba18, in float. The sources are vendored in
+  [native/third_party/crazyflie-firmware](../native/third_party/crazyflie-firmware) (MIT) and compiled by
+  [tests/test_firmware_port.py](../tests/test_firmware_port.py) into a harness: on 1600 random steps
+  (800 near hover, 800 saturating) the int16 roll/pitch/yaw, the four PWM values and the capped flag
+  are identical and the float thrust agrees to 2e-6 relative. Battery compensation is assumed off.
+- `FlightController` ([native/flight_controller.hpp](../native/flight_controller.hpp)) has two laws:
+  `firmware` (the port; per-motor thrust T_i = κ'/4 (pwm_i/massThrust)^p from the identified collective
+  map, mixed to a wrench with the actuator geometry) and `identified` (the previous PD, fallback).
+  `step` advances the firmware memory, `peek` does not; `BatchRuntime.reinitialize` resets it.
+- Configs: [crazyflie_firmware.toml](../configs/controllers/crazyflie_firmware.toml) carries `ctrlMel.*`
+  as flown (crazyswarm2 `crazyflies.yaml` cf_2: mass 0.144, massThrust 17700; translation gains zeroed
+  by the host script; attitude gains firmware defaults). Controller clock 0.002 s (500 Hz). Actuator
+  motor layout follows the legacy mixer (M1 front-right, M2 rear-right, M3 rear-left, M4 front-left;
+  M2/M4 positive yaw). `flight_drone.firmware_config()` defaults to the firmware law; the training
+  environment, benchmark and coupled validation therefore use it; `fit_drone_flights.py` keeps the
+  identified law.
+- Stage 2 ([scripts/fit_firmware_drone.py](../scripts/fit_firmware_drone.py), drone-only flights,
+  debiased 2 s open-loop loss, held out random_high and whip; cable flights scored coupled, never fitted):
+  roll/pitch inertia ×1.375 (1.877e-4 kg m²), motor arm ×1.225 (0.0613 m), motor response 22.5 ms,
+  command delay 0 — adopted in `drone_cable.json`, `drone.json`, `geometric.toml`. Numbers reproduced
+  twice (`runs/calibration_2026-10-27/firmware_drone_fit.json`; a refinement from this point,
+  `firmware_drone_fit_refined.json`, moved to inertia ×1.79 / arm ×1.43 / 4 ms with the same held-out
+  scores — inertia and arm are correlated and the search surface is flat; the arm must be measured).
+
+**Results (vector RMS over 2 s windows, mm; fit / held out).**
+
+| law | drone-only debiased | drone-only raw | cable debiased | cable raw |
+|---|---|---|---|---|
+| identified (previous) | 57 / 53 | 256 / 248 | 74 / 79 | 383 / 362 |
+| firmware, unfitted (inertia and arm as guessed) | 76 / 64 | 313 / 301 | 72 / 58 | 332 / 271 |
+| firmware, stage 2 (adopted) | 65 / 58 | 278 / 265 | 61 / 54 | 296 / 250 |
+
+Per axis on the cable windows, the lean away from the cable at large swings fell from −5.1° to −1.9°
+and the mean vertical bias from −0.19 to −0.10 m/s² (the hover residual, see "Open"). The firmware law
+is worse than the identified PD on the drone-only flights it was not tuned on by hand (+4 mm held out)
+and much better on the cable flights (−25 mm held out, −31 % raw): one model for both, with the
+controller gains fixed by the firmware.
+
+**Checks.** 96 tests pass (firmware harness, exact physics, environment hover within 1 mm, batch =
+single bit for bit). Batch throughput with the 500 Hz firmware law: 2.8k lane-steps/s at 24 lanes,
+4.9k at 96 (was 4.3k / 7.2k with the 200 Hz identified law).
+
+**Open.** Hover residual −0.10 m/s² with the cable (mass bookkeeping or downwash; lab tests listed in
+the design §5). Motor arm and inertia unmeasured (stage 0). Per-motor PWM→thrust map and PWM
+saturation level unidentified (stage 1): the 0.85 N per-motor limit and the power-law extrapolation
+above hover are the previous assumptions. The firmware's state estimate is the true state (no
+attitude bias yet). Drone-only identification could be improved by a search that does not stall at
+the delay bound. Coupled validation table with the adopted configuration:
+`runs/calibration_2026-10-27/coupled_validation_adopted.json` (`validate_coupled.py --adopted`, every row reproduced twice): cable shape 25.0–66.6 mm on the fitting flights, held out random_high 45.1 mm and whip 70.6 mm (previous identified-law coupled validation: 60.0 and 73.7); tip 39–131 mm; drone debiased 32–103 mm (line_star worst), held out random_high 46.6 and whip 54.3 (previous 54.7 and 54.2).
