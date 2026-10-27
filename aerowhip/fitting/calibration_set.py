@@ -1,42 +1,41 @@
-"""The 2026-10-27 calibration flights as a fitting data set: usable spans and the split.
+"""The calibration flights as a fitting data set: which flights, their roles and usable spans.
 
-Usable spans come from the take log (`takes.jsonl`, last entry per folder): `exclude_phases`
-and `usable_until_t_s`. The whip flights were flown as validation and, with random_high, are
-held out of every fit; they are only scored with the final parameters.
+All of it comes from the calibration manifest (`model_calibration.yaml` in the data root, see
+`aerowhip.fitting.manifest`): flights with role 'fit' are fitted, 'held_out' flights are scored
+only with the final parameters, 'hover' flights serve the motor identification, 'excluded' ones
+are not used. Usable spans (`usable.until_t_s`, `usable.exclude_phases`) trim a flight.
 """
-import json
 from pathlib import Path
 
 import numpy as np
 
+from aerowhip.fitting.manifest import Manifest
 from aerowhip.takes.calibration_flights import load, windows
 
 DEFAULT_ROOT = Path('/home/tony-lab/Documents/PHD/Crazyflie/crazyswarm2_jazzy_whipping/calibration_data')
 SESSION = '2026-10-27'
-MOTIONS = ('circle', 'decay', 'figure8', 'line_star', 'random', 'random_high', 'strokes', 'vertical', 'whip')
-HELD_OUT = ('random_high', 'whip')
-# Spans the take log does not mark: the drone-only strokes flight ran its battery to 6.78 V
-# under load in 'strokes 90 4' and lost the link in 'strokes 90 6' (11 m replay error there).
-USABLE_UNTIL_T_S = {f'strokes/{SESSION}_cf_2_nocable_strokes_01': 104.1}
 
 
-def take_notes(root=DEFAULT_ROOT):
-    notes = {}
-    for line in (Path(root)/'takes.jsonl').read_text().splitlines():
-        entry = json.loads(line)
-        notes[entry['folder']] = entry      # last entry per folder wins
-    return notes
+def manifest(root=DEFAULT_ROOT):
+    return Manifest(root)
 
 
-def folders(setup, root=DEFAULT_ROOT):
+def held_out(setup='cf_2', root=DEFAULT_ROOT, session=SESSION):
+    """Motions held out of every fit for this setup."""
+    return tuple(f['motion'] for f in manifest(root).flights(setup, roles=('held_out',), session=session))
+
+
+HELD_OUT = ('random_high', 'whip')     # the 2026-10-27 split; `held_out()` reads the manifest
+
+
+def folders(setup, root=DEFAULT_ROOT, session=SESSION, roles=('fit', 'held_out')):
     """{motion: folder} for one setup ('cf_2' with cable, 'cf_2_nocable' without)."""
-    root = Path(root)
+    m = manifest(root)
     out = {}
-    for motion in MOTIONS:
-        hits = sorted(root.glob(f'*/{SESSION}_{setup}_{motion}_0*'))
-        hits = [h for h in hits if h.is_dir() and (h/'poses.jsonl').exists()]
-        if hits:
-            out[motion] = hits[-1] if motion != 'vertical' else hits[0]
+    for f in m.flights(setup, roles=roles, session=session):
+        if f['motion'] in out:
+            raise ValueError(f"{setup}: two {f['motion']} flights with a fitting role in session {session}; mark one 'excluded'")
+        out[f['motion']] = m.folder(f)
     return out
 
 
@@ -45,9 +44,9 @@ def flight_windows(folder, *, root=DEFAULT_ROOT, duration_s=2., stride_s=1., min
     flight = load(folder)
     if not cable:
         flight.markers = None
-    note = take_notes(root).get(str(Path(folder).relative_to(root)), {})
-    excluded = tuple(note.get('exclude_phases') or ())
-    until = note.get('usable_until_t_s', USABLE_UNTIL_T_S.get(str(Path(folder).relative_to(root))))
+    m = manifest(root)
+    entry = next((f for f in m.data['flights'] if m.folder(f) == Path(folder)), None)
+    until, excluded = m.usable(entry) if entry else (None, ())
     result = []
     for w in windows(flight, duration_s=duration_s, stride_s=stride_s, min_seen=min_seen):
         if w.phase.startswith(('takeoff', 'land', 'settle')) or any(w.phase.startswith(p) for p in excluded):
@@ -65,7 +64,8 @@ def flight_windows(folder, *, root=DEFAULT_ROOT, duration_s=2., stride_s=1., min
 def split(setup, *, root=DEFAULT_ROOT, cable=True, **kwargs):
     """({motion: windows} for fitting, {motion: windows} held out)."""
     train, held = {}, {}
-    for motion, folder in folders(setup, root).items():
-        target = held if motion in HELD_OUT else train
-        target[motion] = flight_windows(folder, root=root, cable=cable, **kwargs)
+    m = manifest(root)
+    for f in m.flights(setup, session=SESSION):
+        target = held if f['role'] == 'held_out' else train
+        target[f['motion']] = flight_windows(m.folder(f), root=root, cable=cable, **kwargs)
     return train, held

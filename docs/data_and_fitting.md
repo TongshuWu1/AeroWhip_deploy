@@ -154,9 +154,14 @@ saved with `clock_verified: false`.
 ## Fitting
 
 Fitting uses the calibration flights of one session through the native engine, on 2 s
-windows every 1 s inside each flight's usable span (`aerowhip.fitting.calibration_set`);
-two flights (`random_high`, `whip`) are held out of every fit and scored only with the final
-parameters. Every reported number is computed twice.
+windows every 1 s inside each flight's usable span (`aerowhip.fitting.calibration_set`).
+Which flights exist, their roles (`fit`, `held_out`, `hover`, `excluded`), usable spans and
+logs, the vehicle measurements and the bench tests all come from one manifest beside the
+data, `model_calibration.yaml` (`aerowhip.fitting.manifest`), written during the sessions
+and checked by the data repository's `check_calibration_data.py`; nothing about the data set
+is hard-coded in the fitting code. In the 2026-10-27 session `random_high` and `whip` are held
+out of every fit and scored only with the final parameters. Every reported number is computed
+twice.
 
 1. **Drone pipeline** (`aerowhip.fitting.flight_drone`, `scripts/fit_drone_flights.py`,
    `scripts/fit_firmware_drone.py`): the sent acceleration commands drive the flight

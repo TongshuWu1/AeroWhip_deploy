@@ -22,13 +22,13 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aerowhip.fitting import flight_drone
 from aerowhip.paths import ROOT
-from aerowhip.fitting.calibration_set import folders, flight_windows, HELD_OUT
+from aerowhip.fitting.calibration_set import folders, flight_windows, HELD_OUT, manifest
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
 from aerowhip.takes.calibration_flights import load
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from fit_cable_flights import nelder_mead
 
-DRONE_MASS_KG = .146     # weighed with battery and clamp
+DRONE_MASS_KG = manifest().measurement('drone_mass_kg')     # from the calibration manifest (weighed, battery and clamp)
 
 
 def configured(base, x):

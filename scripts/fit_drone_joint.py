@@ -49,6 +49,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--iterations', type=int, default=60)
+    parser.add_argument('--fix-arm', action='store_true', help='keep the configured motor arm (measured); fit the rest')
     args = parser.parse_args()
     base = load_model_configuration(DEFAULT_MODEL)
     firmware = tomllib.loads(FIRMWARE.read_text())
@@ -56,7 +57,7 @@ def main():
         raise SystemExit('The firmware law is required')
     drag = base['drone']['body_drag_s_inv']
     x0 = [1., 1., float(base['actuator']['response_time_s'][0]), float(base['controller']['command_delay_s']), float(drag[0]), float(drag[2])]
-    step = [.25, .15, .008, .01, .15, .2]
+    step = [.25, 0. if args.fix_arm else .15, .008, .01, .15, .2]
     train, held = items_for('cf_2_nocable')
     cable_train, cable_held = cable_items()
     items = [i for v in train.values() for i in v]
@@ -65,7 +66,7 @@ def main():
     evaluations = []
 
     def clean(x):
-        return [x[0], x[1], x[2], max(0., x[3]), x[4], x[5]]    # a negative delay is zero delay
+        return [x[0], 1. if args.fix_arm else x[1], x[2], max(0., x[3]), x[4], x[5]]    # a negative delay is zero delay
 
     def objective(x):
         if x[0] <= .1 or x[1] <= .1 or x[2] < 0 or x[3] > .2 or x[4] < 0 or x[5] < 0:

@@ -1603,3 +1603,28 @@ User's decision ("do what you recommend"): keep the linear damping; the option s
 - Diagnostics also run this session (one-off): `CableReplay` supports meshes finer than one segment per
   marker interval (2–3 segments: whip −1.5 to −1.7 mm).
 - 111 tests pass with the option off; results unchanged (whip cable alone 67.94 mm).
+
+## Dated change note — 2026-10-28 calibration manifest; measured arm; lab session prepared
+
+User's request: one systematic, automated data collection with a single calibration data file.
+
+- Companion repository (`crazyswarm2_jazzy_whipping`, committed there): `calibration_data/model_calibration.yaml`
+  (schema `aerowhip_model_calibration_v1`): `vehicle` measurements with method/date/uncertainty (drone 0.146 kg
+  pending re-weigh, cable 0.017, assembly **0.162 kg measured 2026-10-27**, motor square **0.098 m measured**
+  → arm 0.0693 m, attachment 0.0423 fitted, missing: plate-to-prop height, disc coverage), `bench`, `flights`
+  (23 entries migrated from takes.jsonl with roles, usable spans, logs), `stages`, `adopted`. The host's
+  `physical.yaml` masses (0.1505 / 0.157) are documented as weight-trim settings, not measurements.
+  `collect_series.py` now flies the whole remaining series per setup (Enter per flight, skip/retry/quit,
+  battery-swap pause) and appends each flight to the manifest; the flight recorder writes `motors.jsonl`
+  (motor.m1..4 PWM and pm.vbat at 30 Hz); `check_calibration_data.py` validates data against the manifest
+  (30 warnings on the 2026-10-27 data: no motor logs, missing measurements; 0 errors).
+- This repository: [fitting/manifest.py](../aerowhip/fitting/manifest.py) reads it;
+  [fitting/calibration_set.py](../aerowhip/fitting/calibration_set.py) takes folders, roles and usable spans
+  from the manifest (`folders`, `split`, `flight_windows`, `held_out`; `HELD_OUT` kept as the 2026-10-27
+  constant); `fit_drone_flights.DRONE_MASS_KG` comes from the manifest. Window sets unchanged (drone-only
+  257 + 66, cable 241 + 46). PyYAML added to the dependencies.
+- Measured arm adopted in `configs/actuators/drone.json`: ±0.049 m per body axis (was ±0.06125 from the
+  stage-2 scale ×1.225). **The stage-2 inertia, motor response, delay and drag have not been refitted with
+  it**; `fit_drone_joint.py --fix-arm` is ready (a run was started and stopped at the user's request: wait
+  for the full session's data). Until that refit, the drone model is inconsistent with its own fit.
+- 111 tests pass.

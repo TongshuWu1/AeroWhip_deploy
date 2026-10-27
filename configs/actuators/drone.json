@@ -3,23 +3,23 @@
   "allocation": "inverse_clip",
   "motor_positions_com_m": [
     [
-      0.061250000000000006,
-      -0.061250000000000006,
+      0.049,
+      -0.049,
       0
     ],
     [
-      -0.061250000000000006,
-      -0.061250000000000006,
+      -0.049,
+      -0.049,
       0
     ],
     [
-      -0.061250000000000006,
-      0.061250000000000006,
+      -0.049,
+      0.049,
       0
     ],
     [
-      0.061250000000000006,
-      0.061250000000000006,
+      0.049,
+      0.049,
       0
     ]
   ],
@@ -54,5 +54,5 @@
     0.3971693249999999
   ],
   "motor_layout": "crazyflie legacy mixer: M1 front-right, M2 rear-right, M3 rear-left, M4 front-left; x forward, y left",
-  "calibration_note": "stage 2 (runs/calibration_2026-10-27/firmware_drone_fit.json): arm x1.225 of the 0.05 m layout guess and 22.5 ms response, fitted with the roll/pitch inertia on the drone-only flights; arm and inertia are correlated until the arm is measured"
+  "calibration_note": "arm measured 2026-10-27: adjacent motor centres 9.8 cm (square), so +-0.049 m per body axis (arm 0.0693 m); response time from stage 2 refit with the arm fixed (runs/calibration_2026-10-27/drone_fit_fixed_arm.json)"
 }
