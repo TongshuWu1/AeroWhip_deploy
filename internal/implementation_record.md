@@ -1470,3 +1470,26 @@ Approved by the user after the residual analysis ("Yes lets do it").
   dynamics (motor map, stage 1); stage 2 (inertia, arm, motor response) was fitted without drag and
   has not been refitted jointly; drag proportional to thrust (rotor drag) versus constant was not
   tested; whip cable shape is not improved.
+
+## Dated change note — 2026-10-28 faster drone-only replays; joint stage-2 + drag refit (not adopted)
+
+- [fitting/flight_drone.py](../aerowhip/fitting/flight_drone.py) `drone_only`: the stand-in cable for
+  drone-only flights is now one 2 cm link of 1 mg (was ten links of 0.1 g). On 65 drone-only windows
+  it moves the drone by at most 0.12 mm over 2 s relative to a ten-link 1 mg cable, whereas the 0.1 g
+  cable moved it by up to 12.6 mm (pooled RMS change 0.14 mm); one replay costs about half. Earlier
+  drone-only results (stage 2, drag fit) were computed with the 0.1 g cable; recomputed with the new
+  one, the adopted model scores 139 raw / 37.6 debiased (fit) and 135 / 42.1 (held out), within 1 mm of
+  the reported values.
+- Physics step: the configured 1/600 s step runs as 1 ms steps under the 2 ms controller period (each
+  period is split into two). A 2 ms step was compared with 1 ms on whip, line_star, strokes and
+  random_high cable windows: maximum drone difference 0.8–2.4 mm, marker 1.0–2.4 mm (median 0.3–0.7)
+  over 2 s, no solver failures, 1.9x faster. Not adopted (pending the user's decision); one-off check.
+- [scripts/fit_drone_joint.py](../scripts/fit_drone_joint.py): stage 2 (inertia scale, arm scale,
+  motor response, delay) refitted together with the drag rates on the raw loss of the drone-only
+  flights (`runs/calibration_2026-10-27/drone_joint_fit.json`, reproduced twice; 87 evaluations,
+  3 minutes). Best: inertia ×0.934, arm ×0.678, motor 19.1 ms, delay 41.6 ms, k_xy 0.70, k_z 0.93.
+  Raw / debiased mm, adopted → joint: fit 139/37.6 → 131/35.4; held out 135/42.1 → 138/38.7 (whip raw
+  132 → 139); cable fit 179/38.9 → 177/38.2; cable held out 164/45.6 → 152/40.6. **Not adopted**: the
+  gain is small and mixed, and the parameters moved far along known trade-offs (arm against inertia,
+  delay against drag and motor response) — these flights do not identify them separately. Needs the
+  measured arm and the acceleration-step flights (design §5) first.

@@ -7,7 +7,7 @@ removing the best constant acceleration bias per window and axis (d - b t^2/2). 
 raw error is dominated by slowly varying biases of about 0.1 m/s^2 (attitude-estimate offsets,
 airflow) that the real host PID absorbs; the debiased loss measures the modelled dynamics.
 
-Drone-only flights use the model with a negligible cable (0.1 g); command times are the
+Drone-only flights use the model with a negligible cable (one 2 cm link, 1 mg); command times are the
 frame index of the pose each command was computed from (the windows' uniform 100 Hz clock).
 """
 from concurrent.futures import ThreadPoolExecutor
@@ -30,11 +30,16 @@ def firmware_config(path=FIRMWARE):
 
 
 def drone_only(config):
+    """The model without cable: the engine needs one, so a single 2 cm link of 1 mg remains. Its
+    effect on the drone is below 0.12 mm over 2 s (a 0.1 g ten-link cable moved the drone by up to
+    12 mm), and one link halves the cost of a replay."""
     config = deepcopy(config)
     cable = config['cable']
-    cable['total_mass_kg'] = 1e-4
-    cable['moving_marker_masses_kg'] = [1e-6]*len(cable['marker_interval_lengths_m'])
+    cable['total_mass_kg'] = 1e-6
+    cable['marker_interval_lengths_m'] = [.02]
+    cable['moving_marker_masses_kg'] = [1e-8]
     cable['normal_drag_coefficient'] = 0.
+    config['simulation'] = dict(config['simulation'], segments_per_marker_interval=[1])
     return config
 
 
