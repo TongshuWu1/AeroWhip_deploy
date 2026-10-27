@@ -1,0 +1,34 @@
+# Crazyflie flight pipeline below the host, firmware law: the ported Mellinger controller
+# (native/firmware.hpp) with the gains of the flight configuration, and the delivered-thrust map
+# identified on the 2026-10-27 drone-only flights (shared with crazyflie_flight.toml).
+law = "firmware"
+firmware_mass_kg = 0.144        # ctrlMel.mass on cf_2 (also in [ctrlMel])
+thrust_scale = 0.5529           # kappa, N^(1-p): delivered = kappa*(1+beta*(V-V0))*T_cmd^p, T_cmd collective-equivalent N
+thrust_exponent = 2.2
+voltage_slope_v_inv = 0.1765
+reference_voltage_v = 7.2
+tilt_gain = 1.0                 # identified law only
+
+# ctrlMel.* in flight: crazyswarm2_jazzy_whipping/config/crazyflies.yaml (cf_2) over the firmware
+# defaults of controller_mellinger.c; the host script (acceleration_circle_cf2.py, real mode) zeroes
+# the translation gains and integral ranges for the acceleration interface.
+[ctrlMel]
+mass = 0.144
+massThrust = 17700.0
+kp_xy = 0.0                     # yaml 0.4, zeroed in flight
+kd_xy = 0.0                     # yaml 0.3, zeroed in flight
+ki_xy = 0.0
+i_range_xy = 0.0
+kp_z = 0.0                      # yaml 2.5, zeroed in flight
+kd_z = 0.0                      # yaml 0.4, zeroed in flight
+ki_z = 0.0                      # yaml 1.5, zeroed in flight
+i_range_z = 0.0                 # yaml 15.0, zeroed in flight
+kR_xy = 70000.0                 # firmware defaults from here on
+kw_xy = 20000.0
+ki_m_xy = 0.0
+i_range_m_xy = 1.0
+kR_z = 60000.0
+kw_z = 12000.0
+ki_m_z = 500.0
+i_range_m_z = 1500.0
+kd_omega_rp = 200.0

@@ -106,12 +106,17 @@ windows every 1 s inside each flight's usable span (`aerowhip.fitting.calibratio
 two flights (`random_high`, `whip`) are held out of every fit and scored only with the final
 parameters. Every reported number is computed twice.
 
-1. **Drone pipeline** (`aerowhip.fitting.flight_drone`, `scripts/fit_drone_flights.py`): the
-   sent acceleration commands drive the flight controller and plant open loop from the
-   measured state. The thrust map and attitude response are identified directly from the
-   measured thrust (mass × acceleration along the body axis) and body attitude; the
-   open-loop position error over 2 s, after removing a constant acceleration drift per
-   window, checks the result.
+1. **Drone pipeline** (`aerowhip.fitting.flight_drone`, `scripts/fit_drone_flights.py`,
+   `scripts/fit_firmware_drone.py`): the sent acceleration commands drive the flight
+   controller and plant open loop from the measured state. The thrust map and, for the
+   identified law, the attitude response are identified directly from the measured thrust
+   (mass × acceleration along the body axis) and body attitude. For the firmware law the
+   controller gains are firmware constants and the vehicle around it is fitted instead: the
+   roll/pitch inertia scale, the motor arm scale, the motor response time and the command
+   delay (Nelder–Mead on the debiased open-loop position error of the drone-only flights);
+   the cable flights are then scored with nothing refitted, raw and debiased, as the
+   cross-check. The open-loop position error over 2 s, after removing a constant
+   acceleration drift per window, checks the result.
 2. **Cable** (`aerowhip.fitting.flight_cable`, `scripts/fit_cable_flights.py`): the measured
    drone pose drives the clamp; the cable starts from the measured markers and runs open
    loop. Loss: RMS distance between simulated and measured markers over the markers that were

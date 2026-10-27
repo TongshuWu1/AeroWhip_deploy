@@ -10,6 +10,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <algorithm>
+#include <string>
 #include <cmath>
 
 namespace py = pybind11;
@@ -158,6 +159,17 @@ py::object actuation_info(const Runtime& r) {
     out["target_motor_thrust_n"]=r.has_effort()?py::cast(a.target(r.effort())):py::none();
     return out;
 }
+mellinger::Parameters mellinger_parameters(const py::dict& d) {
+    mellinger::Parameters p;
+    auto get=[&](const char* key,float& field){if(d.contains(key))field=d[key].cast<float>();};
+    get("mass",p.mass);get("massThrust",p.massThrust);get("kp_xy",p.kp_xy);get("kd_xy",p.kd_xy);get("ki_xy",p.ki_xy);get("i_range_xy",p.i_range_xy);
+    get("kp_z",p.kp_z);get("kd_z",p.kd_z);get("ki_z",p.ki_z);get("i_range_z",p.i_range_z);get("kR_xy",p.kR_xy);get("kw_xy",p.kw_xy);
+    get("ki_m_xy",p.ki_m_xy);get("i_range_m_xy",p.i_range_m_xy);get("kR_z",p.kR_z);get("kw_z",p.kw_z);get("ki_m_z",p.ki_m_z);get("i_range_m_z",p.i_range_m_z);
+    get("kd_omega_rp",p.kd_omega_rp);
+    for(auto item:d){std::string k=py::str(item.first);static const char* known[]={"mass","massThrust","kp_xy","kd_xy","ki_xy","i_range_xy","kp_z","kd_z","ki_z","i_range_z","kR_xy","kw_xy","ki_m_xy","i_range_m_xy","kR_z","kw_z","ki_m_z","i_range_m_z","kd_omega_rp"};
+        bool ok=false;for(auto n:known)if(k==n)ok=true;if(!ok)throw py::value_error("Unknown ctrlMel parameter: "+k);}
+    return p;
+}
 FlightController flight_controller(const py::dict& firmware,const py::dict& model_config,double voltage) {
     // Attitude gains from the model's controller section; firmware and thrust map from `firmware`.
     FlightControllerParameters p;
@@ -170,6 +182,13 @@ FlightController flight_controller(const py::dict& firmware,const py::dict& mode
     for(int i=0;i<3;++i){p.attitude_stiffness[i]=w[i]*w[i];p.attitude_damping[i]=2.*z[i]*w[i];}
     p.inertia=fixed<9>(drone["inertia_body_about_com_kg_m2"],2);p.com=fixed<3>(drone["center_of_mass_tracking_m"]);
     p.gravity=fixed<3>(model_config["simulation"].cast<py::dict>()["gravity_world_m_s2"]);
+    std::string law=firmware.contains("law")?firmware["law"].cast<std::string>():"identified";
+    if(law=="firmware"){
+        p.law=FlightLaw::firmware;
+        p.firmware=mellinger_parameters(firmware["ctrlMel"].cast<py::dict>());
+        auto a=actuator(model_config["actuator"].cast<py::dict>());
+        p.mixing=a.mixing();p.motor_minimum=a.minimum;p.motor_maximum=a.maximum;
+    } else if(law!="identified") throw py::value_error("law must be 'identified' or 'firmware'");
     return FlightController(p,voltage);
 }
 // Independent lanes of one model, each with its own flight controller (battery voltage),
@@ -183,8 +202,8 @@ struct BatchRuntime {
         for(long i=0;i<long(lanes.size());++i) {
             if(failed[i]) continue;
             try {
-                const auto& c=controllers[i];
-                lanes[i]->step({{lanes[i]->time(),commands[i]}},[&c](const Vector& s,const Command& u){return c(s,u);});
+                auto& c=controllers[i];
+                lanes[i]->step({{lanes[i]->time(),commands[i]}},[&c](const Vector& s,const Command& u){return c.step(s,u);});
             } catch(const std::exception& e) {failed[i]=1;errors[i]=e.what();}
         }
     }
@@ -226,10 +245,10 @@ PYBIND11_MODULE(_native, m) {
         .def("reset",&Runtime::reset)
         .def("checkpoint",[](const Runtime& r){return array(r.checkpoint());})
         .def("restore",[](Runtime& r,Array checkpoint){r.restore(vector(checkpoint));})
-        .def("step",[](Runtime& r,py::list events,const FlightController& controller){
+        .def("step",[](Runtime& r,py::list events,FlightController& controller){
             std::vector<Event> checked;
             for(auto event:events) {auto item=event.cast<py::tuple>();if(item.size()!=2)throw py::value_error("Expected timestamp/command pairs");checked.push_back({item[0].cast<double>(),vector(item[1])});}
-            py::gil_scoped_release release;r.step(checked,[&controller](const Vector& s,const Command& c){return controller(s,c);});
+            py::gil_scoped_release release;r.step(checked,[&controller](const Vector& s,const Command& c){return controller.step(s,c);});
         })
         .def("reinitialize",[](Runtime& r,Array s){auto v=vector(s);r.reinitialize(v);})
         .def("step",[](Runtime& r,py::list events,py::object controller){
@@ -238,7 +257,7 @@ PYBIND11_MODULE(_native, m) {
             auto evaluate=callback(std::move(controller));{py::gil_scoped_release release;r.step(checked,evaluate);}
         })
         .def("snapshot",[](const Runtime& r,bool forces,const FlightController& controller){
-            Vector out;{py::gil_scoped_release release;out=r.snapshot(forces,[&controller](const Vector& s,const Command& c){return controller(s,c);});}return array(out);
+            Vector out;{py::gil_scoped_release release;out=r.snapshot(forces,[&controller](const Vector& s,const Command& c){return controller.peek(s,c);});}return array(out);
         })
         .def("snapshot",[](const Runtime& r,bool forces,py::object controller){
             auto evaluate=callback(std::move(controller));Vector out;
@@ -259,7 +278,21 @@ PYBIND11_MODULE(_native, m) {
         .def_property("battery_voltage",&FlightController::voltage,&FlightController::set_voltage)
         .def_property("acceleration_bias",&FlightController::bias,[](FlightController& c,py::object b){c.set_bias(fixed<3>(b));})
         .def("delivered_thrust",&FlightController::delivered_thrust)
+        .def("reset",&FlightController::reset)
+        .def_property_readonly("law",[](const FlightController& c){return c.law()==FlightLaw::firmware?"firmware":"identified";})
+        .def("motors",[](const FlightController& c,Array s,Array command){return c.motors(vector(s),vector(command));})
         .def("__call__",[](const FlightController& c,Array s,Array command){return c(vector(s),vector(command));});
+    // The firmware port alone, with the harness layout of tests/test_firmware_port.py:
+    // in (23): sp_pos sp_vel sp_acc sp_yaw_deg pos vel quat_xyzw gyro_deg_s; out (9): thrust roll pitch yaw pwm1..4 capped.
+    py::class_<mellinger::Controller>(m,"Mellinger")
+        .def(py::init([](py::dict p){return new mellinger::Controller(mellinger_parameters(p));}))
+        .def("reset",&mellinger::Controller::reset)
+        .def("step",[](mellinger::Controller& c,py::array_t<float,py::array::c_style|py::array::forcecast> in){
+            if(in.size()!=23) throw py::value_error("Expected 23 inputs");const float* v=in.data();
+            mellinger::Input i;i.setpoint_position={v[0],v[1],v[2]};i.setpoint_velocity={v[3],v[4],v[5]};i.setpoint_acceleration={v[6],v[7],v[8]};
+            i.setpoint_yaw_deg=v[9];i.position={v[10],v[11],v[12]};i.velocity={v[13],v[14],v[15]};i.qx=v[16];i.qy=v[17];i.qz=v[18];i.qw=v[19];i.gyro={v[20],v[21],v[22]};
+            auto o=c.step(i);py::array_t<float> out(9);float* d=out.mutable_data();
+            d[0]=o.thrust;d[1]=o.roll;d[2]=o.pitch;d[3]=o.yaw;for(int k=0;k<4;++k)d[4+k]=o.pwm[k];d[8]=o.capped?1.f:0.f;return out;});
     py::class_<BatchRuntime>(m,"BatchRuntime")
         .def(py::init([](const Model& model,Array state,Array hold,double period,double delay,const Actuator& actuator,std::vector<FlightController> controllers){
             auto b=new BatchRuntime;auto s=vector(state),c=vector(hold);
@@ -282,7 +315,7 @@ PYBIND11_MODULE(_native, m) {
             py::gil_scoped_release release;
             #pragma omp parallel for
             for(long i=0;i<long(rows.size());++i){
-                try{b.lanes[i]->reinitialize(rows[i]);b.failed[i]=0;b.errors[i].clear();}
+                try{b.lanes[i]->reinitialize(rows[i]);b.controllers[i].reset();b.failed[i]=0;b.errors[i].clear();}
                 catch(const std::exception& e){b.failed[i]=1;b.errors[i]=e.what();}}
         })
         .def("set_voltage",[](BatchRuntime& b,py::array_t<double,py::array::c_style|py::array::forcecast> v){

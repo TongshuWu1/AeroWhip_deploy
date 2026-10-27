@@ -6,5 +6,5 @@ velocity_gain_s_inv = [4.0, 4.0, 5.0]
 attitude_frequency_rad_s = [20.0, 20.0, 15.0]
 attitude_damping_ratio = [1.0, 1.0, 1.0]
 # Explicit experimental clock, not inferred from 100 Hz observations.
-controller_period_s = 0.005
+controller_period_s = 0.002   # 500 Hz: the firmware attitude rate (ATTITUDE_RATE); the geometric law is continuous-time
 command_delay_s = 0.03

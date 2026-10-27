@@ -15,7 +15,8 @@ nodes, including the attachment node 0, are world positions. All quantities are 
 
 Defined in [configs/physics/drone_cable.json](../configs/physics/drone_cable.json),
 [configs/controllers/geometric.toml](../configs/controllers/geometric.toml),
-[configs/controllers/crazyflie_flight.toml](../configs/controllers/crazyflie_flight.toml) and
+[configs/controllers/crazyflie_flight.toml](../configs/controllers/crazyflie_flight.toml),
+[configs/controllers/crazyflie_firmware.toml](../configs/controllers/crazyflie_firmware.toml) and
 [configs/actuators/drone.json](../configs/actuators/drone.json), combined by
 [configs/simulation.json](../configs/simulation.json).
 
@@ -74,19 +75,37 @@ convergence does not by itself establish physical accuracy.
 Two controllers drive the plant:
 
 - **Flight pipeline** (`FlightController`, [native/flight_controller.hpp](../native/flight_controller.hpp)):
-  the Crazyflie's onboard Mellinger controller with its translation gains zeroed, as flown.
-  The sent world acceleration a (trims included) becomes the firmware thrust vector
-  F = m_fw (a + g ẑ) with the firmware's mass m_fw = 0.144 kg; the body z axis is driven
-  towards F/|F| by an attitude PD loop; the firmware thrust T_cmd = F · z_body is mapped to the
-  delivered thrust by the identified open-loop thrust map above (nonlinear in T_cmd and
-  dependent on battery voltage V). An optional constant world acceleration bias models the
-  slowly varying disturbances seen in flight (about 0.1 m/s²) for randomization.
+  the Crazyflie's onboard controller as flown, in one of two laws selected by the controller
+  file's `law`:
+  - `firmware` ([crazyflie_firmware.toml](../configs/controllers/crazyflie_firmware.toml)): a
+    line-by-line port of the firmware's Mellinger controller and legacy power distribution
+    ([native/firmware.hpp](../native/firmware.hpp)), in single precision as the firmware computes
+    it, running at the firmware's 500 Hz attitude rate with the gains of the flight
+    configuration (`ctrlMel.*`; the translation gains are zero for the acceleration interface).
+    The sent world acceleration a (trims included) is the firmware setpoint; the firmware's
+    thrust `massThrust · (m_fw (a + g ẑ) · z_body)` and its int16 roll/pitch/yaw outputs go
+    through the legacy mixer and cap to four PWM values; each motor's thrust is
+    T_i = κ' / 4 · (pwm_i / massThrust)^p with the identified map below (κ' includes the battery
+    voltage), which reproduces the collective map when the four motors are equal. The port is
+    checked against the vendored firmware sources compiled into a test harness
+    ([tests/test_firmware_port.py](../tests/test_firmware_port.py)). The motor layout of the
+    actuator file follows the firmware's legacy mixer (M1 front-right, M2 rear-right, M3
+    rear-left, M4 front-left; M2 and M4 produce positive yaw torque). Battery compensation of
+    the firmware is assumed off.
+  - `identified` ([crazyflie_flight.toml](../configs/controllers/crazyflie_flight.toml)): the
+    reduced model identified on the drone-only flights, kept as the fallback. F = m_fw (a + g ẑ)
+    with m_fw = 0.144 kg; the body z axis is driven towards F/|F| by an attitude PD loop; the
+    firmware thrust T_cmd = F · z_body is mapped to the delivered thrust by the same map.
+
+  In both laws an optional constant world acceleration bias models the slowly varying
+  disturbances seen in flight (about 0.1 m/s²) for randomization.
 - **Geometric controller** (`aerowhip.control.geometric_controller`): position/velocity/
   acceleration tracking with a static weight trim, used by the interactive simulator and the
   scripted-flight tools.
 
-Motor commands are mixed with per-motor clipping; a first-order motor response produces the
-delivered wrench.
+Motor commands are mixed with per-motor clipping (the firmware law supplies motor forces already
+mixed and capped by the firmware; the allocation reproduces them); a first-order motor response
+produces the delivered wrench.
 
 ## Batched execution
 
