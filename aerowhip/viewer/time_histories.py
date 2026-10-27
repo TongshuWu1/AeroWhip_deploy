@@ -88,6 +88,9 @@ class TimeHistories(PlotCanvas):
         if forces != self.has_forces:
             self._build(forces)
         t = data[:, 0]
+        available = bool(np.isfinite(data[:, 1:4]).any())
+        self.axes[0].set_title('Drone acceleration (m/s²)' if available else
+                               'Drone acceleration · not provided by this source')
         for k in range(3):
             self.lines[f'a{k}'].set_data(t, data[:, 1+k])
         self.lines['tilt'].set_data(t, data[:, 4])

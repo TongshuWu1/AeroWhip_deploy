@@ -159,6 +159,11 @@ its ROS adapter. Closing the simulation window does the same. Docker stays
 running, so you can run `./docker/start.sh --custom-sim` again. The standalone
 `scripts/simulate.py` window also closes cleanly on Ctrl+C.
 
+The flight viewer (simulation, replay and real flight) has a dock of rolling 10 s time
+histories for the selected robot: drone acceleration per axis (when the source provides
+it), tilt, cable-tip speed from successive displayed tip positions, and, when the model
+provides forces, cable force and thrust. View › Time histories toggles it.
+
 ## Real flight
 
 From the Crazyswarm checkout, start the existing real stack with the shared
