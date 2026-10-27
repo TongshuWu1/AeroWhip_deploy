@@ -1170,3 +1170,16 @@ a cable grid rerun segfaulted in the garbage collector during JSON parsing. The 
 is faulting; a memory test is the next step before further computation. The cable grid's
 first run (Cb ×4, drag ×4, 37 mm vs 63 mm) stands as indicative only.
 
+## Dated change note — 2026-10-27 motor thrust-stand data
+
+The user's thrust-stand ramp tests of one cf_2 motor+propeller (2026-10-26, four usable
+battery voltages 7.2–8.1 V, one discarded run) are saved in the companion repository under
+`calibration_data/bench/motor_ramp_2026-10-26/` with a README and `summary.json`. Findings:
+thrust per RPM² 6.8–7.0e-10 N/rpm² at all voltages; thrust at a fixed ESC command falls ~20 %
+per volt (motor speed, not the propeller); hover at the effective 0.157 kg needs 0.385 N per
+motor, 1400 µs at 8.1 V and ~1570 µs at 7.5 V. The Mellinger firmware maps force to PWM
+open-loop (`massThrust` = 17700, no voltage compensation), which explains the ~9 % thrust
+shortfall and its drift with battery. Model decision pending: thrust scaled by logged battery
+voltage in the drone block (replacing the constant effective mass). The motor time constant
+is not resolvable from these tests. `configs/actuators/drone.json` is unchanged.
+
