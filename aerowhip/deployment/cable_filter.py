@@ -14,6 +14,8 @@ and live, so what is validated on recordings is what flies.
 
 No learned components. Costs per frame are O(markers x points) NumPy operations.
 """
+import math
+
 import numpy as np
 
 MARKERS = 10
@@ -268,15 +270,19 @@ class CableFilter:
 
     def _project(self, root, positions):
         """Pull consecutive markers to at most their cable distance apart (the cable cannot
-        stretch); the attachment is fixed. A few Gauss-Seidel sweeps."""
-        chain = np.vstack([root, positions])
+        stretch); the attachment is fixed. A few Gauss-Seidel sweeps (scalar arithmetic: this
+        is the filter's hot spot, sixty tiny vector operations per frame otherwise)."""
+        chain = [tuple(map(float, root))]+[tuple(map(float, q)) for q in positions]
+        segments = self.segments.tolist()
         for _ in range(self.iterations):
             for k in range(1, MARKERS+1):
-                gap = chain[k]-chain[k-1]
-                length = np.linalg.norm(gap)
-                limit = self.segments[k-1]
+                (ax, ay, az), (bx, by, bz) = chain[k-1], chain[k]
+                gx, gy, gz = bx-ax, by-ay, bz-az
+                length = math.sqrt(gx*gx+gy*gy+gz*gz)
+                limit = segments[k-1]
                 if length > limit:
-                    chain[k] = chain[k-1]+gap*(limit/length)
+                    s = limit/length
+                    chain[k] = (ax+gx*s, ay+gy*s, az+gz*s)
         positions[:] = chain[1:]
 
     def _chain_ok(self, root, positions):
