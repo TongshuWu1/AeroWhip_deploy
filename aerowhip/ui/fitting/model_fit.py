@@ -3,17 +3,23 @@ with the configuration and adopt it.
 
     python -m aerowhip.ui.fitting
 
-Left: the pipeline (thrust map → drone → cable → coupled validation), each stage with whether its
-latest result is in use and a Run button (hover a stage for what it fits). Right: Progress (best loss
-and parameters of the selected run, live while it runs, also for fits started from a terminal),
-Result (before/after, per-flight chart and the explicit Adopt), Data (the calibration manifest) and
-Runs (every result, old layout included). Fits run as their own processes
-(`aerowhip.fitting.stages`); the window reads their `.progress.jsonl` and result files.
+Top: the activity bar, always visible: the fit running now (stage, step, progress, time left), what
+is queued next, or the last run. Left: the pipeline (thrust map → drone → cable → coupled validation),
+each stage with its state (RUNNING, QUEUED, result to review, in use, not run) and one action (Run,
+Queue, Cancel, Stop). Right: Live (the running fit, or the last one), Result (before/after, per-flight
+chart and the explicit Adopt), Data (the calibration manifest) and Runs (every result, old layout
+included). Fits run one at a time as their own processes (`aerowhip.fitting.stages`), not as
+children of the window: output in <result>.log, exit code in <result>.exit; the window finds a
+running fit from its `.progress.jsonl` (process id), so it can be closed and reopened at any time,
+and fits started from a terminal show the same way.
 """
 from datetime import datetime
 import json
 import math
+import os
+import shlex
 from pathlib import Path
+import subprocess
 import sys
 import time
 
@@ -28,7 +34,6 @@ from aerowhip.ui.style import PALETTE, ROLE
 
 CHECKER = calibration_set.DEFAULT_ROOT.parent/'scripts/check_calibration_data.py'
 ADOPTIONS = stages.FITS/'adoptions.jsonl'
-STALLED_S = 600.          # a progress file silent this long without 'done' is reported as stopped
 # Older results have no progress file; their parameter names come from here.
 LEGACY_PARAMETERS = {'cable': ['log10 EI', 'log10 Cb', 'Cd', 'log10 linear drag']}
 GOOD, BAD = PALETTE['green'], PALETTE['vermillion']
@@ -65,12 +70,6 @@ def all_results():
         if stage is not None:
             found.append((path, stage))
     return sorted(found, key=lambda item: item[0].stat().st_mtime, reverse=True)
-
-
-def running_progress():
-    """Progress files under runs/fits without a result yet (fits running or stopped)."""
-    return [p for p in stages.FITS.glob('*/*.progress.jsonl')
-            if not p.with_name(p.name.replace('.progress.jsonl', '.json')).exists()]
 
 
 def adoptions():
@@ -225,6 +224,50 @@ def status_chip(text, colour):
     return f'<span style="color:{colour}; font-weight:600">● {text}</span>' if colour else f'<span>○ {text}</span>'
 
 
+# ---------------------------------------------------------------- runs on disk
+
+def pid_alive(pid):
+    try:
+        os.kill(int(pid), 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+
+
+def run_state(path, events=None):
+    """'running' | 'done' | 'failed' | 'stopped' for a progress file. A run is running while the
+    process that writes it is alive; its wrapper's `.exit` file (runs started from the window)
+    tells a stop (terminated) from a failure."""
+    path = Path(path)
+    events = progress_file.read(path) if events is None else events
+    if events and events[-1]['kind'] == 'done':
+        return 'done'
+    if events and events[-1]['kind'] == 'failed':
+        return 'failed'
+    exit_file = path.with_name(path.name.replace('.progress.jsonl', '.exit'))
+    if exit_file.exists():
+        code = exit_file.read_text().strip()
+        return 'stopped' if code in ('143', '137', '-15', '-9') else 'failed' if code != '0' else 'done'
+    pid = events[0].get('pid') if events else None
+    if pid is not None:
+        return 'running' if pid_alive(pid) else 'stopped'
+    # older runs record no process id: look for a process whose command line names this run's result
+    result = path.name.replace('.progress.jsonl', '.json')
+    found = subprocess.run(['pgrep', '-f', f'--output [^ ]*{result}'], capture_output=True).returncode == 0
+    return 'running' if found else 'stopped'
+
+
+def progress_files():
+    """Every progress file under runs/fits, newest first."""
+    return sorted(stages.FITS.glob('*/*.progress.jsonl'), key=lambda p: p.stat().st_mtime, reverse=True)
+
+
+def stage_of_progress(path):
+    return stages.stage_of(Path(str(path).replace('.progress.jsonl', '.json')))
+
+
 # ---------------------------------------------------------------- pipeline
 
 STATUS_TEXT = {'in use': ('in use', GOOD), 'pending': ('result to review', PALETTE['orange']),
@@ -232,12 +275,12 @@ STATUS_TEXT = {'in use': ('in use', GOOD), 'pending': ('result to review', PALET
 
 
 class StageCard(QtWidgets.QFrame):
-    run_clicked = QtCore.Signal(object)
+    action_clicked = QtCore.Signal(object, str)        # stage, 'run' | 'stop' | 'cancel'
     open_clicked = QtCore.Signal(object)
 
     def __init__(self, number, stage):
         super().__init__()
-        self.stage, self.latest = stage, None
+        self.stage, self.latest, self.action = stage, None, 'run'
         self.setObjectName('card')
         self.setToolTip(f'{stage.description}\nData: {stage.data}')
         layout = QtWidgets.QVBoxLayout(self)
@@ -249,40 +292,62 @@ class StageCard(QtWidgets.QFrame):
         self.status = label('')
         top.addWidget(self.status)
         layout.addLayout(top)
+        self.bar = QtWidgets.QProgressBar()
+        self.bar.setRange(0, 1000)
+        self.bar.setTextVisible(False)
+        self.bar.setFixedHeight(6)
+        self.bar.setVisible(False)
+        layout.addWidget(self.bar)
         self.latest_label = label('', 'note', wrap=True)
         layout.addWidget(self.latest_label)
         buttons = QtWidgets.QHBoxLayout()
-        self.run = QtWidgets.QPushButton('Run')
-        self.run.setToolTip(' '.join(stage.command(stages.FITS/stage.key/'<time>.json')))
-        self.run.clicked.connect(lambda: self.run_clicked.emit(self.stage))
-        self.open = QtWidgets.QPushButton('Open result')
+        self.button = QtWidgets.QPushButton('Run')
+        self.button.setToolTip(' '.join(stage.command(stages.FITS/stage.key/'<time>.json')))
+        self.button.clicked.connect(lambda: self.action_clicked.emit(self.stage, self.action))
+        self.open = QtWidgets.QPushButton('View result')
         self.open.clicked.connect(lambda: self.open_clicked.emit(self.latest))
-        buttons.addWidget(self.run)
+        buttons.addWidget(self.button)
         buttons.addWidget(self.open)
         buttons.addStretch()
         layout.addLayout(buttons)
+        self.result_status = ('none', None)
 
     def update_from(self, status, latest, summary, suggested):
-        """suggested: this stage is the next step; its primary button is Run, or Open result when a
-        result waits for a decision."""
-        self.latest = latest
-        self.status.setText(status_chip(*STATUS_TEXT[status]))
-        for button, primary in ((self.run, suggested and status != 'pending'), (self.open, suggested and status == 'pending')):
-            button.setObjectName('primary' if primary else '')
-            button.style().unpolish(button)
-            button.style().polish(button)
+        """Result side: status of the newest result, its headline; suggested: the next step."""
+        self.latest, self.result_status, self.suggested = latest, STATUS_TEXT[status], suggested
         self.open.setEnabled(latest is not None)
         text = ''
         if summary and summary['headline']:
             name, before, after = summary['headline'][0]
             text = f'{name}: ' + (f'{fmt(before, 3)} → <b>{fmt(after, 3)}</b>' if before is not None else f'<b>{fmt(after, 3)}</b>')
         if latest is not None:
-            text += f'<br>{when(latest)}'
+            text += f'<br>last result {when(latest)}'
         self.latest_label.setText(text)
+
+    def set_activity(self, activity, busy, fraction=None):
+        """activity: 'running' | 'queued' | None for this stage; busy: another fit is running."""
+        if activity == 'running':
+            self.status.setText(status_chip('RUNNING' + (f' {fraction*100:.0f} %' if fraction is not None else ''), PALETTE['blue']))
+            self.action, text = 'stop', 'Stop'
+        elif activity == 'queued':
+            self.status.setText(status_chip('QUEUED', PALETTE['sky']))
+            self.action, text = 'cancel', 'Cancel'
+        else:
+            self.status.setText(status_chip(*self.result_status))
+            self.action, text = 'run', 'Queue' if busy else 'Run'
+        self.button.setText(text)
+        self.bar.setVisible(activity == 'running')
+        if fraction is not None:
+            self.bar.setValue(int(fraction*1000))
+        primary = activity is None and not busy and getattr(self, 'suggested', False)
+        self.button.setObjectName('primary' if primary else '')
+        self.button.style().unpolish(self.button)
+        self.button.style().polish(self.button)
+        self.setStyleSheet(f'QFrame#card {{ border: 2px solid {PALETTE["blue"]}; }}' if activity == 'running' else '')
 
 
 class Pipeline(QtWidgets.QWidget):
-    run_clicked = QtCore.Signal(object)
+    action_clicked = QtCore.Signal(object, str)
     run_all_clicked = QtCore.Signal()
     open_clicked = QtCore.Signal(object)
 
@@ -291,7 +356,7 @@ class Pipeline(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(10, 12, 10, 10)
         layout.setSpacing(8)
-        self.next = label('', wrap=True)
+        self.next = label('', 'note', wrap=True)
         layout.addWidget(self.next)
         self.run_all = QtWidgets.QPushButton('Run stages 1–3 in turn')
         self.run_all.setToolTip('Thrust map, drone dynamics and cable, one after another (each starts from the '
@@ -301,7 +366,7 @@ class Pipeline(QtWidgets.QWidget):
         self.cards = []
         for i, stage in enumerate(stages.STAGES):
             card = StageCard(i+1, stage)
-            card.run_clicked.connect(self.run_clicked)
+            card.action_clicked.connect(self.action_clicked)
             card.open_clicked.connect(self.open_clicked)
             layout.addWidget(card)
             self.cards.append(card)
@@ -324,17 +389,16 @@ class Pipeline(QtWidgets.QWidget):
         for i, (card, (status, latest, summary)) in enumerate(zip(self.cards, statuses)):
             card.update_from(status, latest, summary, i == suggested)
         stage, status = self.cards[suggested].stage, statuses[suggested][0]
-        self.next.setText({'none': f'Next: run <b>{stage.title.lower()}</b>.',
-                           'pending': f'Next: review the <b>{stage.title.lower()}</b> result.'}
-                          .get(status, f'Next: <b>{stage.title.lower()}</b> of the adopted model.'))
+        self.next.setText({'none': f'Suggested next: run <b>{stage.title.lower()}</b>.',
+                           'pending': f'Suggested next: review the <b>{stage.title.lower()}</b> result.'}
+                          .get(status, f'Suggested next: <b>{stage.title.lower()}</b> of the adopted model.'))
 
-    def set_running(self, active=None, queued=()):
-        """active: key of the stage running now (None if idle); queued: keys waiting their turn."""
+    def set_activity(self, running_key=None, fraction=None, queued=()):
         for card in self.cards:
             key = card.stage.key
-            card.run.setEnabled(key != active and key not in queued)
-            card.run.setText('Running…' if key == active else 'Queued' if key in queued else 'Queue' if active else 'Run')
-        self.run_all.setEnabled(active is None)
+            card.set_activity('running' if key == running_key else 'queued' if key in queued else None,
+                              running_key is not None, fraction if key == running_key else None)
+        self.run_all.setEnabled(running_key is None and not queued)
 
 
 # ---------------------------------------------------------------- progress
@@ -363,6 +427,29 @@ def plan_progress(events):
         done += min(used.get(current, 0), budget[current])
     total = sum(budget)
     return done/total, plan['phases'][current], current, len(budget), total-done
+
+
+PHASE_WORDS = {'loading flights': 'loading the flights', 'start point': 'scoring the configuration now',
+               'least squares': 'least-squares search', 'final check': 'final check (scored twice)'}
+
+
+def describe_progress(events, state='running'):
+    """(fraction done or None, 'step 4 of 10: fit with delay 10 ms · 23 % · at most 15 min left')."""
+    p = plan_progress(events)
+    if p is None:
+        return None, ''
+    fraction, phase, index, count, left = p
+    words = PHASE_WORDS.get(phase, f'fit with {phase}' if phase.startswith('delay') else phase)
+    if state == 'done':
+        return 1., 'complete'
+    if state != 'running':
+        return fraction, f'stopped at step {index+1} of {count} ({words})'
+    times = [e['time'] for e in events if e['kind'] == 'evaluation'][-30:]
+    eta = ''
+    if len(times) >= 3:
+        minutes = left*(times[-1]-times[0])/(len(times)-1)/60
+        eta = f' · at most {minutes:.0f} min left' if minutes >= 1 else ' · under a minute left'
+    return fraction, f'step {index+1} of {count}: {words} · {fraction*100:.0f} %{eta}'
 
 
 class ProgressView(QtWidgets.QWidget):
@@ -417,20 +504,25 @@ class ProgressView(QtWidgets.QWidget):
         self.console.setVisible(shown)
         self.output_toggle.setText('Hide output' if shown else 'Show output')
 
-    def show_events(self, events, *, source='', running=False, exit_code=None):
-        """exit_code: the exit code of a fit started here that has ended (None if still running or
-        started elsewhere)."""
+    def show_events(self, events, *, source='', state='running', title=None):
+        """state: 'starting' | 'running' | 'done' | 'failed' | 'stopped' (see run_state)."""
         start = next((e for e in events if e['kind'] == 'start'), None)
         if start is None:
-            self.title.setText('Starting…' if running else 'No progress recorded')
-            self.summary.setText('')
-            self.bar.setValue(0)
+            self.title.setText(title or ('Starting…' if state in ('starting', 'running') else 'Nothing has run yet'))
+            self.summary.setText(status_chip('starting: loading the program', PALETTE['blue']) if state == 'starting' else '')
+            self.bar.setRange(0, 0 if state == 'starting' else 1000)
+            self.bar.setVisible(state == 'starting')
             self.bar_label.setText('')
             self.source.setText(source)
+            for canvas in (self.loss, self.parameters):
+                canvas.reset()
+                canvas.draw_idle()
+            self.signature = None
             return
         stage = stages.BY_KEY.get(start['stage']) or next((s for s in stages.STAGES if s.title.lower() == start['stage']), None)
-        self.title.setText(stage.title if stage else start['stage'])
-        state = self._summary(events, start, running, exit_code)
+        name = stage.title if stage else start['stage']
+        self.title.setText(title or (f'Running now: {name}' if state == 'running' else f'Last run: {name}'))
+        self._summary(events, start, state)
         self._bar(events, state)
         signature = (source, len(events))
         if signature == self.signature:
@@ -443,23 +535,14 @@ class ProgressView(QtWidgets.QWidget):
         else:
             self._search(events, start)
 
-    def _summary(self, events, start, running, exit_code):
+    def _summary(self, events, start, state):
         last = events[-1]
         evaluations = [e for e in events if e['kind'] == 'evaluation']
         flights = sum(e['kind'] == 'flight' for e in events)
         factor, unit = display_unit(start.get('unit'))
-        if last['kind'] == 'done':
-            state = 'done'
-            chip = status_chip('done', GOOD)
-        elif last['kind'] == 'failed' or exit_code not in (None, 0, 'stopped'):
-            state = 'failed'
-            chip = status_chip(f'failed: {last.get("error", f"exit code {exit_code}")}', BAD)
-        elif running or (exit_code is None and time.time()-last.get('time', 0) < STALLED_S):
-            state = 'running'
-            chip = status_chip('running', PALETTE['blue'])
-        else:
-            state = 'stopped'
-            chip = status_chip('stopped (no result written)', BAD)
+        chip = {'done': status_chip('finished', GOOD), 'running': status_chip('running', PALETTE['blue']),
+                'failed': status_chip(f'failed{": "+last["error"] if last.get("error") else " (see Show output)"}', BAD),
+                'stopped': status_chip('stopped before the end (no result written)', BAD)}[state]
         parts = [chip]
         start_value = next((e['value'] for e in events if e['kind'] == 'phase_done' and e['value'] is not None), None)
         values = [e['value'] for e in evaluations if e['value'] is not None]
@@ -480,7 +563,6 @@ class ProgressView(QtWidgets.QWidget):
             seconds = (time.time() if state == 'running' else last.get('time', start['time']))-start['time']
             parts.append(f'{seconds:.0f} s' if seconds < 60 else f'{seconds/60:.1f} min')
         self.summary.setText('&nbsp;&nbsp;·&nbsp;&nbsp;'.join(parts))
-        return state
 
     def _bar(self, events, state):
         p = plan_progress(events)
@@ -489,20 +571,11 @@ class ProgressView(QtWidgets.QWidget):
             self.bar.setRange(0, 0 if state == 'running' else 1000)      # busy indicator without a plan
             self.bar_label.setText('')
             return
-        fraction, phase, index, count, left = p
+        fraction, text = describe_progress(events, state)
         self.bar.setVisible(True)
         self.bar.setRange(0, 1000)
-        self.bar.setValue(int(1000*(1. if state == 'done' else fraction)))
-        if state != 'running':
-            self.bar_label.setText({'done': 'complete'}.get(state, f'stopped in {phase}'))
-            return
-        times = [e['time'] for e in events if e['kind'] == 'evaluation'][-30:]
-        eta = ''
-        if len(times) >= 3:
-            per = (times[-1]-times[0])/(len(times)-1)
-            minutes = left*per/60
-            eta = f' · at most {minutes:.0f} min left' if minutes >= 1 else ' · under a minute left'
-        self.bar_label.setText(f'{phase} ({index+1}/{count}) · {fraction*100:.0f} %{eta}')
+        self.bar.setValue(int(1000*fraction))
+        self.bar_label.setText(text)
 
     @staticmethod
     def _phase_curves(events):
@@ -589,7 +662,7 @@ class ProgressView(QtWidgets.QWidget):
                                  lw=1.8 if live or phase is None else 1., alpha=1 if live or phase is None else .7)
                     axp.axhline(start['x0'][i], color=ROLE['reference'], ls='--', lw=.9)
                     newest = max(curves.items(), key=lambda item: item[1][0][-1])[1][2][-1, i]
-                    axp.set_title(f'{names[i]}\n{fmt(float(newest))}', fontsize=8.5)
+                    axp.set_title(f'{names[i].replace("_", " ")} = {fmt(float(newest))}', fontsize=8)
                     axp.tick_params(labelsize=7)
                     axp.locator_params(axis='y', nbins=4)
                     axp.locator_params(axis='x', nbins=3)
@@ -902,11 +975,14 @@ class RunsView(QtWidgets.QWidget):
             groups[stage.key] = QtWidgets.QTreeWidgetItem([stage.title])
             groups[stage.key].setFirstColumnSpanned(False)
             self.tree.addTopLevelItem(groups[stage.key])
-        for path in running_progress():
-            stage = stages.stage_of(path.with_name(path.name.replace('.progress.jsonl', '.json')))
+        for path in progress_files():                  # runs without a result: running, stopped or failed
+            if Path(str(path).replace('.progress.jsonl', '.json')).exists():
+                continue
+            stage = stage_of_progress(path)
             if stage:
-                item = QtWidgets.QTreeWidgetItem([path.name, when(path), '', 'running or stopped'])
-                item.setData(0, QtCore.Qt.ItemDataRole.UserRole, str(path))
+                item = QtWidgets.QTreeWidgetItem([str(path.relative_to(ROOT/'runs')).replace('.progress.jsonl', ''),
+                                                  when(path), '', run_state(path)])
+                item.setForeground(3, QtGui.QColor(PALETTE['blue'] if run_state(path) == 'running' else BAD))
                 groups[stage.key].addChild(item)
         for path, stage in results:
             try:
@@ -937,17 +1013,88 @@ class RunsView(QtWidgets.QWidget):
 
 # ---------------------------------------------------------------- window
 
+class ActivityBar(QtWidgets.QFrame):
+    """Always visible: what is running now (stage, step, progress, time left), what is queued
+    next, or, when nothing runs, the last run and its outcome."""
+    stop_clicked = QtCore.Signal()
+    live_clicked = QtCore.Signal()
+    result_clicked = QtCore.Signal()
+
+    def __init__(self):
+        super().__init__()
+        self.setObjectName('card')
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(14, 8, 14, 8)
+        text = QtWidgets.QVBoxLayout()
+        text.setSpacing(3)
+        self.headline = label('')
+        self.headline.setStyleSheet('font-size: 15px;')
+        text.addWidget(self.headline)
+        self.bar = QtWidgets.QProgressBar()
+        self.bar.setRange(0, 1000)
+        self.bar.setTextVisible(False)
+        self.bar.setFixedHeight(8)
+        text.addWidget(self.bar)
+        self.detail = label('', 'note')
+        text.addWidget(self.detail)
+        layout.addLayout(text, 1)
+        self.live = QtWidgets.QPushButton('Watch live')
+        self.live.clicked.connect(self.live_clicked)
+        self.result = QtWidgets.QPushButton('View result')
+        self.result.clicked.connect(self.result_clicked)
+        self.stop = QtWidgets.QPushButton('Stop')
+        self.stop.setToolTip('Stop the running fit (no result is written) and empty the queue')
+        self.stop.clicked.connect(self.stop_clicked)
+        for b in (self.live, self.result, self.stop):
+            layout.addWidget(b)
+
+    def show_running(self, name, state, describe, queue):
+        fraction, words = describe
+        dot = PALETTE['blue']
+        self.headline.setText(f'<span style="color:{dot}">●</span> <b>{"Starting" if state == "starting" else "Running"}: '
+                              f'{name}</b>' + (f'&nbsp;&nbsp;—&nbsp;&nbsp;{words}' if words else ''))
+        self.bar.setVisible(True)
+        if fraction is None:
+            self.bar.setRange(0, 0)
+        else:
+            self.bar.setRange(0, 1000)
+            self.bar.setValue(int(fraction*1000))
+        self.detail.setText('Queued next: '+', then '.join(queue) if queue else 'Nothing queued after it.')
+        self.live.setVisible(True)
+        self.stop.setVisible(True)
+        self.result.setVisible(False)
+
+    def show_idle(self, last):
+        """last: (name, state, finished time text, headline text) of the newest run, or None."""
+        self.headline.setText('<span style="color:#8c8c8c">○</span> <b>Nothing running.</b>')
+        self.bar.setVisible(False)
+        self.stop.setVisible(False)
+        if last is None:
+            self.detail.setText('Press Run on a stage to start a fit.')
+            self.live.setVisible(False)
+            self.result.setVisible(False)
+            return
+        name, state, at, headline = last
+        verb = {'done': 'finished', 'stopped': 'was stopped', 'failed': 'failed'}.get(state, state)
+        self.detail.setText(f'Last run: {name} {verb} at {at}' + (f' · {headline}' if headline else ''))
+        self.live.setVisible(True)
+        self.live.setText('Show last run')
+        self.result.setVisible(state == 'done')
+
+    def reset_live_text(self):
+        self.live.setText('Watch live')
+
+
 class ModelFitWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('AeroWhip Model Fit')
         style.apply(self)
-        self.process = None
-        self.stopping = False
-        self.running = None          # (stage, result path) of the fit started here
         self.queue = []              # stages waiting their turn (fits run one at a time)
-        self.exits = {}              # progress file -> exit code of fits started here that have ended
-        self.watched = None          # progress file shown in the Progress tab
+        self.launching = None        # (stage, result path, wrapper pid, start time) until its progress file appears
+        self.live_path = None        # progress file shown in the Live tab
+        self.was_running = None      # progress file that was running at the last poll
+        self.activity = ActivityBar()
         self.pipeline = Pipeline()
         left = QtWidgets.QScrollArea()
         left.setWidgetResizable(True)
@@ -956,150 +1103,219 @@ class ModelFitWindow(QtWidgets.QMainWindow):
         self.pipeline.setObjectName('page')
         self.progress, self.result, self.data, self.runs = ProgressView(), ResultView(), DataView(), RunsView()
         self.tabs = QtWidgets.QTabWidget()
-        for widget, name in ((self.progress, 'Progress'), (self.result, 'Result'), (self.data, 'Data'), (self.runs, 'Runs')):
+        for widget, name in ((self.progress, 'Live'), (self.result, 'Result'), (self.data, 'Data'), (self.runs, 'Runs')):
             self.tabs.addTab(widget, name)
         split = QtWidgets.QSplitter()
         split.addWidget(left)
         split.addWidget(self.tabs)
         split.setStretchFactor(1, 1)
         split.setSizes([380, 1100])
-        self.setCentralWidget(split)
-        self.statusBar().showMessage(f'Calibration data: {calibration_set.DEFAULT_ROOT}')
-        self.pipeline.run_clicked.connect(self.start)
+        page = QtWidgets.QWidget()
+        page.setObjectName('page')
+        outer = QtWidgets.QVBoxLayout(page)
+        outer.setContentsMargins(8, 8, 8, 0)
+        outer.setSpacing(8)
+        outer.addWidget(self.activity)
+        outer.addWidget(split, 1)
+        self.setCentralWidget(page)
+        self.statusBar().showMessage(f'Calibration data: {calibration_set.DEFAULT_ROOT}. Fits run on their own: '
+                                     'closing this window does not stop them.')
+        self.pipeline.action_clicked.connect(self.action)
         self.pipeline.run_all_clicked.connect(lambda: [self.start(s) for s in stages.STAGES if s.adoptable])
         self.pipeline.open_clicked.connect(self.open)
         self.runs.open_clicked.connect(self.open)
         self.progress.stop_clicked.connect(self.stop)
+        self.activity.stop_clicked.connect(self.stop)
+        self.activity.live_clicked.connect(lambda: self.tabs.setCurrentWidget(self.progress))
+        self.activity.result_clicked.connect(self._open_last_result)
         self.result.adopted.connect(self.refresh)
         self.tabs.currentChanged.connect(lambda _: self.tabs.currentWidget() is self.data and self.data.refresh())
         self.timer = QtCore.QTimer(self, interval=700, timeout=self.poll)
         self.timer.start()
         self.refresh()
         self.data.refresh()
-        self._open_newest()
+        results = all_results()
+        if results:
+            self.result.show_result(results[0][0])
+        self.poll()
 
     def refresh(self):
         results = all_results()
         self.pipeline.refresh(results)
         self.runs.refresh(results)
 
-    def _open_newest(self):
-        live = sorted(running_progress(), key=lambda p: p.stat().st_mtime, reverse=True)
-        if live and time.time()-live[0].stat().st_mtime < STALLED_S:
-            self.open(live[0])
-            return
-        results = all_results()
-        if results:
-            self.open(results[0][0])
-
-    def open(self, path):
-        """Show a result (Result and Progress tabs) or a progress file without a result yet."""
-        if path is None:
-            return
-        path = Path(path)
-        if path.name.endswith('.progress.jsonl'):
-            self.watched = path
-            self.tabs.setCurrentWidget(self.progress)
-        else:
-            self.watched = progress_file.progress_path(path)
-            self.result.show_result(path)
-            if self.tabs.currentWidget() not in (self.progress, self.result):
-                self.tabs.setCurrentWidget(self.result)
-            if not self.watched.exists():
-                self.watched = None
-                self.progress.signature = None
-                try:
-                    self.progress.show_events(events_for(path), source=str(path))
-                except Exception as exc:
-                    self.progress.show_events([], source=f'{path}: {exc}')
-        self.poll()
+    # what is running
+    def running(self):
+        """(stage, progress path or None, state, events) of the fit running now, or None."""
+        if self.launching is not None:
+            stage, output, wrapper, t0 = self.launching
+            path = progress_file.progress_path(output)
+            exit_file = output.with_suffix('.exit')
+            if path.exists() and progress_file.read(path):
+                self.launching = None
+            elif exit_file.exists() or time.time()-t0 > 300:
+                self.launching = None
+                self.statusBar().showMessage(f'{stage.title} did not start: see {output.with_suffix(".log").relative_to(ROOT)}')
+                return None
+            else:
+                return stage, None, 'starting', []
+        for path in progress_files():
+            if time.time()-path.stat().st_mtime > 3600:       # a running fit writes at least every few minutes
+                break
+            events = progress_file.read(path)
+            if events and run_state(path, events) == 'running':
+                return stage_of_progress(path), path, 'running', events
+        return None
 
     def poll(self):
-        if self.watched is None or not self.watched.exists():
-            return
-        running = self.running is not None and progress_file.progress_path(self.running[1]) == self.watched
-        self.progress.show_events(progress_file.read(self.watched), source=str(self.watched), running=running,
-                                  exit_code=self.exits.get(self.watched))
+        active = self.running()
+        if active is None and self.queue:
+            self._launch(self.queue.pop(0))
+            active = self.running()
+        queued = [s.title for s in self.queue]
+        if active is not None:
+            stage, path, state, events = active
+            describe = describe_progress(events, 'running') if events else (None, 'loading the program')
+            self.activity.show_running(stage.title if stage else path.name, state, describe, queued)
+            self.activity.reset_live_text()
+            self.pipeline.set_activity(stage.key if stage else None, describe[0], [s.key for s in self.queue])
+            self.live_path = path
+            self.progress.stop.setVisible(True)
+            if path is None:
+                self.progress.show_events([], state='starting', title=f'Starting: {stage.title}')
+            else:
+                self.progress.show_events(events, source=str(path), state='running')
+                self._console(path)
+        else:
+            newest = next(iter(progress_files()), None)
+            last = None
+            if newest is not None:
+                events = progress_file.read(newest)
+                state = run_state(newest, events)
+                stage = stage_of_progress(newest)
+                result = Path(str(newest).replace('.progress.jsonl', '.json'))
+                headline = ''
+                if state == 'done' and result.exists() and stage is not None:
+                    try:
+                        name, before, after = stage.summary(load_result(result))['headline'][0]
+                        headline = f'{name}: {fmt(before, 3)} → {fmt(after, 3)}' if before is not None else f'{name}: {fmt(after, 3)}'
+                    except Exception:
+                        headline = ''
+                at = datetime.fromtimestamp(newest.stat().st_mtime).strftime('%H:%M')
+                last = (stage.title if stage else newest.name, state, at, headline)
+                self.live_path = newest
+                self.progress.show_events(events, source=str(newest), state=state)
+                self._console(newest)
+            self.activity.show_idle(last)
+            self.pipeline.set_activity(None, None, [])
+            self.progress.stop.setVisible(False)
+        current = active[1] if active else None
+        if self.was_running is not None and current != self.was_running:
+            self._finished(self.was_running)
+        self.was_running = current
 
-    # fits started here, one at a time
+    def _console(self, path):
+        if not self.progress.console.isVisible():
+            return
+        log = Path(str(path).replace('.progress.jsonl', '.log'))
+        text = log.read_text(errors='replace')[-20000:] if log.exists() else '(no output log for this run)'
+        if text != self.progress.console.toPlainText():
+            self.progress.console.setPlainText(text)
+            self.progress.console.moveCursor(QtGui.QTextCursor.MoveOperation.End)
+
+    def _finished(self, path):
+        """A fit that was running has ended: refresh the pipeline and the run list, open its result."""
+        self.refresh()
+        result = Path(str(path).replace('.progress.jsonl', '.json'))
+        stage = stage_of_progress(path)
+        if result.exists() and run_state(path) == 'done':
+            self.result.show_result(result)
+            self.statusBar().showMessage(f'{stage.title if stage else ""} finished: {result.relative_to(ROOT)}')
+        else:
+            self.statusBar().showMessage(f'{stage.title if stage else path.name} ended without a result ({run_state(path)})')
+
+    # starting and stopping
+    def action(self, stage, what):
+        if what == 'run':
+            self.start(stage)
+        elif what == 'stop':
+            self.stop()
+        elif what == 'cancel' and stage in self.queue:
+            self.queue.remove(stage)
+            self.poll()
+
     def start(self, stage):
-        """Run a stage now, or queue it behind the running one (two fits at once slow each other
+        """Run a stage now, or queue it behind the running fit (two fits at once slow each other
         down several times over: each already uses every core)."""
-        if self.running is not None:
-            if stage is not self.running[0] and stage not in self.queue:
+        active = self.running()
+        if active is not None or self.queue:
+            if (active is None or active[0] is not stage) and stage not in self.queue:
                 self.queue.append(stage)
-                self.statusBar().showMessage(f'Queued: {", ".join(s.title.lower() for s in self.queue)}')
-            self._buttons()
-            return
-        self._launch(stage)
-
-    def _buttons(self):
-        self.pipeline.set_running(self.running[0].key if self.running else None, [s.key for s in self.queue])
+        else:
+            self._launch(stage)
+        self.poll()
 
     def _launch(self, stage):
+        """Start a fit as its own process (not a child of this window): output to <result>.log,
+        exit code to <result>.exit, at a lower priority so the desktop stays responsive."""
         output = stage.output()
         output.parent.mkdir(parents=True, exist_ok=True)
-        command = stage.command(output)
-        self.process = QtCore.QProcess(self)
-        self.process.setWorkingDirectory(str(ROOT))
-        self.process.setProcessChannelMode(QtCore.QProcess.ProcessChannelMode.MergedChannels)
-        self.process.readyReadStandardOutput.connect(self._output)
-        self.process.finished.connect(self._finished)
-        self.running = (stage, output)
-        self.progress.console.clear()
-        self.progress.console.appendPlainText('$ '+' '.join(command))
-        self.progress.stop.setVisible(True)
-        self.stopping = False
-        self._buttons()
-        self.watched = progress_file.progress_path(output)
-        self.progress.signature = None
-        self.progress.title.setText(f'{stage.title}: starting…')
+        command = ' '.join(shlex.quote(c) for c in stage.command(output))
+        script = (f'nice -n 10 {command} > {shlex.quote(str(output.with_suffix(".log")))} 2>&1; '
+                  f'echo $? > {shlex.quote(str(output.with_suffix(".exit")))}')
+        ok, pid = QtCore.QProcess.startDetached('/bin/sh', ['-c', script], str(ROOT))
+        if not ok:
+            self.statusBar().showMessage(f'Could not start {stage.title.lower()}')
+            return
+        self.launching = (stage, output, pid, time.time())
         self.tabs.setCurrentWidget(self.progress)
-        self.statusBar().showMessage(f'Running {stage.title.lower()} → {output.relative_to(ROOT)}')
-        self.process.start('nice', ['-n', '10', *command])      # the window stays responsive
-
-    def _output(self):
-        text = bytes(self.process.readAllStandardOutput()).decode(errors='replace')
-        self.progress.console.moveCursor(QtGui.QTextCursor.MoveOperation.End)
-        self.progress.console.insertPlainText(text)
-        self.progress.console.ensureCursorVisible()
 
     def stop(self):
         """Stop the running fit and empty the queue."""
         self.queue.clear()
-        if self.process is not None and self.process.state() != QtCore.QProcess.ProcessState.NotRunning:
-            self.stopping = True
-            self.process.terminate()
-            QtCore.QTimer.singleShot(3000, self.process.kill)
-        self._buttons()
-
-    def _finished(self, code, _status):
-        stage, output = self.running
-        self.running = None
-        self.exits[progress_file.progress_path(output)] = 'stopped' if self.stopping else code
-        self.progress.stop.setVisible(False)
-        self.progress.console.appendPlainText(f'\n[exit code {code}]')
+        active = self.running()
+        if active is None:
+            return
+        stage, path, state, events = active
+        pid = events[0].get('pid') if events else None
+        if pid is None and self.launching is not None:
+            subprocess.run(['pkill', '-TERM', '-P', str(self.launching[2])], check=False)
+        elif pid is not None:
+            answer = QtWidgets.QMessageBox.question(self, 'Stop the fit', f'Stop {stage.title.lower()}? No result is written.')
+            if answer != QtWidgets.QMessageBox.StandardButton.Yes:
+                return
+            try:
+                os.kill(int(pid), 15)
+            except ProcessLookupError:
+                pass
+        else:
+            self.statusBar().showMessage('This fit was started elsewhere without a process id; stop it from where it runs')
         self.poll()
-        self.refresh()
-        if code == 0 and output.exists():
-            self.statusBar().showMessage(f'{stage.title} finished: {output.relative_to(ROOT)}')
-            self.result.show_result(output)
-        else:
-            self.statusBar().showMessage(f'{stage.title} {"stopped" if self.stopping else f"ended with exit code {code}"}; '
-                                         'no result written')
-        if self.queue:
-            self._launch(self.queue.pop(0))
-        else:
-            self._buttons()
+
+    # viewing results
+    def open(self, path):
+        if path is None:
+            return
+        path = Path(path)
+        if path.name.endswith('.progress.jsonl'):
+            self.statusBar().showMessage(f'{path.name} has no result (the run did not finish)')
+            return
+        self.result.show_result(path)
+        self.tabs.setCurrentWidget(self.result)
+
+    def _open_last_result(self):
+        newest = next(iter(progress_files()), None)
+        if newest is not None:
+            self.open(Path(str(newest).replace('.progress.jsonl', '.json')))
 
     def closeEvent(self, event):
-        if self.process is not None and self.process.state() != QtCore.QProcess.ProcessState.NotRunning:
-            answer = QtWidgets.QMessageBox.question(self, 'A fit is running', 'Stop the running fit and close?')
+        if self.queue:
+            answer = QtWidgets.QMessageBox.question(
+                self, 'Queued fits', f'{", ".join(s.title for s in self.queue)} will not start once this window is '
+                'closed (the running fit continues). Close anyway?')
             if answer != QtWidgets.QMessageBox.StandardButton.Yes:
                 event.ignore()
                 return
-            self.process.kill()
-            self.process.waitForFinished(2000)
         event.accept()
 
 

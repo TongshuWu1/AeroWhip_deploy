@@ -2,7 +2,7 @@
 
 A fit script writes `<result>.progress.jsonl` next to its result file:
 
-    {"kind": "start", "stage": ..., "parameters": [...], "x0": [...], "unit": "m", "time": ...}
+    {"kind": "start", "stage": ..., "parameters": [...], "x0": [...], "unit": "m", "pid": 1234, "time": ...}
     {"kind": "plan", "phases": ["loading flights", ...], "evaluations": [2, ...], "time": ...}
     {"kind": "phase", "index": 0, "label": "loading flights", "time": ...}
     {"kind": "evaluation", "n": 1, "phase": 2, "x": [...], "value": 0.123, "time": ...}
@@ -18,6 +18,7 @@ earlier), which the window turns into a progress bar and an estimate of the time
 """
 import json
 import math
+import os
 from pathlib import Path
 import time
 
@@ -35,7 +36,7 @@ class Progress:
         self.evaluations = 0
         self.current = None
         self.write(kind='start', stage=stage, parameters=list(parameters), x0=[float(v) for v in x0], unit=unit,
-                   result=str(result))
+                   result=str(result), pid=os.getpid())
 
     def write(self, **values):
         values['time'] = time.time()

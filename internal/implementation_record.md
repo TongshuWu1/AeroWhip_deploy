@@ -1746,3 +1746,15 @@ User's request: one systematic, automated data collection with a single calibrat
   per phase (current phase blue, finished ones grey and labelled), the delay profile as each delay
   finishes, and the parameters per phase. Checked visibly with the thrust map and a drone fit started
   from the window (cable queued behind it).
+- **Model Fit window reworked for clarity** (same day, at the user's request: "I don't know which one
+  is running"): an activity bar across the top always says what runs now (stage, step k of N in
+  words, progress bar, time left at most), what is queued next, or, when idle, the last run and its
+  outcome; stage cards show RUNNING (with a bar) / QUEUED / their result status, with one action
+  (Run, Queue, Cancel, Stop); the Live tab always follows the running fit (or the last one) and old
+  results open only in Result. Fits are no longer children of the window: they start detached
+  (`sh -c 'nice -n 10 … > <result>.log 2>&1; echo $? > <result>.exit'`), the progress file records the
+  process id, and the window finds a running fit from it (older runs: by process command line), so
+  the window can be closed and reopened without stopping a fit, and fits started elsewhere show the
+  same way. Stop asks, terminates the fit (exit 143 → 'stopped') and empties the queue. Checked
+  visibly: running (a drone fit at step 7 of 10) and idle (that fit stopped). The drone fits of
+  19:07 and 19:10 were stopped by the user (a duplicate and then a restart); no result written.
