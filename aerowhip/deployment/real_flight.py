@@ -9,6 +9,7 @@ from time import perf_counter
 
 import numpy as np
 
+from aerowhip.deployment.observer import rotation_log
 from aerowhip.deployment.ros_bridge import vector
 from aerowhip.deployment.ros_real_bridge import PacketReader, cable_candidate_mask
 from aerowhip.physics.state import DroneState, quaternion_xyzw_to_rotation_matrix
@@ -40,6 +41,33 @@ def select_real_robots(base, selected=None):
     return robots
 
 
+class PoseDerivatives:
+    """Velocity, body rate and acceleration of a tracked body from its last few OptiTrack poses:
+    endpoint derivatives of a least-squares quadratic over `history` frames (the flight
+    estimator uses the same fit for velocity). Display only."""
+
+    def __init__(self, history=7):
+        self.history = history
+        self.samples = []
+
+    def update(self, time_s, p, q):
+        self.samples.append((float(time_s), np.asarray(p, float), quaternion_xyzw_to_rotation_matrix(np.asarray(q, float))))
+        del self.samples[:-self.history]
+        if len(self.samples) < 3:
+            return None, None, None
+        t = np.array([x[0] for x in self.samples]); u = t-t[-1]
+        if t[-1]-t[0] < 1e-3:
+            return None, None, None
+        design = np.column_stack((np.ones_like(u), u, u*u))
+        positions = np.array([x[1] for x in self.samples])
+        coefficients = np.linalg.lstsq(design, positions-positions[-1], rcond=None)[0]
+        velocity, acceleration = coefficients[1], 2*coefficients[2]
+        R = self.samples[-1][2]
+        logs = np.array([rotation_log(R.T@x[2]) for x in self.samples])
+        omega = np.linalg.lstsq(design, logs, rcond=None)[0][1]
+        return velocity, omega, acceleration
+
+
 class RealFlightFeed(DisplayFeed):
     def __init__(self, configuration, robots, frame_id, session, *, cable_model=None, tracking_settings=None, capture_only=False):
         self.robots = {r['name']: r for r in robots}
@@ -60,6 +88,7 @@ class RealFlightFeed(DisplayFeed):
         self.tracking_generation = 0
         self.tracking_status = 'awaiting point cloud'
         self.reconstruction = None
+        self.derivatives = {}      # per robot: PoseDerivatives for the displayed velocity/acceleration
         if tracking_settings is not None:
             from aerowhip.deployment.cable_tracking import CableTracker
             if len(self.robots) != 1:
@@ -154,6 +183,7 @@ class RealFlightFeed(DisplayFeed):
         if generation != self.generation:
             for cable in self.cables.values():
                 cable.reset()
+            self.derivatives.clear()
             if self.tracker is not None and generation != self.tracking_generation:
                 self.tracker.reset()
                 self.tracking_display = None
@@ -178,13 +208,14 @@ class RealFlightFeed(DisplayFeed):
                 raise ValueError('Unconfigured robot in real-view packet')
             p = np.asarray(vector(data['position_world_m'], 3))
             q = np.asarray(vector(data['quaternion_xyzw'], 4))
+            velocity, omega, acceleration = self.derivatives.setdefault(name, PoseDerivatives()).update(data['time_s'], p, q)
             attachment = p+quaternion_xyzw_to_rotation_matrix(q)@self.configuration.platform.attachment_offset_body_m
             simulated = self.cables.get(name)
             cable = None if simulated is None or simulated.latest is None else CableDisplay(
                 simulated.latest.time_s, Provenance.SIMULATED,
                 simulated.latest.positions_world_m, self.cable_model.marker_indices)
             displays.append(RobotDisplay(name, float(data['time_s']),
-                Provenance(self.robots[name]['provenance']), DroneState(p, q, None, None), attachment,
+                Provenance(self.robots[name]['provenance']), DroneState(p, q, velocity, omega, acceleration), attachment,
                 cable=cable,
                 cable_tracking=(self.tracking_display if self.tracking_display is not None
                     and self.tracking_display.time_s <= time_s else None),
