@@ -48,17 +48,17 @@ class MotionPlots(PlotCanvas):
                     command = np.asarray(a['applied_command'], float)[:, :3]
                     achieved = np.gradient(np.asarray(a['drone_velocities'], float), t, axis=0)
                     for k in range(3):
-                        ax.plot(t, command[:, k], color=AXIS[k], linewidth=1.0, label='xyz'[k])
+                        ax.plot(t, command[:, k], color=AXIS[k], linewidth=1.0, label=f"{'xyz'[k]} command")
                         ax.plot(t, achieved[:, k], color=AXIS[k], linewidth=.9, linestyle=':', alpha=.9)
-                    ax.plot([], [], color=ROLE['measured'], linestyle=':', label='achieved')
-                    ax.set_ylabel('accel. (m/s²)')
-                    ax.legend(loc='upper left', ncols=4, title='applied command x/y/z (solid)', title_fontsize=7.5)
+                    ax.plot([], [], color=ROLE['measured'], linestyle=':', label='achieved (dotted)')
+                    ax.set_ylabel('a (m/s²)')
+                    ax.legend(loc='upper left', ncols=4)
                 elif panel == 'tilt':
                     command = np.asarray(a['applied_command'], float)[:, :3]
                     ax.plot(t, command_tilt_deg(command), color=ROLE['command'], label='commanded')
                     ax.plot(t, tilt_deg(np.asarray(a['drone_rotations'], float)), color=ROLE['measured'],
                             label='achieved')
-                    ax.set_ylabel('tilt (deg)')
+                    ax.set_ylabel('tilt (°)')
                     ax.set_ylim(bottom=0)
                     ax.legend(loc='upper left', ncols=2)
                 elif panel == 'tip':
@@ -74,7 +74,7 @@ class MotionPlots(PlotCanvas):
                     thrust = np.asarray(a['motor_thrust_n'], float)
                     for k in range(thrust.shape[1]):
                         ax.plot(t, thrust[:, k], linewidth=.9, label=f'm{k+1}')
-                    ax.set_ylabel('thrust (N)')
+                    ax.set_ylabel('motor (N)')
                     ax.legend(loc='upper left', ncols=4)
             axes[-1].set_xlabel('time (s)')
             axes[-1].set_xlim(t[0], t[-1])

@@ -89,8 +89,10 @@ class TimeHistories(PlotCanvas):
             self._build(forces)
         t = data[:, 0]
         available = bool(np.isfinite(data[:, 1:4]).any())
+        # Same (left) title slot as at build time, outside the style context.
         self.axes[0].set_title('Drone acceleration (m/s²)' if available else
-                               'Drone acceleration · not provided by this source')
+                               'Drone acceleration · not provided by this source',
+                               loc='left', fontsize=self.rc['axes.titlesize'])
         for k in range(3):
             self.lines[f'a{k}'].set_data(t, data[:, 1+k])
         self.lines['tilt'].set_data(t, data[:, 4])

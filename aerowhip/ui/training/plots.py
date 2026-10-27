@@ -113,7 +113,9 @@ class LearningCurves(QtWidgets.QWidget):
                                       ('components.numerically_valid', 'numerically valid', ROLE['reference'])):
                 sx, sy = _series(rounds, key)
                 if len(sx):
-                    outcome.plot(sx, sy, color=color, label=label)
+                    # Numerical validity is usually 1: dashed so overlapping curves stay visible.
+                    outcome.plot(sx, sy, color=color, label=label,
+                                 linestyle='--' if key.endswith('numerically_valid') else '-')
                     plotted = True
             outcome.set_ylim(-.03, 1.03)
             outcome.set_title('Episode outcomes')
