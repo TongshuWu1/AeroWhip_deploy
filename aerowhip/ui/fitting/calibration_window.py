@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QComboBox, QDialog, QDoubleSpinBox, QFormLayout,
                                QVBoxLayout)
 
 from aerowhip.paths import ROOT
+from aerowhip.ui import style
 from aerowhip.physics.model_configuration import DEFAULT_FIT_MODEL, DEFAULT_MODEL, load_model_configuration
 
 
@@ -48,6 +49,7 @@ class CalibrationWindow(QDialog):
         self._close_when_done = False
         self.setWindowTitle('Calibration comparison')
         self.setMinimumWidth(480)
+        style.apply(self)
         layout = QVBoxLayout(self)
         name = QLabel(take.path.name)
         name.setWordWrap(True)
@@ -91,6 +93,7 @@ class CalibrationWindow(QDialog):
         layout.addWidget(self.description)
         note = QLabel('Start selects the first measured sample at or after the requested time, with 0.10 s of causal history before it. Measurements remain on their native 0.01 s grid. Missing data or unsupported inputs are rejected.')
         note.setWordWrap(True)
+        note.setObjectName('note')
         layout.addWidget(note)
         self.progress = QProgressBar()
         self.progress.setRange(0, 100)
@@ -100,7 +103,7 @@ class CalibrationWindow(QDialog):
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
         row = QHBoxLayout()
-        self.run_button = QPushButton('Run')
+        self.run_button = QPushButton('Run', objectName='primary')
         self.run_button.setToolTip('Run a CPU comparison over this interval. No fitting or model update is performed.')
         self.stop_button = QPushButton('Stop')
         self.close_button = QPushButton('Close')
