@@ -122,8 +122,12 @@ class RobotDisplay:
     # planned reference acceleration, world frame, gravity excluded. None when not available.
     commanded_acceleration_world_mps2: np.ndarray | None = None
     desired_acceleration_world_mps2: np.ndarray | None = None
+    # Real flights: live readouts from the drone (battery_v, armed, pwm, rssi, stale), shown in the panel.
+    telemetry: dict | None = None
 
     def __post_init__(self):
+        if self.telemetry is not None and not isinstance(self.telemetry, dict):
+            raise ValueError('telemetry must be a dict')
         for name in ('commanded_acceleration_world_mps2', 'desired_acceleration_world_mps2'):
             if getattr(self, name) is not None:
                 object.__setattr__(self, name, _array(getattr(self, name), (3,), name))

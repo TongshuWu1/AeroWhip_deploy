@@ -61,11 +61,16 @@ class Inspector(QtWidgets.QWidget):
                     row.addWidget(field, 1)
                     self.values[name].append(field)
                 layout.addLayout(row)
+        self.live_section = label('DRONE · LIVE', name='section'); layout.addWidget(self.live_section)
+        self.live = label(); self.live.setWordWrap(True)
+        font = QtGui.QFont('monospace'); font.setPixelSize(12); self.live.setFont(font)
+        layout.addWidget(self.live)
+        self.live_section.hide(); self.live.hide()
         layout.addWidget(label('CABLE', name='section'))
         self.cable = label(name='muted'); self.cable.setWordWrap(True)
         self.tip = label(); self.tip.setWordWrap(True)
         layout.addWidget(self.cable); layout.addWidget(self.tip)
-        self.tracking = label(name='muted'); self.tracking.setWordWrap(True)
+        self.tracking = label(); self.tracking.setWordWrap(True); self.tracking.setFont(font)
         self.tracking.hide(); layout.addWidget(self.tracking)
         layout.addWidget(label('MODEL FORCES', name='section'))
         self.forces = label(); self.forces.setWordWrap(True)
@@ -93,22 +98,45 @@ class Inspector(QtWidgets.QWidget):
             for axis, index, field in zip(axes, range(3), fields):
                 value = None if vector is None else round(float(vector[index]), 3)
                 field.setText(f'{axis}  —' if value is None else f'{axis} {0. if value == 0. else value:+.3f}')
+        live = None if robot is None else getattr(robot, 'telemetry', None)
+        self.live_section.setVisible(live is not None); self.live.setVisible(live is not None)
+        if live is not None:
+            lines = []
+            if 'battery_v' in live:
+                lines.append(f"Battery  {live['battery_v']:.2f} V" + (f" (under load {live['battery_under_load_v']:.2f})" if 'battery_under_load_v' in live else '')
+                             + ('  · ARMED' if live.get('armed') else '') + ('  · stale' if live.get('stale') else ''))
+            if 'pwm' in live:
+                lines.append('Motors   '+'  '.join(f'M{i+1} {v/1000:4.1f}k' for i, v in enumerate(live['pwm'])))
+            command = getattr(robot, 'commanded_acceleration_world_mps2', None)
+            desired = getattr(robot, 'desired_acceleration_world_mps2', None)
+            if command is not None:
+                lines.append('Sent a   '+'  '.join(f'{ax} {v:+.2f}' for ax, v in zip('XYZ', command))+' m/s²')
+            if desired is not None:
+                lines.append('Desired  '+'  '.join(f'{ax} {v:+.2f}' for ax, v in zip('XYZ', desired))+' m/s²')
+            if live.get('rssi') is not None:
+                lines.append(f"Radio    rssi {live['rssi']}")
+            self.live.setText('\n'.join(lines))
         cable = None if robot is None else robot.cable
+        tracking = None if robot is None else robot.cable_tracking
+        self.cable.setVisible(cable is not None or tracking is None)
         self.cable.setText('Unavailable' if cable is None else
             f'{cable.provenance.value}{" · stale" if frame.time_s-cable.time_s > .25 else ""} · {len(cable.positions_world_m)} nodes\n'
             f'State time {cable.time_s:.3f} s · lag {max(0., frame.time_s-cable.time_s):.3f} s')
-        self.tip.setText('Tip position unavailable' if cable is None else 'Tip [m]  '+
+        self.tip.setVisible(cable is not None)
+        self.tip.setText('' if cable is None else 'Tip [m]  '+
                          '  '.join(f'{axis} {v:+.3f}' for axis, v in zip('XYZ', cable.positions_world_m[-1])))
-        tracking = None if robot is None else robot.cable_tracking
         self.tracking.setVisible(tracking is not None)
         if tracking is not None:
             count = int(tracking.observed.sum())
-            confidence = (f'{tracking.confidence[tracking.observed].min():.2f}' if count else '—')
-            self.tracking.setText(f'Labelled cable (blue) · {count}/{len(tracking.observed)} markers\n'
-                f'{tracking.status}\nLag {max(0., frame.time_s-tracking.time_s):.3f} s'
-                f'{" · stale (hidden)" if frame.time_s-tracking.time_s > .25 else ""}\n'
-                f'Min association confidence: {confidence} (heuristic)\n'
-                'Blue: estimated identities · gray: raw candidates')
+            stale = frame.time_s-tracking.time_s > .25
+            lines = [f'Labelled (blue)  {count}/{len(tracking.observed)} markers' + ('  · stale' if stale else ''),
+                     f'Status   {tracking.status}']
+            if count:
+                lines.append('Confid.  '+' '.join(f'{c:.1f}' for c in tracking.confidence))
+                tip = tracking.positions_world_m[-1]
+                if tracking.observed[-1]:
+                    lines.append('Tip [m]  '+'  '.join(f'{axis} {v:+.3f}' for axis, v in zip('XYZ', tip)))
+            self.tracking.setText('\n'.join(lines))
         forces = None if robot is None else robot.forces
         self.forces.setText('Unavailable' if forces is None else
             f'Thrust  {np.linalg.norm(forces.thrust_world_n):.3f} N\n'

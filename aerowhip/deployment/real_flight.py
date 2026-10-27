@@ -42,6 +42,23 @@ def select_real_robots(base, selected=None):
     return robots
 
 
+def live_telemetry(packet, name):
+    """Battery, armed state, motor PWM and signal strength of one drone from the relay packet."""
+    status = packet.get('status', {}).get(name)
+    motors = packet.get('motors', {}).get(name)
+    if status is None and motors is None:
+        return None
+    out = {}
+    if status is not None:
+        out.update(battery_v=float(status['battery_v']), armed=bool(status.get('supervisor_info', 0) & 2),
+                   rssi=status.get('rssi'), stale=status.get('age_s', 0.) > 2.5)
+    if motors is not None and motors.get('age_s', 0.) < 1.:
+        out['pwm'] = [float(v) for v in motors['pwm']]
+        if motors.get('battery_v') is not None:
+            out['battery_under_load_v'] = float(motors['battery_v'])
+    return out
+
+
 def fresh(packet, name, key, max_age_s=.5):
     """A command echo from the relay packet if it is recent (the flight script sends at 50 Hz), else None."""
     command = packet.get('commands', {}).get(name, {})
@@ -243,14 +260,13 @@ class RealFlightFeed(DisplayFeed):
                     and self.tracking_display.time_s <= time_s else None),
                 trajectory_epoch=packet.get('flight_epochs', {}).get(name, 0),
                 commanded_acceleration_world_mps2=fresh(packet, name, 'acceleration_mps2'),
-                desired_acceleration_world_mps2=fresh(packet, name, 'desired_mps2')))
+                desired_acceleration_world_mps2=fresh(packet, name, 'desired_mps2'),
+                telemetry=live_telemetry(packet, name)))
         label = self.source_label
         if self.cables:
             label += ' · simulated cable'
-        if self.tracker is not None:
-            label += ' · cable estimate: '+self.tracking_status
-            if self.tracking_display is not None and time_s-self.tracking_display.time_s > .25:
-                label += ' (stale)'
+        if self.tracker is not None and self.tracking_display is None and self.tracking_status.startswith(('Marker', 'cloud')):
+            label += ' · cable labeller: '+self.tracking_status
         if packet.get('capture_type') is None:
             label += ' · awaiting capture source'
         for name in packet.get('robots', []):
@@ -262,17 +278,7 @@ class RealFlightFeed(DisplayFeed):
             label += ' · waiting for the first OptiTrack pose of '+', '.join(never)+' (the stack starts once the drone answers on the radio)'
         if lost:
             label += ' · OptiTrack lost '+', '.join(lost)
-        for name, status in packet.get('status', {}).items():
-            armed = bool(status.get('supervisor_info', 0) & 2)
-            label += (f" · {name} {status['battery_v']:.2f} V{' armed' if armed else ''}"
-                      + (' (stale)' if status.get('age_s', 0.) > 2.5 else ''))
-        for name, motors in packet.get('motors', {}).items():
-            if motors.get('age_s', 0.) < 1.:
-                label += ' · PWM '+' '.join(f'{v/1000:.1f}k' for v in motors['pwm'])
-        for name, command in packet.get('commands', {}).items():
-            if command.get('age_s', 0.) < 1. and 'acceleration_mps2' in command:
-                a = command['acceleration_mps2']
-                label += f' · cmd a [{a[0]:+.2f} {a[1]:+.2f} {a[2]:+.2f}] m/s²'
+        # Battery, motors, commands and the cable labeller's state are shown in the panel, not here.
         issues = packet.get('issues', {})
         errors = [f'{name}: {value}' for name, value in issues.items()]
         errors.extend(f'{name}: {cable.error}' for name, cable in self.cables.items() if cable.error)
