@@ -1,7 +1,7 @@
 """Score the environment's OptiTrack model against the recordings: on each cable flight the
 sensor synthesizes clouds from the reconstructed cable (measured markers, reconstructed where
 hidden) and the recorded drone pose, the live filter labels them, and the label statistics are
-compared with the same filter's labels on the real clouds (cable_labels_filter.npz). The
+compared with the same filter run over the real clouds (on their recorded stamps). The
 synthetic path uses a uniform 10 ms clock; the real one the recorded stamps. Run twice.
 
     python scripts/validate_sensing.py --output runs/calibration_2026-10-27/sensing_validation.json
@@ -14,10 +14,13 @@ import sys
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from aerowhip.deployment.cable_filter import CableFilter
 from aerowhip.envs.sensing import OptiTrackSensor
 from aerowhip.experiment import DEFAULT, load
 from aerowhip.fitting.calibration_set import folders
 from aerowhip.fitting.sensing_statistics import DT, label_statistics, marker_speeds
+
+LENGTH_TOLERANCE_M = .015   # the live filter's length tolerance
 from aerowhip.takes.cable_labels import load_flight
 
 
@@ -26,7 +29,12 @@ def synthetic(folder, config, arc, attachment, seed):
     rec = np.load(folder/'cable_reconstruction.npz')
     positions = rec['positions']
     ok = np.isfinite(positions).all((1, 2))
-    # the longest run of complete reconstructed frames is the simulated 'truth'
+    # A usable 'truth' frame is a physically possible cable: every link at most the length tolerance
+    # longer than its interval (reconstructed markers past the last seen one can violate it).
+    chain = np.concatenate([flight.root[:, None], np.nan_to_num(positions)], 1)
+    excess = np.linalg.norm(np.diff(chain, axis=1), axis=2)-np.diff(np.r_[0., arc])
+    ok &= (excess <= LENGTH_TOLERANCE_M).all(1)
+    # the longest run of complete, possible reconstructed frames is the simulated 'truth'
     runs, start = [], None
     for f, good in enumerate(np.r_[ok, False]):
         if good and start is None:
@@ -49,11 +57,18 @@ def synthetic(folder, config, arc, attachment, seed):
 
 
 def real(folder, span):
-    labels = np.load(folder/'cable_labels_filter.npz')
+    """The current live filter run over the recorded cloud (on its recorded stamps)."""
+    flight = load_flight(folder)
+    filt = CableFilter(flight.arc)
+    index, confidence = [], []
+    for f in range(flight.frames):
+        state = filt.observe(float(flight.stamps[f]), flight.root[f], flight.points[f])
+        index.append(state['index'].copy()); confidence.append(state['confidence'].copy())
+    labels = np.load(folder/'cable_labels.npz')
     a, b = span
-    seen = labels['index'][a:b] >= 0
+    seen = np.array(index)[a:b] >= 0
     stats = label_statistics(seen, marker_speeds(labels['positions'])[a:b])
-    stats['mean_confidence'] = float(np.mean(labels['confidence'][a:b]))
+    stats['mean_confidence'] = float(np.mean(np.array(confidence)[a:b]))
     return stats
 
 
@@ -70,8 +85,8 @@ def main():
     config = experiment.environment.sensing
     results = {}
     for motion, folder in folders('cf_2').items():
-        if not (folder/'cable_labels_filter.npz').exists() or not (folder/'cable_reconstruction.npz').exists():
-            print(motion, 'skipped: no filter labels or reconstruction'); continue
+        if not (folder/'cable_reconstruction.npz').exists():
+            print(motion, 'skipped: no reconstruction'); continue
         passes = [synthetic(folder, config, arc, attachment, args.seed) for _ in range(2)]
         if passes[0] != passes[1]:
             raise RuntimeError('Synthetic sensing did not reproduce')

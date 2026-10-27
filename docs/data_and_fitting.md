@@ -32,6 +32,20 @@ clouds frame by frame and is scored against these labels; its output is kept bes
 (`cable_labels_filter.npz`). `python scripts/label_cable.py <folders>` opens the review
 window to inspect either labelling and correct it by hand.
 
+The recorded stamps are host receipt times: the cameras deliver exactly one frame per 10 ms
+(the mean step over a flight is 10.00 ms), but the stamps jitter between about 5 and 16 ms
+and occasionally stall for 20–40 ms before a burst. The filter therefore runs on a frame
+clock that advances by whole frames and follows slow drift; using the raw stamp differences
+put the jitter into every velocity and made the filter lose the cable during the whip
+strokes. With the frame clock it agrees with the whole-recording labels on 99.96 % of the
+labelled marker-frames of the whip flight and labels 99.4 % of them (84 % and 86 % with raw
+stamps). `scripts/filter_velocity_check.py` scores its marker velocities against central
+differences of the whole-recording labels: 0.08–0.26 m/s RMS per flight, the tip within
+0.1–0.2 m/s, and at every snap above 3 m/s that the labels cover (83 on the nine flights)
+the filter's peak tip speed is within 1 % of the reference in the median, about one frame
+(10 ms) later. A few snaps right after a delivery stall are under-read (down to 52 % of the
+peak); publishing the camera frame number with the cloud would remove them.
+
 ### OptiTrack sensing statistics
 
 The training environment lets the policy observe through a model of the cameras
@@ -45,14 +59,15 @@ per-marker, per-frame hazard of disappearing is 8·10⁻⁴ at rest, 1–3·10�
 probability 0.32 per frame (from the filter's labels; the camera-level run length is not
 observable). White position noise of a resting marker is 0.1 mm per axis (drone rigid body
 0.02 mm). The cloud also holds the drone's own markers (two of them 8–9 cm from the tracking
-origin, beyond the 7 cm exclusion) and about three static points elsewhere in the room. At
-the label level, the live filter leaves more gaps than the cameras do (2.6–9.9 % of frames
-on the slow flights, 19 % on the whip flight) because of ambiguous points near the cable.
-`scripts/validate_sensing.py` scores the model at this level: the reconstructed cable of each
-flight is turned into synthetic clouds, the filter labels them, and its label statistics are
-compared with the filter's labels on the real clouds. With the adopted values the synthetic
-clouds give the same order of gaps (slow flights 1.0–2.3 % versus 0.5–9.9 % real, whip 13 %
-versus 19 %), so the model is somewhat optimistic on the fastest motion. The absolute
+origin, beyond the 7 cm exclusion) and about three static points elsewhere in the room.
+`scripts/validate_sensing.py` scores the model at the level the policy sees: the longest
+physically possible span of each flight's reconstructed cable is turned into synthetic clouds,
+the filter labels them, and its label statistics are compared with the filter run over the
+real clouds of the same span. The fraction of marker-frames labelled agrees within 1 % on every
+flight (whip 99.6 % simulated, 99.3 % real). The real filter leaves more frequent but shorter
+gaps on the flights with clutter near the cable (frames with a gap: decay 1.4 % simulated versus
+4.3 % real, line_star 1.4 versus 6.0, whip 1.1 versus 4.6; mean gap 1.4–2.1 frames real versus
+3–7 simulated), because ambiguous real points are not modelled. The absolute
 capture-to-host latency cannot be measured from these files (receipt jitter is below 0.5 ms;
 the clock offset needs the onboard estimate against OptiTrack), so the latency is an assumed
 range of 0–2 frames, drawn per lane and episode.
@@ -149,6 +164,14 @@ parameters. Every reported number is computed twice.
    and 54.2 → 45.6 mm). The vertical rate is larger than a regression of the residuals on
    velocity suggests (0.2–0.33 s⁻¹) and may also absorb vertical thrust dynamics; it should be
    re-checked once the motor map is identified on the bench.
+   `scripts/cable_error_split.py` separates the cable model's own error from the drone's: the
+   same windows are replayed with the measured drone pose driving the clamp. On the whip flight
+   the cable alone accounts for 68 of the 74 mm coupled cable-shape error (tip 127 of 135 mm),
+   and on every flight for most of it; the error grows with marker speed (whip: 39 mm below
+   1 m/s, 130–190 mm above 2 m/s) and along the cable. A finer mesh (two or three segments per
+   marker interval) changes it by 1.5–2.3 mm; the bending damping Cb is the sensitive term
+   (lower Cb helps the whip and hurts the slower flights), so the fitted value is a compromise
+   across speeds.
 2. **Cable** (`aerowhip.fitting.flight_cable`, `scripts/fit_cable_flights.py`): the measured
    drone pose drives the clamp; the cable starts from the measured markers and runs open
    loop. Loss: RMS distance between simulated and measured markers over the markers that were

@@ -1511,3 +1511,45 @@ Approved by the user (switch to 2 ms if peak tip speed holds).
   5.2k/9.0k lane-steps/s (24/96 lanes); environment end to end 1.9k/2.1k → 2.4k/2.7k (the Python
   sensing and task now dominate). `tests/test_live_cable.py` derives its step count from the model.
   107 tests pass.
+
+## Dated change note — 2026-10-28 whip error split; live filter frame clock and velocity check
+
+Approved by the user ("Yes": cable vs drone split, then filter velocities).
+
+- **Error split**, [scripts/cable_error_split.py](../scripts/cable_error_split.py)
+  (`runs/calibration_2026-10-27/cable_error_split.json`, reproduced twice): every cable-flight window
+  replayed with the measured drone pose driving the clamp (cable alone) and open loop from the sent
+  commands (coupled), scored as cable shape. Cable alone / coupled, mm: whip 67.9 / 73.8 (tip 127 / 135),
+  strokes 48.5 / 52.3, decay 43.5 / 48.5, random_high 35.0 / 42.7, line_star 29.1 / 50.4, others 19–32 /
+  25–37. The cable model dominates on the fast flights; its error grows with marker speed (whip 39 mm below
+  1 m/s, 97 at 1–2, 128–187 above 2) and toward the tip, and through the window (whip 21 → 93 mm from the
+  first to the last half second). Diagnostics (one-off, not retained): 2 and 3 segments per marker interval
+  improve whip by 1.5–1.7 mm (`flight_cable.CableReplay` now starts finer meshes from the measured markers);
+  a central-difference initial velocity changes nothing; one-at-a-time sensitivity on whip / strokes /
+  random_high: Cb 1e-4 → 58.8 / 49.8 / 37.1 (adopted 3.0e-4: 67.9 / 48.5 / 35.0), Cb 1e-3 → 87.9 / 64.0 /
+  53.9, Cd 0.3–1.2 and the linear drag ±2 mm, EI 1e-7…1e-4 ≤ 1 mm. Bending damping is the term to revisit;
+  not refitted (whip is held out).
+- **Filter frame clock**, [deployment/cable_filter.py](../aerowhip/deployment/cable_filter.py): the stamps
+  in the recordings are host receipt times (stamp − receipt 0.3 ms; mean step 10.00 ms, steps 5–16 ms with
+  stalls to 37 ms). `observe` now advances a frame clock by whole frames (≥ 1) and pulls it 5 % toward
+  each stamp; prediction and velocity use it. `get_state`/`set_state` carry it. Effect on the recorded
+  clouds: whip labels agree with the sequence labels on 99.96 % of labelled marker-frames and label 99.38 %
+  (stored previous-filter labels: 84.2 % / 86.2 %); line_star 99.50 / 98.26 (98.74 / 97.72). The stored
+  `cable_labels_filter.npz` files were not regenerated.
+- **Velocity check**, [scripts/filter_velocity_check.py](../scripts/filter_velocity_check.py)
+  (`filter_velocity_check.json` on the recorded stamps, `_uniform`/`_stamps` variants kept, each reproduced
+  twice): reference = central differences of `cable_labels.npz` on the 10 ms clock; snaps = tip peaks
+  > 3 m/s fully labelled ±5 frames (83 on nine flights; peaks inside a label gap are not scored — an
+  earlier version without this rule reported spurious 1.4× overshoots). Frame-clock filter on recorded
+  stamps: velocity RMS 0.08–0.26 m/s, tip 0.11–0.32; snap peak ratio median 0.99–1.00 per flight, delay
+  median 1 frame; outliers 0.52–0.75 at six snaps right after delivery stalls (uniform clock: min 0.90).
+  On simulated whips with exact truth (one-off): peak within 2–4 %, 1–2 frames late. Recommendation for
+  flight: publish the NatNet frame number with the cloud.
+- **Sensing validation** ([scripts/validate_sensing.py](../scripts/validate_sensing.py)) now runs the
+  current filter over the real clouds instead of reading `cable_labels_filter.npz`, and uses as synthetic
+  truth only physically possible reconstructed frames (every link ≤ 15 mm over its interval; extrapolated
+  markers had violated it by up to 1.8 m and caused most of the earlier synthetic whip gaps). Labelled
+  fraction simulated / real within 1 % on every flight (whip 0.996 / 0.993); frames with a gap 0.8–1.6 %
+  simulated vs 0.5–6.0 % real, real gaps shorter (1.3–2.1 frames vs 2.9–6.6). Supersedes the earlier
+  validation numbers.
+- 109 tests pass (frame clock: jitter and a dropped frame).

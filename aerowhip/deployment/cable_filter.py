@@ -62,6 +62,7 @@ class CableFilter:
         self.confidence = np.zeros(MARKERS)
         self.initialized = False
         self.time = None
+        self.clock = None                                # camera frame clock (see observe)
         self.root = None
         self.root_velocity = np.zeros(3)
         self.quality = 0.                                # 0 unreliable .. 1 all markers seen
@@ -102,9 +103,17 @@ class CableFilter:
         """Advance to time_s with the attachment at `root` and the cloud `points` (N, 3)."""
         points = np.asarray(points, float).reshape(-1, 3)
         root = np.asarray(root, float)
-        # OptiTrack stamps arrive bunched (0.1 ms, then 10 ms): never let a tiny step inflate a
-        # velocity. The step used for prediction and velocity is at least half a nominal frame.
-        dt = self.dt if self.time is None else max(time_s-self.time, .5*self.dt)
+        # The stamps are host receipt times, jittered by a few ms around the cameras' exact 10 ms
+        # frames. A frame clock tracks the camera: each stamp advances it by the whole number of
+        # frames it is ahead (at least one; a dropped frame counts two), and it follows slow drift.
+        # Prediction and velocity use the frame clock, so jitter never enters a velocity.
+        if self.clock is None:
+            dt, self.clock = self.dt, time_s
+        else:
+            frames = max(1, round((time_s-self.clock)/self.dt))
+            dt = self.dt*frames
+            self.clock += dt
+            self.clock += .05*(time_s-self.clock)
         self.time, self.root = time_s, root
         if not self.initialized:
             if self.start(root, points):
@@ -314,12 +323,12 @@ class CableFilter:
     # ------------------------------------------------------------------ offline support
     def get_state(self):
         return dict(positions=self.positions.copy(), velocities=self.velocities.copy(), hidden_s=self.hidden_s.copy(),
-                    initialized=self.initialized, time=self.time, root=None if self.root is None else self.root.copy(),
-                    index=self.index.copy())
+                    initialized=self.initialized, time=self.time, clock=self.clock,
+                    root=None if self.root is None else self.root.copy(), index=self.index.copy())
 
     def set_state(self, state):
         self.positions, self.velocities, self.hidden_s = (state[k].copy() for k in ('positions', 'velocities', 'hidden_s'))
-        self.initialized, self.time = state['initialized'], state['time']
+        self.initialized, self.time, self.clock = state['initialized'], state['time'], state['clock']
         self.root = None if state['root'] is None else state['root'].copy()
         self.index = state['index'].copy()
         self._update_quality()

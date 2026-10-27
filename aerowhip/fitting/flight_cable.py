@@ -56,8 +56,15 @@ class CableReplay:
         self.markers = np.asarray(info['marker_indices'])[1:]-1   # free-node index of each marker
         self.free = len(self.rest)
         self.width = state_width                                 # 6 (twist-free) or 7 (v1 angles)
-        if not np.array_equal(np.diff(np.asarray(info['marker_indices'])), np.ones(len(self.markers), int)):
-            raise ValueError('Replay assumes one cable segment per marker interval')
+        # Nodes between markers (meshes finer than one segment per marker interval) start on the
+        # straight line between their neighbouring markers, at their arc fraction.
+        arc = np.r_[0., np.cumsum(self.rest)]
+        known = np.r_[0, np.asarray(info['marker_indices'])[1:]]
+        self.between = []                                        # (known point before, arc fraction to the next)
+        for node in range(1, len(arc)):
+            a = int(np.searchsorted(known, node, 'right'))-1
+            f = 0. if known[a] == node else (arc[node]-arc[known[a]])/(arc[known[a+1]]-arc[known[a]])
+            self.between.append((a, f))
 
     def roots(self, positions, rotations):
         return positions+np.einsum('nij,j->ni', rotations, self.attachment)
@@ -72,13 +79,16 @@ class CableReplay:
             raise ValueError('Window history must have every marker')
         root, root_v = roots[-1], endpoint_velocity(t, roots)
         velocities = endpoint_velocity(t, markers)
+        points, rates = np.vstack([root, markers[-1]]), np.vstack([root_v, velocities])
+        targets = np.array([points[a] if f == 0. else points[a]+f*(points[a+1]-points[a]) for a, f in self.between])
+        target_v = np.array([rates[a] if f == 0. else rates[a]+f*(rates[a+1]-rates[a]) for a, f in self.between])
         q, v = np.empty((self.free, 3)), np.empty((self.free, 3))
         previous, previous_v = root, root_v
         for i in range(self.free):
-            edge = markers[-1, i]-previous
+            edge = targets[i]-previous
             tangent = edge/np.linalg.norm(edge)
             q[i] = previous+tangent*self.rest[i]
-            relative = velocities[i]-previous_v
+            relative = target_v[i]-previous_v
             v[i] = previous_v+relative-tangent*(tangent@relative)
             previous, previous_v = q[i], v[i]
         state = np.r_[q.ravel(), v.ravel()]

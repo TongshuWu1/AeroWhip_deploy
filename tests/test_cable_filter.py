@@ -49,3 +49,27 @@ def test_hanging_cable_is_labelled_in_order():
     state = filt.observe(0., root, markers[order])
     assert state['initialized'] and (state['confidence'] == 1.).all()
     assert np.array_equal(state['index'], np.argsort(order))
+
+
+def test_frame_clock_absorbs_receipt_jitter():
+    # A marker moving at 2 m/s observed on jittered receipt stamps (frames exactly 10 ms apart):
+    # the filter's velocity follows the motion, not the jitter.
+    rng = np.random.default_rng(2)
+    filt = CableFilter(ARC)
+    root0 = np.array([0., 0., 2.])
+    velocity = np.array([2., 0., 0.])
+    for frame in range(60):
+        stamp = frame*.01+rng.uniform(-.004, .004)
+        root = root0+velocity*frame*.01
+        state = filt.observe(stamp, root, root+np.outer(ARC, [0., 0., -1.]))
+    np.testing.assert_allclose(state['velocities'], np.tile(velocity, (10, 1)), atol=1e-6)
+
+
+def test_frame_clock_counts_a_dropped_frame():
+    filt = CableFilter(ARC)
+    root0 = np.array([0., 0., 2.])
+    velocity = np.array([1., 0., 0.])
+    for frame in [*range(30), *range(31, 60)]:              # frame 30 never arrives
+        root = root0+velocity*frame*.01
+        state = filt.observe(frame*.01, root, root+np.outer(ARC, [0., 0., -1.]))
+    np.testing.assert_allclose(state['velocities'], np.tile(velocity, (10, 1)), atol=1e-6)
