@@ -364,24 +364,37 @@ class Pipeline(QtWidgets.QWidget):
         self.run_all.clicked.connect(self.run_all_clicked)
         layout.addWidget(self.run_all)
         self.cards = []
-        for i, stage in enumerate(stages.STAGES):
-            card = StageCard(i+1, stage)
+        number = 0
+        for stage in stages.STAGES:
+            if stage.key == 'coupled':                 # the coupled fit comes before its validation
+                number += 1
+                layout.addWidget(self._planned(number, 'Coupled refinement', 'planned',
+                    'Not built yet. A few parameters (command delay, bending damping, attachment) fitted with the drone '
+                    'and the cable simulated together on the cable flights, after the drone and cable fits.'))
+            number += 1
+            card = StageCard(number, stage)
             card.action_clicked.connect(self.action_clicked)
             card.open_clicked.connect(self.open_clicked)
             layout.addWidget(card)
             self.cards.append(card)
-        residual = QtWidgets.QFrame()
-        residual.setObjectName('card')
-        residual.setToolTip('A small learned correction on top of the physical model, fitted once the coupled '
-                            'validation is settled.')
-        r = QtWidgets.QHBoxLayout(residual)
-        r.setContentsMargins(12, 9, 12, 9)
-        r.addWidget(label(f'<b>{len(self.cards)+1}&nbsp;&nbsp;Residual</b>', 'muted'))
-        r.addStretch()
-        r.addWidget(label('later', 'muted'))
-        residual.setEnabled(False)
-        layout.addWidget(residual)
+        layout.addWidget(self._planned(number+1, 'Residual', 'later',
+            'A small learned correction on top of the physical model, fitted once the coupled validation is settled.'))
         layout.addStretch()
+
+    @staticmethod
+    def _planned(number, title, tag, text):
+        frame = QtWidgets.QFrame()
+        frame.setObjectName('card')
+        box = QtWidgets.QVBoxLayout(frame)
+        box.setContentsMargins(12, 9, 12, 9)
+        top = QtWidgets.QHBoxLayout()
+        top.addWidget(label(f'<b>{number}&nbsp;&nbsp;{title}</b>', 'muted'))
+        top.addStretch()
+        top.addWidget(label(tag, 'muted'))
+        box.addLayout(top)
+        box.addWidget(label(text, 'note', wrap=True))
+        frame.setEnabled(False)
+        return frame
 
     def refresh(self, results):
         statuses = [stage_status(card.stage, results) for card in self.cards]
@@ -428,6 +441,22 @@ def plan_progress(events):
     total = sum(budget)
     return done/total, plan['phases'][current], current, len(budget), total-done
 
+
+PARAMETER_WORDS = {                      # progress parameter name -> (plain words with unit, conversion)
+    'inertia_scale_xy': ('roll/pitch inertia (× configured)', lambda v: v),
+    'arm_scale': ('motor arm (× configured)', lambda v: v),
+    'motor_response_s': ('motor response time (ms)', lambda v: v*1e3),
+    'command_delay_s': ('command delay (ms)', lambda v: v*1e3),
+    'body_drag_xy_s_inv': ('air drag, horizontal (1/s)', lambda v: v),
+    'body_drag_z_s_inv': ('air drag, vertical (1/s)', lambda v: v),
+    'log10 EI': ('bending stiffness EI (N m²)', lambda v: 10**v),
+    'log10 Cb': ('bending damping Cb (N m² s)', lambda v: 10**v),
+    'Cd': ('normal drag coefficient Cd', lambda v: v),
+    'log10 linear drag': ('linear air drag (1/s)', lambda v: 10**v),
+    'kappa': ('thrust scale κ', lambda v: v),
+    'exponent p': ('thrust exponent p', lambda v: v),
+    'voltage slope beta': ('voltage slope β (1/V)', lambda v: v),
+}
 
 PHASE_WORDS = {'loading flights': 'loading the flights', 'start point': 'scoring the configuration now',
                'least squares': 'least-squares search', 'final check': 'final check (scored twice)'}
@@ -484,10 +513,12 @@ class ProgressView(QtWidgets.QWidget):
         self.bar_label = label('', 'note')
         bar.addWidget(self.bar_label)
         layout.addLayout(bar)
-        self.loss = PlotCanvas(minimum=(300, 220))
-        self.parameters = PlotCanvas(minimum=(300, 180))
+        self.loss = PlotCanvas(minimum=(300, 260))
         layout.addWidget(self.loss, 5)
-        layout.addWidget(self.parameters, 3)
+        self.table_title = label('Parameters: value at the start and in the best fit so far', 'section')
+        layout.addWidget(self.table_title)
+        self.table = table(['', 'start', 'best so far', 'change'])
+        layout.addWidget(self.table)
         self.console = QtWidgets.QPlainTextEdit()
         self.console.setReadOnly(True)
         self.console.setMaximumBlockCount(20000)
@@ -514,9 +545,10 @@ class ProgressView(QtWidgets.QWidget):
             self.bar.setVisible(state == 'starting')
             self.bar_label.setText('')
             self.source.setText(source)
-            for canvas in (self.loss, self.parameters):
-                canvas.reset()
-                canvas.draw_idle()
+            self.loss.reset()
+            self.loss.draw_idle()
+            self.table.setVisible(False)
+            self.table_title.setVisible(False)
             self.signature = None
             return
         stage = stages.BY_KEY.get(start['stage']) or next((s for s in stages.STAGES if s.title.lower() == start['stage']), None)
@@ -530,6 +562,7 @@ class ProgressView(QtWidgets.QWidget):
         self.signature = signature
         self.source.setText(source+('  (rebuilt from the result file)' if start.get('legacy') else ''))
         flights = [e for e in events if e['kind'] == 'flight']
+        self.state = state
         if flights:
             self._flights(flights)
         else:
@@ -577,97 +610,105 @@ class ProgressView(QtWidgets.QWidget):
         self.bar.setValue(int(1000*fraction))
         self.bar_label.setText(text)
 
-    @staticmethod
-    def _phase_curves(events):
-        """{phase: (evaluation numbers, best-so-far values, best x)} at the start of each phase and
-        at every evaluation that improved its phase's best; phase None without phase events."""
-        curves = {}
-        if not any(e['kind'] == 'evaluation' for e in events):     # older results: per-iteration best only
-            iterations = [e for e in events if e['kind'] == 'iteration']
-            keep = improvements([e['best'] for e in iterations]) if iterations else []
-            if keep and keep[-1] != len(iterations)-1:
-                keep.append(len(iterations)-1)
-            return {None: (np.array([iterations[i]['n'] for i in keep], float), np.array([iterations[i]['best'] for i in keep]),
-                           np.array([iterations[i]['x'] for i in keep]))} if keep else {}
-        for e in events:
-            if e['kind'] != 'evaluation' or e['value'] is None:
-                continue
-            n, v, x = curves.setdefault(e.get('phase'), ([], [], []))
-            if not v or e['value'] < v[-1]:
-                n.append(e['n']); v.append(e['value']); x.append(e['x'])
-        last = {}
-        for e in events:                                   # extend each curve to its phase's last evaluation
-            if e['kind'] == 'evaluation':
-                last[e.get('phase')] = e['n']
-        out = {}
-        for phase, (n, v, x) in curves.items():
-            if last[phase] > n[-1]:
-                n, v, x = n+[last[phase]], v+[v[-1]], x+[x[-1]]
-            out[phase] = (np.array(n, float), np.array(v), np.array(x))
-        return out
-
     def _search(self, events, start):
+        """Error over time (best so far), the delay profile for the drone, and the parameter table."""
         factor, unit = display_unit(start.get('unit'))
-        names = start['parameters']
-        curves = self._phase_curves(events)
+        evaluations = [e for e in events if e['kind'] == 'evaluation' and e['value'] is not None]
+        if not evaluations:                                 # older results: per-iteration best only
+            evaluations = [dict(n=e['n'], value=e['best'], x=e['x']) for e in events if e['kind'] == 'iteration']
+        start_value = next((e['value'] for e in events if e['kind'] == 'phase_done' and e['value'] is not None),
+                           evaluations[0]['value'] if evaluations else None)
         plan = next((e for e in events if e['kind'] == 'plan'), None)
-        labels = plan['phases'] if plan else []
-        current = max((e['index'] for e in events if e['kind'] == 'phase'), default=None)
-        finished = events[-1]['kind'] == 'done'
-        profile = [(e['label'], e['value'], e['x']) for e in events
-                   if e['kind'] == 'phase_done' and e['label'].startswith('delay') and e['value'] is not None]
-        start_value = next((e['value'] for e in events if e['kind'] == 'phase_done' and e['value'] is not None), None)
-        for canvas in (self.loss, self.parameters):
-            canvas.reset()
-        with self.loss.style():
-            if profile or (plan and any(l.startswith('delay') for l in labels)):
-                grid = self.loss.figure.add_gridspec(1, 2, width_ratios=(3, 1))
-                ax, side = self.loss.figure.add_subplot(grid[0]), self.loss.figure.add_subplot(grid[1])
+        delays = [p for p in plan['phases'] if p.startswith('delay')] if plan else []
+        canvas = self.loss
+        canvas.reset()
+        with canvas.style():
+            if delays:
+                grid = canvas.figure.add_gridspec(1, 2, width_ratios=(2.2, 1))
+                ax, side = canvas.figure.add_subplot(grid[0]), canvas.figure.add_subplot(grid[1])
             else:
-                ax, side = self.loss.figure.add_subplot(111), None
-            for phase, (n, v, _) in sorted(curves.items(), key=lambda item: -1 if item[0] is None else item[0]):
-                live = phase == current and not finished
-                xs, ys = smooth(n, v*factor)
-                ax.plot(xs, ys, color=ROLE['model'] if live or phase is None else ROLE['reference'],
-                        lw=2.2 if live or phase is None else 1.3, alpha=1 if live or phase is None else .8)
-                ax.plot(n[-1], v[-1]*factor, 'o', ms=5 if live else 3.5,
-                        color=ROLE['model'] if live or phase is None else ROLE['reference'])
-                if phase is not None and len(labels) > phase and labels[phase].startswith('delay') and not live:
-                    ax.annotate(labels[phase].replace('delay ', ''), (n[-1], v[-1]*factor), xytext=(3, 3),
-                                textcoords='offset points', fontsize=7, color=ROLE['reference'])
-            if start_value is not None:
-                ax.axhline(start_value*factor, color=ROLE['reference'], ls='--', lw=1)
-            ax.set_title(f'Loss ({unit}): best so far in each phase' if plan else f'Best loss ({unit})')
-            ax.set_xlabel('evaluation')
-            ax.grid(axis='y', alpha=.3)
+                ax, side = canvas.figure.add_subplot(111), None
+            if evaluations:
+                timed = 'time' in evaluations[0] and 'time' in start
+                t = np.array([(e['time']-start['time'])/60 if timed else e['n'] for e in evaluations])
+                v = np.array([e['value'] for e in evaluations])*factor
+                best = np.minimum.accumulate(v)
+                keep = sorted(set(improvements(list(best))+[len(best)-1]))
+                if timed and start_value is not None:      # the start point is scored before the search
+                    t, best, keep = np.r_[0., t], np.r_[start_value*factor, best], [0]+[k+1 for k in keep]
+                xs, ys = smooth(t[keep], best[keep])
+                ax.plot(xs, ys, color=ROLE['model'], lw=2.4)
+                ax.plot(t[keep[-1]], best[keep[-1]], 'o', color=ROLE['model'], ms=7)
+                ax.annotate(f'best {best[-1]:.3g} {unit}', (t[keep[-1]], best[-1]), xytext=(-8, 10),
+                            textcoords='offset points', ha='right', fontsize=9, color=ROLE['model'], fontweight='bold')
+                if start_value is not None:
+                    ax.axhline(start_value*factor, color=ROLE['reference'], ls='--', lw=1)
+                    ax.annotate(f'start {start_value*factor:.3g} {unit}', (t[0], start_value*factor), xytext=(4, 4),
+                                textcoords='offset points', fontsize=8.5, color=ROLE['reference'])
+                ax.set_xlabel('minutes since the start' if timed else 'evaluation')
+                span = max(best.max()-best.min(), 1e-9)
+                ax.set_ylim(best.min()-.15*span, best.max()+.15*span)
+            ax.set_ylabel(f'error ({unit})' if unit else 'error')
+            ax.set_title('Model error on the flights, best so far (lower is better)')
+            ax.grid(alpha=.3)
             if side is not None:
-                if profile:
-                    d = [float(l.split()[1]) for l, _, _ in profile]
-                    side.plot(d, [v*factor for _, v, _ in profile], 'o-', color=ROLE['model'], lw=1.5, ms=5)
-                    best = int(np.argmin([v for _, v, _ in profile]))
-                    side.plot(d[best], profile[best][1]*factor, 'o', ms=9, mfc='none', color=ROLE['highlight'])
-                side.set_title('Delay profile')
-                side.set_xlabel('command delay (ms)')
-                side.grid(alpha=.3)
-            self.loss.figure.tight_layout()
-        self.loss.draw_idle()
-        with self.parameters.style():
-            if names and curves:
-                axes = self.parameters.figure.subplots(1, len(names), squeeze=False).ravel()
-                for i, axp in enumerate(axes):
-                    for phase, (n, _, X) in curves.items():
-                        live = phase == current and not finished
-                        xs, ys = smooth(n, X[:, i])
-                        axp.plot(xs, ys, color=ROLE['model'] if live or phase is None else ROLE['reference'],
-                                 lw=1.8 if live or phase is None else 1., alpha=1 if live or phase is None else .7)
-                    axp.axhline(start['x0'][i], color=ROLE['reference'], ls='--', lw=.9)
-                    newest = max(curves.items(), key=lambda item: item[1][0][-1])[1][2][-1, i]
-                    axp.set_title(f'{names[i].replace("_", " ")} = {fmt(float(newest))}', fontsize=8)
-                    axp.tick_params(labelsize=7)
-                    axp.locator_params(axis='y', nbins=4)
-                    axp.locator_params(axis='x', nbins=3)
-                self.parameters.figure.tight_layout()
-        self.parameters.draw_idle()
+                self._delay_profile(side, events, delays, factor, unit, running=self.state == 'running')
+            canvas.figure.tight_layout()
+        canvas.draw_idle()
+        self._parameter_table(start, evaluations)
+
+    @staticmethod
+    def _delay_profile(ax, events, delays, factor, unit, running=True):
+        """Error at each command delay of the plan: finished ones filled, the one in progress open,
+        the best circled; delays not tried yet are only ticks."""
+        done = {e['label']: e['value'] for e in events if e['kind'] == 'phase_done' and e['label'].startswith('delay')}
+        current = max((e for e in events if e['kind'] == 'phase'), key=lambda e: e['time'], default=None)
+        ms = [float(d.split()[1]) for d in delays]
+        xs = [m for d, m in zip(delays, ms) if done.get(d) is not None]
+        ys = [done[d]*factor for d in delays if done.get(d) is not None]
+        if xs:
+            ax.plot(xs, ys, '-', color=ROLE['model'], lw=1.2, alpha=.6)
+            ax.plot(xs, ys, 'o', color=ROLE['model'], ms=6)
+            b = int(np.argmin(ys))
+            ax.plot(xs[b], ys[b], 'o', ms=13, mfc='none', mew=1.6, color=GOOD)
+            ax.annotate(f'best so far: {xs[b]:.0f} ms', (xs[b], ys[b]), xytext=(0, -16), textcoords='offset points',
+                        ha='center', fontsize=8.5, color=GOOD)
+        if current is not None and current['label'] in delays and current['label'] not in done and events[-1]['kind'] != 'done':
+            vals = [e['value'] for e in events if e['kind'] == 'evaluation' and e.get('phase') == current['index']
+                    and e['value'] is not None]
+            if vals:
+                m = float(current['label'].split()[1])
+                ax.plot(m, min(vals)*factor, 'o', ms=6, mfc='none', color=ROLE['model'])
+                ax.annotate('in progress' if running else 'stopped here', (m, min(vals)*factor), xytext=(0, 8), textcoords='offset points',
+                            ha='center', fontsize=8, color=ROLE['model'])
+        ax.set_xticks(ms)
+        ax.set_xlim(min(ms)-5, max(ms)+5)
+        ax.set_xlabel('command delay tried (ms)')
+        ax.set_ylabel(f'error ({unit})')
+        ax.set_title('Which command delay fits best?')
+        ax.grid(alpha=.3)
+
+    def _parameter_table(self, start, evaluations):
+        names = start.get('parameters') or []
+        if not names or not evaluations:
+            self.table.setRowCount(0)
+            self.table_title.setVisible(False)
+            self.table.setVisible(False)
+            return
+        best = min(evaluations, key=lambda e: e['value'])['x']
+        rows, colours = [], {}
+        for i, name in enumerate(names):
+            text, convert = PARAMETER_WORDS.get(name, (name.replace('_', ' '), lambda v: v))
+            before = convert(start['x0'][i]) if i < len(start['x0']) else None
+            after = convert(best[i]) if i < len(best) else None
+            c = None if before in (None, 0) or after is None else (after-before)/abs(before)*100
+            rows.append([text, before, after, ('new' if before == 0 and after else '') if c is None
+                         else f'{c:+.0f} %' if abs(c) >= 1 else 'same'])
+            if (c is not None and abs(c) >= 1) or (before == 0 and after):
+                colours[(i, 3)] = PALETTE['orange']
+        fill(self.table, rows, colours)
+        self.table_title.setVisible(True)
+        self.table.setVisible(True)
 
     def _flights(self, flights):
         canvas = self.loss
@@ -685,8 +726,8 @@ class ProgressView(QtWidgets.QWidget):
             ax.legend(loc='lower right', frameon=False)
             canvas.figure.tight_layout()
         canvas.draw_idle()
-        self.parameters.reset()
-        self.parameters.draw_idle()
+        self.table.setVisible(False)
+        self.table_title.setVisible(False)
 
 
 # ---------------------------------------------------------------- result

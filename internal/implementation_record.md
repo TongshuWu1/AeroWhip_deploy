@@ -1758,3 +1758,9 @@ User's request: one systematic, automated data collection with a single calibrat
   same way. Stop asks, terminates the fit (exit 143 → 'stopped') and empties the queue. Checked
   visibly: running (a drone fit at step 7 of 10) and idle (that fit stopped). The drone fits of
   19:07 and 19:10 were stopped by the user (a duplicate and then a restart); no result written.
+- **Live view simplified** (user: the live plot did not make sense): one plot of the model error,
+  best so far, against minutes since the start, with the start and the best labelled; for the
+  drone, "Which command delay fits best?" (error per delay tried, best circled, the one in progress
+  open); a table of the parameters in plain words and units (start, best so far, change) instead of
+  the per-phase trace plots. Pipeline shows "4 Coupled refinement — planned (not built yet)" before
+  the coupled validation, and the residual after it. Checked visibly on the stopped drone run.
