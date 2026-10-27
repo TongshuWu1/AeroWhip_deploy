@@ -11,6 +11,9 @@ from PySide6.QtWidgets import (QDialog, QDoubleSpinBox, QFileDialog, QFormLayout
 
 from aerowhip.physics.model_configuration import DEFAULT_FIT_MODEL
 from aerowhip.paths import project_path
+from aerowhip.ui import style
+from aerowhip.ui.plotting import PlotCanvas, message
+from aerowhip.ui.style import ROLE
 
 
 class CableFitWorker(QThread):
@@ -43,7 +46,8 @@ class CableFitWindow(QDialog):
         self.worker = self.result_path = self.run_folder = None
         self._close_when_done = False
         self.setWindowTitle('Cable fit')
-        self.resize(680, 660)
+        self.resize(760, 820)
+        style.apply(self)
         layout = QVBoxLayout(self)
         form = QFormLayout()
         layout.addLayout(form)
@@ -83,6 +87,7 @@ class CableFitWindow(QDialog):
             'Measured attachment position and orientation; residual off. EI, Cb and external drag are fitted. '
             'External-drag multipliers: 0.25–4. GJ, Ct and drone parameters stay fixed. Initial relative twist is assumed zero.')
         description.setWordWrap(True)
+        description.setObjectName('note')
         layout.addWidget(description)
         self.progress = QProgressBar()
         self.progress.setValue(0)
@@ -90,9 +95,15 @@ class CableFitWindow(QDialog):
         self.status = QLabel('Ready. Start runs the complete fixed-split fit; the active model is never replaced.')
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
+        # Convergence: every completed trial's fitting-set marker RMSE and the best so far.
+        self.trials = []
+        self.convergence = PlotCanvas(self, minimum=(400, 220))
+        layout.addWidget(self.convergence, 2)
+        self.plot_trials()
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(500)
+        self.log.setMaximumHeight(120)
         layout.addWidget(self.log, 1)
         self.results = QTableWidget(0, 3)
         self.results.setHorizontalHeaderLabels(['Metric', 'Before (cm)', 'After (cm)'])
@@ -100,7 +111,7 @@ class CableFitWindow(QDialog):
         self.results.setMaximumHeight(165)
         layout.addWidget(self.results)
         buttons = QHBoxLayout()
-        self.start_button, self.stop_button = QPushButton('Start'), QPushButton('Stop')
+        self.start_button, self.stop_button = QPushButton('Start', objectName='primary'), QPushButton('Stop')
         self.open_button, self.close_button = QPushButton('Open results'), QPushButton('Close')
         self.stop_button.setEnabled(False)
         self.open_button.setEnabled(False)
@@ -129,6 +140,8 @@ class CableFitWindow(QDialog):
         self.result_path = self.run_folder = None
         self._close_when_done = False
         self.log.clear()
+        self.trials = []
+        self.plot_trials()
         self.results.setRowCount(0)
         self.open_button.setEnabled(False)
         self.worker = CableFitWorker(self.root, self.model.text(), settings, self)
@@ -157,8 +170,30 @@ class CableFitWindow(QDialog):
         if event['phase'] == 'trial_complete':
             error = event['metrics']['cable_marker_rmse_m']*100
             self.log.appendPlainText(f'{message}: marker RMSE {error:.5f} cm')
+            self.trials.append(error)
+            self.plot_trials()
         elif event['phase'] in ('failed', 'stopped') or done == 0:
             self.log.appendPlainText(message)
+
+    def plot_trials(self, before=None):
+        c = self.convergence
+        with c.style():
+            c.reset()
+            ax = c.figure.add_subplot()
+            if not self.trials:
+                message(ax, 'Marker RMSE of each trial appears here during the fit')
+            else:
+                n = range(1, len(self.trials)+1)
+                ax.plot(n, self.trials, 'o', color=ROLE['model'], markersize=3, label='trial')
+                ax.step(n, list(accumulate_min(self.trials)), where='post', color=ROLE['measured'],
+                        linewidth=1.1, label='best so far')
+                if before is not None:
+                    ax.axhline(before, color=ROLE['reference'], linestyle='--', linewidth=.9, label='input model')
+                ax.set_xlabel('trial')
+                ax.set_ylabel('marker RMSE (cm)')
+                ax.set_title('Convergence · fitting takes')
+                ax.legend(loc='upper right')
+        c.draw_idle()
 
     def fit_completed(self, folder):
         self.result_path = project_path(folder)
@@ -173,6 +208,7 @@ class CableFitWindow(QDialog):
             for j, value in enumerate(row):
                 self.results.setItem(i, j, QTableWidgetItem(value if isinstance(value, str) else f'{value:.5f}'))
         self.results.resizeColumnsToContents()
+        self.plot_trials(summary['training_before']['cable_marker_rmse_m']*100)
         self.log.appendPlainText('Conditional EI/Cb/external-drag fit; GJ/Ct and initial twist remain assumptions.')
         boundary = ' Best is at the search boundary.' if summary['boundary_best'] else ''
         self.status.setText(f"Candidate EI: {summary['EI_n_m2']:.7g} N m²; Cb: {summary['Cb_n_m2_s']:.7g} N m² s; external drag: {summary['external_drag_s_inv']:.7g} s⁻¹.{boundary} "
@@ -215,3 +251,10 @@ class CableFitWindow(QDialog):
             event.ignore()
         else:
             super().closeEvent(event)
+
+
+def accumulate_min(values):
+    best = float('inf')
+    for value in values:
+        best = min(best, value)
+        yield best

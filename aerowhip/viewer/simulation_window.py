@@ -10,41 +10,16 @@ from pyvistaqt import QtInteractor
 
 from aerowhip.viewer.drone_info import roll_pitch_yaw_deg
 from aerowhip.viewer.sources import DisplayFeed, SimulationSource, ReplaySource
+from aerowhip.viewer.time_histories import TimeHistories
+from aerowhip.ui.style import stylesheet
 
 
-STYLE = '''
-QMainWindow, QWidget#flightPage { background: #1b222c; color: #dce4ef; }
-QDockWidget { color: #aab9ca; font-size: 12px; }
-QDockWidget::title { background: #202a36; padding: 8px 10px; }
-QWidget#inspector, QTreeWidget { background: #1b222c; color: #dce4ef; border: 0; }
-QLabel { color: #dce4ef; background: transparent; }
-QLabel#muted { color: #91a3b8; }
-QLabel#section { color: #91a3b8; font-weight: 600; padding-top: 12px; }
-QLabel#objectTitle { font-size: 18px; font-weight: 600; }
-QLabel#badge { background: #253e54; color: #a6d7ff; border-radius: 4px; padding: 4px 9px; }
-QLabel#error { color: #ffa7a7; padding: 8px; background: #442c32; border-radius: 4px; }
-QFrame#playback { background: #202a36; border-top: 1px solid #344252; }
-QPushButton, QToolButton, QComboBox, QDoubleSpinBox { color: #dce4ef; background: #283544;
-    border: 1px solid #415064; border-radius: 4px; padding: 5px 10px; }
-QPushButton:hover, QToolButton:hover { background: #33465c; }
-QPushButton:disabled, QComboBox:disabled { color: #6b7b8c; border-color: #303c4b; }
-QPushButton#primary { color: #ffffff; background: #3478b6; border-color: #3478b6; font-weight: 600; }
-QPushButton#primary:hover { background: #408bcb; }
-QPushButton#primary:disabled { background: #33465c; color: #91a3b8; }
-QComboBox QAbstractItemView { background: #283544; color: #dce4ef; selection-background-color: #3478b6; }
-QCheckBox { color: #b9c7d6; spacing: 6px; }
-QTreeWidget::item { padding: 5px 2px; }
-QTreeWidget::item:selected { background: #2b4965; color: #ffffff; }
-QTreeWidget::item:hover { background: #253444; }
-QHeaderView::section { background: #202a36; color: #91a3b8; border: 0; padding: 5px; }
-QToolBar { background: #202a36; border: 0; border-bottom: 1px solid #344252; spacing: 7px; padding: 7px; }
-QStatusBar { background: #1b222c; color: #91a3b8; border-top: 1px solid #344252; }
-QStatusBar::item { border: 0; }
-QMenuBar, QMenu { background: #202a36; color: #dce4ef; }
-QMenu::item:selected { background: #2b4965; }
-QSlider::groove:horizontal { background: #415064; height: 4px; border-radius: 2px; }
-QSlider::handle:horizontal { background: #72b9f4; width: 12px; margin: -4px 0; border-radius: 5px; }
-QScrollArea { border: 0; background: #1b222c; }
+# Dark flight viewer in the shared visual language (aerowhip.ui.style).
+STYLE = stylesheet(dark=True)+'''
+QLabel#objectTitle { font-size: 17px; font-weight: 600; }
+QLabel#badge { background: #244766; color: #cfe6fb; border-radius: 3px; padding: 3px 8px; }
+QFrame#playback { background: #22272e; border-top: 1px solid #3a424c; }
+QWidget#inspector, QTreeWidget { border: 0; }
 '''
 
 
@@ -159,7 +134,6 @@ class SimulationWindow(QtWidgets.QMainWindow):
         if self.source.has_trajectory and not isinstance(self.source.command_source, FullStateTrajectory):
             self.previous_controller = self.source.command_source, self.source.command_reset
         self.setWindowTitle('AeroWhip · '+self.source.latest.frame.source_label)
-        font = QtGui.QFont('sans-serif'); font.setPixelSize(13); self.setFont(font)
         self.setStyleSheet(STYLE)
         self.resize(*(round(size/self.devicePixelRatioF()) for size in viewer._configuration.viewer.window_size_px))
         self.setMinimumSize(960, 620)
@@ -194,9 +168,13 @@ class SimulationWindow(QtWidgets.QMainWindow):
         scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setMinimumWidth(280)
         self.sidebar = self._dock('Inspector', scroll, QtCore.Qt.DockWidgetArea.RightDockWidgetArea)
+        self.histories = TimeHistories()
+        self.history_dock = self._dock('Time histories · last 10 s', self.histories,
+                                       QtCore.Qt.DockWidgetArea.BottomDockWidgetArea)
         self._build_toolbar()
         menu = self.menuBar().addMenu('View')
         menu.addAction(self.displays.toggleViewAction()); menu.addAction(self.sidebar.toggleViewAction())
+        menu.addAction(self.history_dock.toggleViewAction())
         hint = ('Space  Play / pause    N  Step    T  Reset    R  Frame scene'
                 if self.source.has_playback else 'Read-only display    R  Frame scene')
         self.statusBar().addWidget(label(hint, name='muted'))
@@ -227,6 +205,10 @@ class SimulationWindow(QtWidgets.QMainWindow):
         self.simulation_timer.timeout.connect(viewer._on_timer); self.simulation_timer.start(16)
         self.telemetry_timer = QtCore.QTimer(self)
         self.telemetry_timer.timeout.connect(self.update_telemetry); self.telemetry_timer.start(100)
+        # Sample the time histories faster than the readouts refresh.
+        self.history_timer = QtCore.QTimer(self)
+        self.history_timer.timeout.connect(lambda: self.histories.add(self.source.latest.frame, self.selected_robot))
+        self.history_timer.start(20)
         # Python signal handlers may run inside a VTK render callback. They only
         # set an Event; window/GL destruction is deferred to a Qt timer callback.
         self.shutdown_timer = QtCore.QTimer(self)
@@ -234,6 +216,7 @@ class SimulationWindow(QtWidgets.QMainWindow):
         self.shutdown_timer.start(50)
         self.update_telemetry()
         self.resizeDocks([self.displays, self.sidebar], [220, 300], QtCore.Qt.Orientation.Horizontal)
+        self.resizeDocks([self.history_dock], [210], QtCore.Qt.Orientation.Vertical)
 
     def _dock(self, title, widget, area):
         dock = QtWidgets.QDockWidget(title, self)
@@ -446,10 +429,12 @@ class SimulationWindow(QtWidgets.QMainWindow):
         if signature != self._tree_signature and not self._changing_display:
             self._tree_signature = signature; self._rebuild_tree(snapshot.frame)
         self.panel.update_frame(snapshot.frame, self.selected_robot, error)
+        self.histories.add(snapshot.frame, self.selected_robot)
+        self.histories.redraw()
         self.source_label.setText(snapshot.frame.source_label)
         self.source_label.setToolTip(snapshot.frame.source_label)
         self.status.setText('Error' if error else status)
-        self.status.setStyleSheet('color: #ffbd7b;' if status == 'Stale' or error else '')
+        self.status.setStyleSheet('color: #E69F00;' if status == 'Stale' or error else '')
         self.freshness.setText('Saved arrays · no physics' if self.source.is_replay else
             f'Snapshot age {age*1000:.0f} ms' if snapshot.running or error else 'Paused snapshot')
         if self.source.has_playback:
@@ -501,7 +486,7 @@ class SimulationWindow(QtWidgets.QMainWindow):
             event.accept(); return
         self._closing = True
         self.shutdown_timer.stop()
-        self.simulation_timer.stop(); self.telemetry_timer.stop()
+        self.simulation_timer.stop(); self.telemetry_timer.stop(); self.history_timer.stop()
         if self.controller_panel is not None: self.controller_panel.close()
         self.source.close()
         self.plotter.close()

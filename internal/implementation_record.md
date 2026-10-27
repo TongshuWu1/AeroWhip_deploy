@@ -1183,3 +1183,23 @@ shortfall and its drift with battery. Model decision pending: thrust scaled by l
 voltage in the drone block (replacing the constant effective mass). The motor time constant
 is not resolvable from these tests. `configs/actuators/drone.json` is unchanged.
 
+
+## Dated change note — 2026-10-27 user interfaces reworked
+
+Every window now uses one shared style: `aerowhip/ui/style.py` (colour-blind-safe palette in
+which each colour has one meaning: measured, reference, command, model, error, x/y/z) and
+`aerowhip/ui/plotting.py` (matplotlib canvas with a playback cursor and click-to-seek).
+Hand-painted charts are replaced by matplotlib figures with SI units:
+- training monitor: per-collection return median with a 10–90 % band, outcomes, return
+  decomposition, policy KL against its target, critic explained variance, entropy;
+- saved-motion replays: commanded vs achieved acceleration and tilt, tip velocity, motor
+  thrusts (`aerowhip/ui/motion_plots.py`);
+- take manager: position histories, a tracking-error panel with interval RMS, and a
+  per-marker visibility raster (partial frames are normal);
+- cable review: per-marker labels and chain-length error over flight time;
+- flight viewer: a rolling time-history dock (`aerowhip/viewer/time_histories.py`);
+- cable-fit dialog: a convergence plot.
+
+Behaviour is unchanged except that the policy tester's Run stays disabled until a
+checkpoint is loaded. Checked visually on DISPLAY=:1 (screenshots and the data used are in
+`internal/gui_review.md` and `internal/gui_screenshots/`); live real flight was not tested.

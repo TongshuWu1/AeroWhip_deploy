@@ -42,7 +42,7 @@ class PresetWindow(QtWidgets.QDialog):
         form.addRow('Duration', self.duration)
         self.error = QtWidgets.QLabel()
         self.error.setWordWrap(True)
-        self.error.setStyleSheet('color: #a33131;')
+        self.error.setObjectName('error')
         layout.addWidget(self.error)
         buttons = QtWidgets.QDialogButtonBox(QtWidgets.QDialogButtonBox.StandardButton.Cancel)
         buttons.addButton('Apply', QtWidgets.QDialogButtonBox.ButtonRole.AcceptRole)

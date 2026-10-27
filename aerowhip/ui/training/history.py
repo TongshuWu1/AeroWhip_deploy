@@ -153,9 +153,7 @@ class HistoryTrainingWindow(ui.TrainingWindow):
         if history.warnings:
             details += '\n'+'\n'.join(history.warnings)
         self.live_detail.setText(self.live_detail.text().split('\nHistory:', 1)[0]+'\n'+details)
-        for plot in (self.return_plot, self.reward_plot, self.loss_plot,
-                     self.mechanics_plot, self.valid_plot, self.entropy_plot, self.temperature_plot):
-            plot.setToolTip(plot.toolTip().split('\nHistory:', 1)[0]+'\n'+details)
+        self.curves.setToolTip(self.curves.toolTip().split('\nHistory:', 1)[0]+'\n'+details)
         for index, event in enumerate(getattr(self, 'evaluation_rows', [])):
             item = self.evaluations.item(index, 0)
             if item is not None:

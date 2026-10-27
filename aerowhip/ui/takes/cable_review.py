@@ -5,8 +5,9 @@ spheres joined from the attachment, unlabelled points grey, the drone as a box i
 measured attitude. Markers missing in the frame are drawn as open spheres at an estimate
 between their visible neighbours; the estimate is for display only and never saved. The
 camera follows the attachment and keeps the angle you turn it to. Below, a timeline shows
-how many markers are labelled per frame and the flagged runs (red); the runs are listed on
-the right.
+which markers are labelled in each frame (missing ones are normal: the cable is still
+constrained by the others), the flagged runs (red) and the chain-length error of the labels;
+the runs are listed on the right.
 
 Markers corrected by a person are ringed blue. Mouse: left drag rotates, right drag or wheel zooms, middle drag pans; a left click on a
 point selects it. Keys: Left/Right one frame, Shift +10, PageUp/PageDown 100, N/P next/
@@ -17,14 +18,19 @@ label, A accepts the current flagged run as checked, R resets the view, Ctrl+S s
 import numpy as np
 import pyvista as pv
 import vtk
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-from matplotlib.figure import Figure
+from matplotlib import colormaps
+from matplotlib.colors import ListedColormap
 from pyvistaqt import QtInteractor
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from aerowhip.takes import cable_labels as cl
+from aerowhip.ui import style
+from aerowhip.ui.plotting import PlotCanvas
+from aerowhip.ui.style import ROLE
 
-COLOURS = ['#e6194b', '#f58231', '#ffe119', '#bfef45', '#3cb44b', '#42d4f4', '#4363d8', '#911eb4', '#f032e6', '#a9a9a9']
+# Marker colour runs along the cable (c1 at the drone dark, c10 at the tip light).
+COLOURS = [colormaps['viridis'](x, bytes=False) for x in np.linspace(0, .92, 10)]
+COLOURS = ['#%02x%02x%02x' % tuple(round(255*c) for c in rgba[:3]) for rgba in COLOURS]
 MARKER_RADIUS_M = .014
 PICK_RADIUS_M = .05
 DRONE_BOX_M = (.1, .1, .03)
@@ -53,11 +59,9 @@ class CableReview(QtWidgets.QMainWindow):
         self.plotter.iren.interactor.RemoveObservers('CharEvent')
         self.plotter.track_click_position(self._click, side='left')
 
-        self.figure = Figure(figsize=(12, 1.4), constrained_layout=True)
-        self.timeline_canvas = FigureCanvasQTAgg(self.figure)
-        self.timeline_canvas.setFixedHeight(130)
-        self.timeline = self.figure.add_subplot(111)
-        self.timeline_canvas.mpl_connect('button_press_event', self._timeline_click)
+        self.timeline_canvas = PlotCanvas(self, minimum=(400, 210))
+        self.timeline_canvas.setFixedHeight(230)
+        self.timeline_canvas.seek_requested.connect(self._timeline_seek)
 
         self.info = QtWidgets.QLabel()
         self.info.setTextFormat(QtCore.Qt.RichText)
@@ -86,7 +90,7 @@ class CableReview(QtWidgets.QMainWindow):
         side = QtWidgets.QVBoxLayout()
         for widget in (self.info, legend, self.show_free, self.show_estimate, reset):
             side.addWidget(widget)
-        side.addWidget(QtWidgets.QLabel('Flagged runs (unchecked):'))
+        side.addWidget(QtWidgets.QLabel('Flagged runs, not yet checked'))
         side.addWidget(self.runs, 1)
         for widget in (accept, save, help_text):
             side.addWidget(widget)
@@ -105,6 +109,7 @@ class CableReview(QtWidgets.QMainWindow):
         central = QtWidgets.QWidget(); central.setLayout(main)
         self.setCentralWidget(central)
         self.resize(1600, 1000)
+        style.apply(self)
 
         self.timer = QtCore.QTimer(self)
         self.timer.timeout.connect(lambda: self._goto(min(self.frame+3, self.flight.frames-1)))
@@ -122,10 +127,11 @@ class CableReview(QtWidgets.QMainWindow):
 
     def _build_scene(self):
         p = self.plotter
-        p.set_background('white')
+        p.set_background('#f6f7f9')
         floor = pv.Plane(center=(0, 0, 0), i_size=4, j_size=3, i_resolution=8, j_resolution=6)
         p.add_mesh(floor, style='wireframe', color='#c8c8c8', line_width=1, pickable=False)
-        p.add_mesh(pv.Plane(center=(0, 0, -.002), i_size=4, j_size=3), color='#f2f2f2', pickable=False)
+        p.add_mesh(pv.Plane(center=(0, 0, -.002), i_size=4, j_size=3), color='#e9ecef', lighting=False,
+                   pickable=False)
         p.add_axes(color='black')
         self.free = pv.PolyData(np.zeros((1, 3)))
         self.free_actor = p.add_mesh(self.free, color='#7a7a7a', point_size=9, render_points_as_spheres=True)
@@ -167,19 +173,54 @@ class CableReview(QtWidgets.QMainWindow):
             self.runs.addItem(f'{t:6.2f} s  frames {first}–{last} ({last-first+1})  {", ".join(why)[:60]}')
         if 0 <= current < self.runs.count():
             self.runs.setCurrentRow(current)
-        index = self.labeller.labels.index
-        ax = self.timeline
-        ax.clear()
-        ax.plot((index >= 0).sum(1), color='#3cb44b', lw=.8)
-        for first, last, _ in self.segments:
-            ax.axvspan(first, last+1, color='#e6194b', alpha=.35, lw=0)
-        manual = sorted({f for f, _ in self.labeller.labels.manual})
-        if manual:
-            ax.plot(manual, [10.6]*len(manual), '|', color='#0050ff', ms=8)
-        ax.set_ylim(-.5, 11.2); ax.set_xlim(0, self.flight.frames)
-        ax.set_ylabel('labelled'); ax.set_yticks([0, 5, 10])
-        self.cursor = ax.axvline(self.frame, color='k', lw=1)
-        self.timeline_canvas.draw_idle()
+        self._plot_timeline()
+
+    def _plot_timeline(self):
+        """Per-marker label raster and the chain-length error of the labels, over flight time."""
+        fl, lab = self.flight, self.labeller.labels
+        t = fl.stamps-fl.stamps[0]
+        index = lab.index
+        seen = index >= 0
+        c = self.timeline_canvas
+        with c.style():
+            c.reset()
+            raster, error = c.figure.subplots(2, 1, sharex=True, height_ratios=(1.25, 1))
+            raster.imshow(seen.T.astype(float), aspect='auto', interpolation='nearest', origin='upper',
+                          cmap=ListedColormap(['#ffffff', '#9fb0c0']), vmin=0, vmax=1,
+                          extent=(t[0], t[-1], 9.5, -.5))
+            for first, last, _ in self.segments:
+                raster.axvspan(t[first], t[min(last+1, len(t)-1)], color=ROLE['error'], alpha=.3, linewidth=0)
+            manual = sorted({f for f, _ in lab.manual})
+            if manual:
+                raster.plot(t[manual], [-.9]*len(manual), 'v', color=ROLE['model'], markersize=4, clip_on=False)
+            raster.set_yticks([0, 4, 9], ['c1', 'c5', 'c10'])
+            raster.tick_params(axis='y', labelsize=6.5, length=0)
+            raster.grid(False)
+            raster.set_title(f'Labelled markers (grey) · {seen.sum(1).mean():.2f} of 10 per frame · '
+                             'flagged runs red · corrections ▼', fontsize=8.5)
+            # Adjacent labelled markers: |distance − cable interval| (both directions; flags use 'too far').
+            arc = np.r_[0., fl.arc]
+            worst = np.full(fl.frames, np.nan)
+            for f in range(fl.frames):
+                k = np.flatnonzero(seen[f])
+                if len(k) < 2:
+                    continue
+                q = fl.points[f][index[f, k]]
+                gaps = np.linalg.norm(np.diff(q, axis=0), axis=1)
+                along = np.diff(arc[k+1])
+                adjacent = np.diff(k) == 1
+                if adjacent.any():
+                    worst[f] = 1000*np.max(np.abs(gaps-along)[adjacent])
+            error.plot(t, worst, color=ROLE['measured'], linewidth=.6)
+            error.axhline(1000*cl.LENGTH_TOLERANCE_M, color=ROLE['error'], linestyle='--', linewidth=.8,
+                          label=f'flag tolerance {1000*cl.LENGTH_TOLERANCE_M:.0f} mm')
+            error.set_ylabel('chain error (mm)')
+            error.set_xlabel('flight time (s)')
+            error.set_ylim(0, max(30., float(np.nanpercentile(worst, 99.5)) if np.isfinite(worst).any() else 30.))
+            error.legend(loc='upper right')
+            for ax in (raster, error):
+                c.add_cursor(ax, float(t[self.frame]))
+        c.draw_idle()
 
     # ------------------------------------------------------------------ drawing
     def _draw(self):
@@ -221,8 +262,7 @@ class CableReview(QtWidgets.QMainWindow):
         self.camera_anchor = root.copy()
         self.plotter.render()
 
-        self.cursor.set_xdata([f, f])
-        self.timeline_canvas.draw_idle()
+        self.timeline_canvas.set_cursor(float(fl.stamps[f]-fl.stamps[0]))
         self.slider.blockSignals(True); self.slider.setValue(f); self.slider.blockSignals(False)
         t = fl.stamps[f]-fl.stamps[0]
         missing = [f'c{k+1}' for k in range(10) if index[k] < 0]
@@ -273,9 +313,9 @@ class CableReview(QtWidgets.QMainWindow):
             self.selected = i
             self._draw()
 
-    def _timeline_click(self, event):
-        if event.xdata is not None:
-            self._goto(int(event.xdata))
+    def _timeline_seek(self, time_s):
+        t = self.flight.stamps-self.flight.stamps[0]
+        self._goto(int(np.clip(np.searchsorted(t, time_s), 0, self.flight.frames-1)))
 
     def _selected_marker(self):
         index = self.labeller.labels.index[self.frame]

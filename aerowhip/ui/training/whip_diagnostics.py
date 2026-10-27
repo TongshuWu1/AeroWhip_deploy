@@ -2,150 +2,117 @@
 from time import perf_counter
 
 import numpy as np
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtWidgets
+
+from aerowhip.ui.plotting import PlotCanvas, message
+from aerowhip.ui.style import PALETTE, ROLE
 
 from aerowhip.ui.training.whip_diagnostics_data import WhipDiagnosticsData, recording_choices
 
 
-class DiagnosticCanvas(QtWidgets.QWidget):
+class DiagnosticCanvas(PlotCanvas):
+    """Side and top views (attachment-centred), bending map over time, reach and +X velocity."""
+
     def __init__(self, parent=None):
-        super().__init__(parent)
+        super().__init__(parent, minimum=(580, 470))
         self.data = None
         self.index = 0
-        self.heat = None
-        self.setMinimumSize(580, 470)
-        self.setSizePolicy(QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Expanding)
+        self.set_data(None)
 
     def set_data(self, data):
-        self.data, self.index, self.heat = data, 0, None
-        if data is not None:
-            values = data.density if data.density is not None else data.joint_turn_deg
-            self.heat_max = max(float(np.max(values)), 1e-6)
-            colors = np.array([[15, 20, 40], [53, 40, 102], [136, 70, 134], [225, 125, 89], [255, 234, 150]], float)
-            x = np.clip(values / self.heat_max, 0, 1) * 4
-            lo = np.minimum(x.astype(int), 3)
-            rgb = colors[lo]*(1-(x-lo))[..., None] + colors[lo+1]*(x-lo)[..., None]
-            rgb = np.ascontiguousarray(rgb.transpose(1, 0, 2)[::-1].astype(np.uint8))
-            self.heat = QtGui.QImage(rgb.data, rgb.shape[1], rgb.shape[0], rgb.strides[0], QtGui.QImage.Format.Format_RGB888).copy()
-            # Cache material-track polylines; IDs are geometry associations, not whip numbers.
-            self.tracks = {}
+        self.data, self.index = data, 0
+        with self.style():
+            self.reset()
+            if data is None:
+                message(self.figure.add_subplot(), 'Select a saved motion to inspect whipping diagnostics.')
+                self.draw_idle()
+                return
+            grid = self.figure.add_gridspec(3, 2, height_ratios=(1.25, .9, .8))
+            side, top = self.figure.add_subplot(grid[0, 0]), self.figure.add_subplot(grid[0, 1])
+            heat = self.figure.add_subplot(grid[1, :])
+            reach = self.figure.add_subplot(grid[2, 0], sharex=heat)
+            velocity = self.figure.add_subplot(grid[2, 1], sharex=heat)
+            length = float(data.rest.sum())
+            span = max(1.05*length, float(np.max(abs(data.relative_positions)))*1.05)
+            self.views = []
+            nodes = np.r_[0., data.rest.cumsum()]
+            for ax, dim, title, ylabel in ((side, 2, 'Side view', 'z (m)'), (top, 1, 'Top view', 'y (m)')):
+                ax.set_aspect('equal', adjustable='box')
+                ax.set_xlim(-span, span)
+                ax.set_ylim(-span, span)
+                ax.set_title(title+' · attachment-centred')
+                ax.set_xlabel('x (m)')
+                ax.set_ylabel(ylabel)
+                ax.plot(0, 0, 's', color=ROLE['measured'], markersize=5)
+                cable, = ax.plot([], [], '-o', color=ROLE['model'], linewidth=1.6, markersize=2.5)
+                tip, = ax.plot([], [], 'o', color=ROLE['error'], markersize=4.5)
+                arrow, = ax.plot([], [], '-', color=ROLE['error'], linewidth=1.3)
+                bends, = ax.plot([], [], 'o', markerfacecolor='none', markeredgecolor=PALETTE['orange'],
+                                 markersize=8, markeredgewidth=1.2)
+                for artist in (cable, tip, arrow, bends):
+                    self.animate(artist)
+                self.views.append((dim, cable, tip, arrow, bends, nodes))
+            t = data.time
+            if data.density is not None:
+                values, s = data.density.T, data.grid
+                label = 'bend density (rad/m)'
+            else:
+                values, s = data.joint_turn_deg.T, nodes[1:-1]
+                label = 'joint turn (deg)'
+            image = heat.imshow(values, aspect='auto', origin='lower', cmap='magma', interpolation='nearest',
+                                extent=(t[0], t[-1], float(s[0]), float(s[-1])), vmin=0)
+            colorbar = self.figure.colorbar(image, ax=heat, pad=.01, fraction=.04)
+            colorbar.set_label(label)
+            tracks = {}
             for i, rows in enumerate(data.regions):
                 for region in rows:
                     if set(region['flags']) & {'plateau', 'ambiguous_identity'}:
                         continue
-                    self.tracks.setdefault(region['track_id'], []).append((i, region['centre_m']))
-        self.update()
+                    tracks.setdefault(region['track_id'], []).append((t[i], region['centre_m']))
+            for rows in tracks.values():
+                rows = np.asarray(rows)
+                heat.plot(rows[:, 0], rows[:, 1], color='white', linewidth=.6, alpha=.8)
+            for event in data.events:
+                if t[0] <= event['time_s'] <= t[-1] and event['kind'] in ('armed', 'propagated', 'opening_confirmed'):
+                    heat.axvline(event['time_s'], color=PALETTE['yellow'], linewidth=.8, linestyle='--')
+            heat.set_title('Bending along the cable (white: tracked bend centres)')
+            heat.set_ylabel('arc length (m)')
+            heat.grid(False)
+            reach.plot(t, data.reach*length, color=ROLE['model'], label='+x reach')
+            reach.plot(t, data.tip_height, color=PALETTE['purple'], label='tip height')
+            reach.axhline(0, color=ROLE['reference'], linewidth=.6)
+            reach.set_title('Tip position rel. attachment')
+            reach.set_ylabel('m')
+            reach.set_xlabel('time (s)')
+            reach.legend(loc='best')
+            velocity.plot(t, data.world_outward, color=ROLE['model'], label='world')
+            velocity.plot(t, data.relative_outward, color=PALETTE['orange'], label='rel. attachment')
+            velocity.axhline(0, color=ROLE['reference'], linewidth=.6)
+            velocity.set_title('Tip +x velocity')
+            velocity.set_ylabel('m/s')
+            velocity.set_xlabel('time (s)')
+            velocity.legend(loc='best')
+            for ax in (heat, reach, velocity):
+                self.add_cursor(ax, t[0])
+            heat.tick_params(labelbottom=False)
+        self.set_index(0)
+        self.draw_idle()
 
-    def paintEvent(self, event):
-        p = QtGui.QPainter(self)
-        p.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-        p.fillRect(self.rect(), QtGui.QColor('white'))
-        if self.data is None:
-            p.setPen(QtGui.QColor('#607486'))
-            p.drawText(self.rect(), QtCore.Qt.AlignmentFlag.AlignCenter, 'Select a saved motion to inspect whipping diagnostics.')
+    def set_index(self, index):
+        d = self.data
+        if d is None:
             return
-        d, i = self.data, self.index
-        w, h = self.width(), self.height()
-        def panel(x, y, width, height, title):
-            p.setPen(QtGui.QColor('#213547'))
-            p.drawText(QtCore.QRectF(x+5, y, width-10, 24), QtCore.Qt.AlignmentFlag.AlignCenter, title)
-            return QtCore.QRectF(x+46, y+30, width-62, height-64)
-        for col, dim, title in [(0, 2, 'Side view · X–Z (m)'), (1, 1, 'Top view · X–Y (m)')]:
-            r = panel(col*w/2, 0, w/2, h*.46, title)
-            span = max(1.05*d.length, float(np.max(abs(d.relative_positions)))*1.05)
-            unit = min(r.width(), r.height())/(2*span)
-            r = QtCore.QRectF(r.center().x()-unit*span, r.center().y()-unit*span, 2*unit*span, 2*unit*span)
-            def xy(x, y):
-                return QtCore.QPointF(r.center().x()+unit*x, r.center().y()-unit*y)
-            for k in (-1, -.5, 0, .5, 1):
-                p.setPen(QtGui.QPen(QtGui.QColor('#e2e8ef'), 1))
-                p.drawLine(xy(k*span,-span),xy(k*span,span))
-                p.drawLine(xy(-span,k*span),xy(span,k*span))
-                p.setPen(QtGui.QColor('#607486'))
-                pt = xy(k*span,-span)
-                p.drawText(QtCore.QRectF(pt.x()-20,pt.y()+3,40,18), QtCore.Qt.AlignmentFlag.AlignCenter, f'{k*span:.1f}')
-            p.setPen(QtGui.QColor('#607486'))
-            p.drawText(QtCore.QRectF(r.left()-42,r.top()-6,39,18),QtCore.Qt.AlignmentFlag.AlignRight,f'{span:.1f}')
-            p.drawText(QtCore.QRectF(r.left()-42,r.bottom()-12,39,18),QtCore.Qt.AlignmentFlag.AlignRight,f'{-span:.1f}')
-            p.save();p.setClipRect(r.adjusted(-2,-2,2,2))
-            pts = [xy(v[0],v[dim]) for v in d.relative_positions[i]]
-            p.setPen(QtGui.QPen(QtGui.QColor('#087d79'), 2.5))
-            p.drawPolyline(QtGui.QPolygonF(pts))
-            p.setBrush(QtGui.QColor('#087d79'))
-            for pt in pts: p.drawEllipse(pt, 2.6, 2.6)
-            p.setBrush(QtGui.QColor('#213547')); p.drawRect(QtCore.QRectF(pts[0].x()-4,pts[0].y()-4,8,8))
-            p.setPen(QtGui.QPen(QtGui.QColor('#df9137'), 1.7));p.setBrush(QtCore.Qt.BrushStyle.NoBrush)
-            nodes = np.r_[0.,d.rest.cumsum()]
-            for b in d.regions[i]:
-                center = [np.interp(b['centre_m'],nodes,d.relative_positions[i,:,axis]) for axis in (0,dim)]
-                p.drawEllipse(xy(*center), 6, 6)
-            p.setPen(QtGui.QPen(QtGui.QColor('#c94b52'),2));p.setBrush(QtGui.QColor('#c94b52'))
-            p.drawEllipse(pts[-1],4,4)
-            tip=d.relative_positions[i,-1];v=d.relative_velocities[i,-1]
-            end=xy(tip[0]+.05*v[0],tip[dim]+.05*v[dim]);p.drawLine(pts[-1],end)
-            delta=end-pts[-1];norm=np.hypot(delta.x(),delta.y())
-            if norm>2:
-                ux,uy=delta.x()/norm,delta.y()/norm
-                p.drawPolygon(QtGui.QPolygonF([end, end-QtCore.QPointF(7*ux+3*uy,7*uy-3*ux),end-QtCore.QPointF(7*ux-3*uy,7*uy+3*ux)]))
-            p.restore()
-        unit_label='bend density (rad/m)' if d.density is not None else 'joint turning (deg)'
-        r=panel(0,h*.46,w,h*.25,f'Material bending map · {unit_label} · 0 → {self.heat_max:.2g}')
-        p.drawImage(r,self.heat)
-        start,end=float(d.time[0]),float(d.time[-1]);duration=max(end-start,1e-9)
-        def tx(time): return r.left()+r.width()*(time-start)/duration
-        grid = d.grid if d.grid is not None else np.r_[0.,d.rest.cumsum()][1:-1]
-        low,high=float(grid[0]),float(grid[-1])
-        def sy(s): return r.bottom()-r.height()*(s-low)/max(high-low,1e-9)
-        p.save();p.setClipRect(r)
-        p.setPen(QtGui.QPen(QtGui.QColor('#ffffff'), .9))
-        for rows in self.tracks.values():
-            path=QtGui.QPainterPath();previous=-2
-            for index,s in rows:
-                pt=QtCore.QPointF(tx(d.time[index]),sy(s))
-                path.lineTo(pt) if index==previous+1 else path.moveTo(pt)
-                previous=index
-            p.drawPath(path)
-        for e in d.events:
-            if start<=e['time_s']<=end and e['kind'] in ('armed','propagated','opening_confirmed'):
-                x=tx(e['time_s']);p.setPen(QtGui.QPen(QtGui.QColor('#fcbe64'),1,QtCore.Qt.PenStyle.DashLine))
-                p.drawLine(QtCore.QPointF(x,r.top()),QtCore.QPointF(x,r.bottom()))
-        p.setPen(QtGui.QPen(QtGui.QColor('#3cf4d6'),2))
-        p.drawLine(QtCore.QPointF(tx(d.time[i]),r.top()),QtCore.QPointF(tx(d.time[i]),r.bottom()))
-        p.restore();p.setPen(QtGui.QColor('#607486'))
-        for time in np.linspace(start,end,5):
-            p.drawText(QtCore.QRectF(tx(time)-22,r.bottom()+2,44,18),QtCore.Qt.AlignmentFlag.AlignCenter,f'{time:.2f}')
-        p.drawText(QtCore.QRectF(2,r.top(),40,18),QtCore.Qt.AlignmentFlag.AlignRight,f'{high:.2f} m')
-        p.drawText(QtCore.QRectF(2,r.bottom()-18,40,18),QtCore.Qt.AlignmentFlag.AlignRight,f'{low:.2f} m')
-        self.curves(p,panel(0,h*.71,w/2,h*.29,'Reach / height · attachment-relative (m)'),
-                    [(d.reach*d.length,'#087d79'),(d.tip_height,'#7352bd')], 'teal: positive +X reach   purple: tip height')
-        self.curves(p,panel(w/2,h*.71,w/2,h*.29,'+X velocity (m/s)'),
-                    [(d.world_outward,'#2877c7'),(d.relative_outward,'#d17b25')], 'blue: world   orange: relative   negative = inward')
-
-    def curves(self,p,r,series,legend):
-        d=self.data;finite=np.concatenate([a[np.isfinite(a)] for a,_ in series])
-        low=min(0.,float(finite.min())) if len(finite) else 0.
-        high=max(0.,float(finite.max())) if len(finite) else 0.
-        margin=max((high-low)*.1,.05);low-=margin;high+=margin
-        start,end=d.time[0],d.time[-1];duration=max(end-start,1e-9)
-        def point(t,value):return QtCore.QPointF(r.left()+r.width()*(t-start)/duration,r.bottom()-r.height()*(value-low)/(high-low))
-        p.setPen(QtGui.QPen(QtGui.QColor('#ccd8e2'),1));p.drawRect(r)
-        p.drawLine(point(start,0),point(end,0))
-        for values,color in series:
-            path=QtGui.QPainterPath();active=False
-            for t,value in zip(d.time,values):
-                if not np.isfinite(value):active=False;continue
-                pt=point(t,value)
-                path.lineTo(pt) if active else path.moveTo(pt)
-                active=True
-            p.setPen(QtGui.QPen(QtGui.QColor(color),1.7));p.drawPath(path)
-        p.setPen(QtGui.QPen(QtGui.QColor('#213547'),1,QtCore.Qt.PenStyle.DashLine))
-        p.drawLine(point(d.time[self.index],low),point(d.time[self.index],high))
-        p.setPen(QtGui.QColor('#607486'))
-        for value in (low,high):
-            pt=point(start,value);p.drawText(QtCore.QRectF(r.left()-43,pt.y()-8,38,18),QtCore.Qt.AlignmentFlag.AlignRight,f'{value:.2g}')
-        p.drawText(QtCore.QRectF(r.left(),r.bottom()+2,r.width(),18),QtCore.Qt.AlignmentFlag.AlignCenter,f'{start:.2f} — {end:.2f} s')
-        font=p.font();font.setPointSize(8);p.setFont(font)
-        p.drawText(QtCore.QRectF(r.left()-30,r.bottom()+18,r.width()+60,16),QtCore.Qt.AlignmentFlag.AlignCenter,legend)
+        self.index = i = index
+        tip, velocity = d.relative_positions[i, -1], d.relative_velocities[i, -1]
+        for dim, cable, tip_dot, arrow, bends, nodes in self.views:
+            cable.set_data(d.relative_positions[i, :, 0], d.relative_positions[i, :, dim])
+            tip_dot.set_data([tip[0]], [tip[dim]])
+            # 50 ms of relative tip velocity, drawn as a segment from the tip.
+            arrow.set_data([tip[0], tip[0]+.05*velocity[0]], [tip[dim], tip[dim]+.05*velocity[dim]])
+            centres = [b['centre_m'] for b in d.regions[i]]
+            bends.set_data([np.interp(c, nodes, d.relative_positions[i, :, 0]) for c in centres],
+                           [np.interp(c, nodes, d.relative_positions[i, :, dim]) for c in centres])
+        self.set_cursor(float(d.time[i]))
 
 
 class WhippingDiagnostics(QtWidgets.QWidget):
@@ -189,8 +156,8 @@ class WhippingDiagnostics(QtWidgets.QWidget):
         self.speed.setCurrentIndex(1);controls.addWidget(self.speed)
         self.slider=QtWidgets.QSlider(QtCore.Qt.Orientation.Horizontal);self.slider.valueChanged.connect(self.seek);controls.addWidget(self.slider,1)
         self.clock=QtWidgets.QLabel('—');controls.addWidget(self.clock);layout.addLayout(controls)
-        note=QtWidgets.QLabel('Attachment-centred views; red arrow = relative tip velocity. Orange circles / white tracks = bend centres, not automatically folds.\nFull-history plots are offline context. Recorded opening or validity is not proof of useful whipping.')
-        note.setWordWrap(True);note.setStyleSheet('color:#607486;font-size:11px');layout.addWidget(note)
+        note=QtWidgets.QLabel('Red segment: 50 ms of tip velocity relative to the attachment. Orange circles / white tracks: bend centres (not detected folds).')
+        note.setWordWrap(True);note.setObjectName('note');layout.addWidget(note)
         self.timer=QtCore.QTimer(self);self.timer.setInterval(30);self.timer.timeout.connect(self.tick)
 
     def set_run(self,directory,history):
@@ -243,7 +210,7 @@ class WhippingDiagnostics(QtWidgets.QWidget):
         if self.data is None:return
         self.index=max(0,min(int(index),len(self.data.time)-1));d=self.data;i=self.index
         self.slider.blockSignals(True);self.slider.setValue(i);self.slider.blockSignals(False)
-        self.canvas.index=i;self.canvas.update();self.clock.setText(f'{d.time[i]:.2f} / {d.time[-1]:.2f} s')
+        self.canvas.set_index(i);self.clock.setText(f'{d.time[i]:.2f} / {d.time[-1]:.2f} s')
         def number(value):return f'{value:+.2f}' if np.isfinite(value) else 'undefined'
         def angle(cosine):return f'{np.degrees(np.arccos(np.clip(cosine,-1,1))):.1f}°' if np.isfinite(cosine) else 'undefined'
         rows=d.regions[i];b=max(rows,key=lambda b:b['theta']) if rows else None

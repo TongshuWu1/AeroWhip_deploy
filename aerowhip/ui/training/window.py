@@ -7,7 +7,8 @@ from PySide6 import QtCore, QtWidgets
 from aerowhip.paths import ROOT, project_path
 from aerowhip.experiment import DEFAULT, load
 from aerowhip.learning.artifacts import RUNS, create_run, read_json, save_json, events
-from aerowhip.ui.training.plots import MetricPlot
+from aerowhip.ui import style
+from aerowhip.ui.training.plots import LearningCurves
 from aerowhip.ui.training.preview import EvaluationPreview
 from aerowhip.ui.training.whip_diagnostics import WhippingDiagnostics
 
@@ -135,33 +136,19 @@ class TrainingWindow(QtWidgets.QMainWindow):
         self.config_path=project_path(settings_path); self.current_run=None; self.process=None; self.resume_path=None
         self.replays=[]; self.close_pending=False; self.last_event_count=-1
         central=QtWidgets.QWidget(objectName='trainingPage'); self.setCentralWidget(central)
-        self.setStyleSheet('''
-            QWidget#trainingPage { background: #edf2f6; }
-            QLabel, QGroupBox, QCheckBox { color: #213547; }
-            QGroupBox { border: 1px solid #dce5ec; border-radius: 8px; margin-top: 8px; padding-top: 16px; }
-            QPushButton, QToolButton, QComboBox, QSpinBox { background: white; color: #213547; border: 1px solid #ccd8e2; border-radius: 4px; padding: 6px; }
-            QPushButton:disabled { color: #96a3ad; }
-            QPushButton:hover, QToolButton:hover { background: #e1f2f0; }
-            QComboBox QAbstractItemView, QPlainTextEdit, QTableWidget { background: white; color: #213547; }
-            QTabBar::tab { background: #dce5ec; color: #213547; padding: 9px; }
-            QTabBar::tab:selected { background: white; color: #087d79; }
-            QTabWidget::pane { border: 1px solid #dce5ec; background: #edf2f6; }
-            QProgressBar { border: 1px solid #ccd8e2; border-radius: 4px; color: #213547; background: white; text-align: center; }
-            QProgressBar::chunk { background: #8bd5ca; }
-        ''')
+        style.apply(self)
         layout=QtWidgets.QVBoxLayout(central); layout.setContentsMargins(20,16,20,16); layout.setSpacing(12)
         top=QtWidgets.QHBoxLayout()
-        title=QtWidgets.QLabel('AeroWhip · Training'); title.setStyleSheet('font-size:24px;font-weight:600')
+        title=QtWidgets.QLabel('PPO training'); title.setObjectName('heading')
         top.addWidget(title); top.addStretch()
         self.status=QtWidgets.QLabel('Ready'); top.addWidget(self.status)
-        self.status.setStyleSheet('font-weight: 600; padding: 6px 12px; border: 1px solid palette(mid); border-radius: 6px;')
+        self.status.setObjectName('section')
         self.start_button=QtWidgets.QPushButton('Start'); self.start_button.clicked.connect(self.start)
         self.stop_button=QtWidgets.QPushButton('Stop'); self.stop_button.clicked.connect(self.stop)
         self.save_button=QtWidgets.QPushButton('Save'); self.save_button.clicked.connect(self.save_checkpoint)
-        self.review_button=QtWidgets.QPushButton('Approve motion'); self.review_button.clicked.connect(self.approve_motion)
-        self.review_button.setEnabled(False)
         self.save_button.setToolTip('Request a complete checkpoint at the next training-iteration boundary.')
-        for b in (self.start_button,self.stop_button,self.save_button,self.review_button): b.setMinimumHeight(34); top.addWidget(b)
+        self.start_button.setObjectName('primary')
+        for b in (self.start_button,self.stop_button,self.save_button): top.addWidget(b)
         self.stop_button.setEnabled(False); self.save_button.setEnabled(False)
         layout.addLayout(top)
         self.setup_toggle=QtWidgets.QToolButton(); self.setup_toggle.setCheckable(True)
@@ -189,22 +176,25 @@ class TrainingWindow(QtWidgets.QMainWindow):
         layout.addWidget(setup)
         cards=QtWidgets.QHBoxLayout(); self.cards={}
         for key,label in (('round','Collections'),('episodes','Episodes'),('steps','Environment steps'),('gradient_updates','Gradient updates'),('elapsed','Elapsed')):
-            box=QtWidgets.QGroupBox(label); inner=QtWidgets.QVBoxLayout(box)
-            value=QtWidgets.QLabel('—'); value.setStyleSheet('font-size:21px;font-weight:600'); inner.addWidget(value); cards.addWidget(box); self.cards[key]=value
+            box=QtWidgets.QGroupBox(label); inner=QtWidgets.QVBoxLayout(box); inner.setContentsMargins(6,2,6,2)
+            value=QtWidgets.QLabel('—'); value.setObjectName('value'); inner.addWidget(value); cards.addWidget(box); self.cards[key]=value
         layout.addLayout(cards)
         self.live_detail=QtWidgets.QLabel('No active worker. Start a new experiment or resume a checkpoint.')
-        self.live_detail.setWordWrap(True); layout.addWidget(self.live_detail)
+        self.live_detail.setWordWrap(True); self.live_detail.setObjectName('muted'); layout.addWidget(self.live_detail)
         self.budget_progress=QtWidgets.QProgressBar(); self.budget_progress.setRange(0,1000)
-        self.budget_progress.setMinimumHeight(22)
         self.budget_progress.setFormat('No run selected'); layout.addWidget(self.budget_progress)
         browser=QtWidgets.QHBoxLayout(); self.runs=QtWidgets.QComboBox(); self.runs.currentIndexChanged.connect(self.select_run)
         self.runs.setMinimumWidth(360)
         refresh=QtWidgets.QPushButton('Refresh runs'); refresh.clicked.connect(lambda:self.refresh_runs())
-        browser.addWidget(QtWidgets.QLabel('Dashboard / charts / saved results')); browser.addWidget(self.runs,1); browser.addWidget(refresh)
+        browser.addWidget(QtWidgets.QLabel('Run')); browser.addWidget(self.runs,1); browser.addWidget(refresh)
         replay_browser=QtWidgets.QPushButton('Replay browser…'); replay_browser.clicked.connect(self.open_replay_browser)
         browser.addWidget(replay_browser)
         layout.addLayout(browser)
         self.tabs=QtWidgets.QTabWidget(); layout.addWidget(self.tabs,1)
+        self.curves=LearningCurves()
+        self.curves.setToolTip('Training: median and 10–90 % of all episodes of each collection. '
+                               'Evaluation: one deterministic fixed initial case per marker.')
+        self.tabs.addTab(self.curves,'Learning curves')
         overview=QtWidgets.QWidget(); overview_layout=QtWidgets.QVBoxLayout(overview)
         result_box=QtWidgets.QWidget(); result_layout=QtWidgets.QHBoxLayout(result_box)
         result_layout.setContentsMargins(0,0,0,0)
@@ -217,22 +207,9 @@ class TrainingWindow(QtWidgets.QMainWindow):
         result_layout.addWidget(result_details)
         overview_layout.addWidget(result_box)
         self.preview=EvaluationPreview(); overview_layout.addWidget(self.preview,1)
-        self.tabs.addTab(overview,'Overview · latest motion')
+        self.tabs.addTab(overview,'Latest evaluation')
         self.whip_diagnostics=WhippingDiagnostics()
         self.tabs.addTab(self.whip_diagnostics,'Whipping diagnostics')
-        curves=QtWidgets.QWidget(); chartgrid=QtWidgets.QGridLayout(curves)
-        self.return_plot=MetricPlot('Episode return'); self.mechanics_plot=MetricPlot('Whipping event')
-        self.valid_plot=MetricPlot('Valid episodes',limits=(0,1)); self.loss_plot=MetricPlot('Learner losses')
-        for i,p in enumerate((self.return_plot,self.mechanics_plot,self.valid_plot,self.loss_plot)): chartgrid.addWidget(p,i//2,i%2)
-        self.tabs.addTab(curves,'Learning curves')
-        self.reward_plot=MetricPlot('Event reward components')
-        self.tabs.addTab(self.reward_plot,'Reward breakdown')
-        exploration=QtWidgets.QWidget(); exploration_layout=QtWidgets.QVBoxLayout(exploration)
-        self.entropy_plot=MetricPlot('Normalized-action entropy (nats)')
-        self.entropy_plot.setToolTip('Measured on an optimizer minibatch, not a success metric. Continuous-action entropy can be negative. A coefficient or scheduled target does not guarantee achieved entropy.')
-        self.temperature_plot=MetricPlot('Entropy weight')
-        exploration_layout.addWidget(self.entropy_plot); exploration_layout.addWidget(self.temperature_plot)
-        self.tabs.addTab(exploration,'Exploration')
         results=QtWidgets.QWidget(); result_layout=QtWidgets.QVBoxLayout(results)
         self.evaluations=QtWidgets.QTableWidget(0,7); self.evaluations.setHorizontalHeaderLabels(['Iteration','Return','Mechanics','Strike','Valid','Outside workspace (s)','Workspace cost'])
         self.evaluations.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
@@ -242,7 +219,7 @@ class TrainingWindow(QtWidgets.QMainWindow):
         replayrow=QtWidgets.QHBoxLayout()
         for label,slot in (('Replay selected',lambda:self.open_replay('selected')),('Replay latest',lambda:self.open_replay('latest')),('Replay best',lambda:self.open_replay('best'))):
             button=QtWidgets.QPushButton(label); button.clicked.connect(slot); replayrow.addWidget(button)
-        result_layout.addLayout(replayrow); self.tabs.addTab(results,'Results')
+        result_layout.addLayout(replayrow); self.tabs.addTab(results,'Evaluations')
         self.log=QtWidgets.QPlainTextEdit(); self.log.setReadOnly(True); self.log.setMaximumBlockCount(6000); self.tabs.addTab(self.log,'Log')
         self.timer=QtCore.QTimer(self); self.timer.timeout.connect(self.poll); self.timer.start(750)
         self.update_description(); self.refresh_runs()
@@ -372,10 +349,6 @@ class TrainingWindow(QtWidgets.QMainWindow):
         if self.current_run and self.process:
             (self.current_run/'save.request').touch(); self.status.setText('Save requested · next iteration boundary')
 
-    def approve_motion(self):
-        self.show_text_details('No automatic curriculum',
-            'Each experiment has one fixed reward and does not advance to another task automatically.')
-
     def read_output(self):
         if self.process:
             text=bytes(self.process.readAllStandardOutput()).decode('utf-8',errors='replace')
@@ -413,13 +386,10 @@ class TrainingWindow(QtWidgets.QMainWindow):
         self.poll()
 
     def poll(self):
-        self.review_button.setEnabled(False)
         if self.current_run and self.process:
             try:
                 progress=read_json(self.current_run/'progress.json')
                 phase=progress.get('phase')
-                pending=phase=='curriculum_review'
-                self.review_button.setEnabled(pending)
                 if phase:
                     label='Iteration completed' if phase=='round' else phase.replace('_',' ').capitalize()
                     if (self.current_run/'stop.request').exists() and phase not in ('stopped','failed','completed','plateau_stopped'):
@@ -449,11 +419,6 @@ class TrainingWindow(QtWidgets.QMainWindow):
         self.update_overview(directory,history,selected)
         self.whip_diagnostics.set_run(directory,history)
         scale=selected['ppo']['reward_scale']
-        self.loss_plot.title='PPO losses (last minibatch)'
-        self.return_plot.title=f'Episode return (reward ×{scale:g})'
-        self.reward_plot.title=f'Event reward components (×{scale:g})'
-        self.return_plot.setToolTip('Training reward units. Original task returns are retained in the log; compare runs using the same scale.')
-        self.evaluations.setHorizontalHeaderLabels(['Iteration',f'Return ×{scale:g}','Mechanics','Strike','Valid','Outside workspace (s)',f'Workspace cost ×{scale:g}'])
         rounds=[e for e in history if e['phase']=='round']; evaluations=[e for e in history if e['phase']=='evaluation']
         rows=evaluations
         self.evaluation_rows=rows
@@ -461,31 +426,11 @@ class TrainingWindow(QtWidgets.QMainWindow):
             latest=history[-1]
             for key in ('round','episodes','steps','gradient_updates'):
                 item=next((e[key] for e in reversed(history) if key in e),None)
-                self.cards[key].setText(str(item) if item is not None else '—')
+                self.cards[key].setText(f'{item:,}' if isinstance(item,int) else str(item) if item is not None else '—')
             seconds=int(latest.get('elapsed_s',0)); self.cards['elapsed'].setText(f'{seconds//3600:02}:{seconds//60%60:02}:{seconds%60:02}')
-        self.return_plot.set_series([
-            ('Training',[(e['round'],scale*e['return_mean']) for e in rounds],False),
-            ('Evaluation',[(e['round'],scale*e['evaluation_return']) for e in evaluations],False),
-            ('Best',[(e['round'],scale*e['best_return']) for e in evaluations],True)])
-        self.mechanics_plot.title='Continuous output diagnostics · not success rate'
-        self.mechanics_plot.set_series([(label,[(e['round'],e['components'].get(key)) for e in rounds],False)
-            for key,label in (('peak_reward_rate','Peak rate'),('fold_support_integral_s','Fold support (s)'),
-                              ('positive_output_duration_s','Output duration (s)'))])
-        self.reward_plot.title='Continuous reward and costs'
-        self.reward_plot.set_series([(label,[(e['round'],e['components'].get(key)) for e in rounds],False)
-            for key,label in (('continuous_whip_credit','Accrued output'),('workspace_cost','Workspace cost'),
-                              ('failure_cost','Numerical abort cost'),('net_episode_return','Net return'))])
-        self.valid_plot.title='Completion and physical-envelope diagnostics'
-        self.valid_plot.set_series([(label,[(e['round'],e['components'].get(key)) for e in rounds],False)
-            for key,label in (('completed_horizon','Full horizon'),('physical_violation','Physical violation'),
-                              ('numerically_valid','Numerically valid'))])
+        self.curves.set_history(directory,history,selected)
         self.evaluations.setHorizontalHeaderLabels(['Collection',f'Return ×{scale:g}','Accrued output',
             'Full horizon','Valid','Outside workspace (s)','Workspace cost'])
-        self.loss_plot.set_series([(label,[(e['round'],e.get(key)) for e in rounds],False) for key,label in (('critic_loss','Critic'),('actor_loss','Actor'))])
-        exploration=[e for e in history if e['phase']=='exploration']
-        self.entropy_plot.set_series([('Measured',[(e['round'],e.get('entropy')) for e in exploration],False)])
-        self.temperature_plot.title='PPO entropy bonus coefficient'
-        self.temperature_plot.set_series([('Coefficient',[(e['round'],e.get('entropy_weight')) for e in exploration],False)])
         self.evaluations.setRowCount(len(rows))
         for i,e in enumerate(rows):
             outside=e.get('workspace',{}).get('outside_duration_s')

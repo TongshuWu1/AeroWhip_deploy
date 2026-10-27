@@ -191,5 +191,11 @@ python scripts/train.py --start
 
 This opens the Training window and starts a fresh run of the default experiment
 (without `--start` it only opens the window). Runs are written to `runs/ppo/`.
+The window's learning curves show, per collection, the median and 10–90 % range of the
+training episode returns, the deterministic evaluation return (one fixed initial case),
+episode outcomes, the return decomposition, the policy KL after each update, the critic's
+explained variance and the policy entropy. Saved evaluations replay with the commanded
+(after delay) and achieved drone acceleration and tilt, cable-tip velocity and motor
+thrusts over time.
 `--settings <experiment.json>` selects another experiment file; `--resume
 <checkpoint.pt>` continues a run exactly, changing at most its episode budget.

@@ -52,8 +52,10 @@ python scripts/label_cable.py --auto <flight folder> ...   # label and save, no 
 python scripts/label_cable.py <flight folder>              # review window
 ```
 
-The review window shows the frame's cloud in 3D with the labelled cable, a timeline of
-labelled markers and flagged runs, and display-only estimates for missing markers. A
+The review window shows the frame's cloud in 3D with the labelled cable (markers coloured
+from c1 at the drone to c10 at the tip), display-only estimates for missing markers, and,
+over flight time, which markers are labelled in each frame, the flagged runs and the
+length error between adjacent labelled markers against the flag tolerance. A
 click selects a point; 1–9, 0 label it c1–c10; Delete marks the selected marker not
 visible; Backspace returns it to automatic; A accepts a flagged run; Ctrl+S saves.
 
