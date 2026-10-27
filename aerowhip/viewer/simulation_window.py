@@ -133,7 +133,7 @@ class SimulationWindow(QtWidgets.QMainWindow):
         from aerowhip.trajectories.full_state import FullStateTrajectory
         if self.source.has_trajectory and not isinstance(self.source.command_source, FullStateTrajectory):
             self.previous_controller = self.source.command_source, self.source.command_reset
-        self.setWindowTitle('AeroWhip · '+self.source.latest.frame.source_label)
+        self.setWindowTitle('AeroWhip Simulator')
         self.setStyleSheet(STYLE)
         self.resize(*(round(size/self.devicePixelRatioF()) for size in viewer._configuration.viewer.window_size_px))
         self.setMinimumSize(960, 620)
