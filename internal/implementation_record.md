@@ -1120,5 +1120,9 @@ within ±6 mm), where the model gave 146 mm (attachment −0.051 m plus 0.095 m 
 user chose to correct the model: `attachment.position_tracking_m` −0.051 → −0.0423 m in
 `configs/physics/drone_cable.json`, both scenes, and the replay window (which now reads
 the scene value). The marker spacing along the cable (0.095, then 0.1 m) is unchanged,
-measured on the cable. Checked: tests; equivalence reference re-recorded.
+measured on the cable. Checked: tests. The equivalence reference could NOT be re-recorded:
+`scripts/equivalence_check.py --record` crashed (core dump) on this machine, one of several
+unexplained crashes that night (container Python, loginctl, PyCharm twice); the saved
+reference still corresponds to the model before this change and the check will report
+differences until it is re-recorded on a healthy machine.
 
