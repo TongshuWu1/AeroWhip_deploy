@@ -1126,3 +1126,29 @@ unexplained crashes that night (container Python, loginctl, PyCharm twice); the 
 reference still corresponds to the model before this change and the check will report
 differences until it is re-recorded on a healthy machine.
 
+## Dated change note — 2026-10-27 first fits on the calibration flights
+
+New `aerowhip/takes/calibration_flights.py` loads a calibration flight folder (50 Hz host
+log, OptiTrack poses on their true stamps, cable labels with gaps) and cuts gap-free 2 s
+windows per log phase, with the acceleration command in force at each frame (zero-order
+hold, trims stripped) and a seen-mask per marker. OptiTrack ran at 99.5 Hz with bunched
+stamps (median step 9.65 ms); windows carry true stamps. New
+`aerowhip/fitting/calibration_cable.py`: measured attachment (true stamps, first-knot
+velocity from the initial state) drives the native prescribed cable; loss = RMS over seen
+markers; multipliers on EI, Cb, drag. New `aerowhip/fitting/calibration_drone.py`: native
+coupled runtime in direct-acceleration mode (kp = kv = 0, negligible cable) driven by the
+sent commands on drone-only flights; parameters: acceleration gain, attitude-frequency
+scale, extra delay. The old Motive-CSV take path is untouched.
+
+Indicative results (this machine was faulting; see below): on 33 windows from six cable
+flights a 6×6 grid gives Cb ×4, drag ×4 at 37 mm RMS against 63 mm for the base; EI has no
+effect; on a drone-only 8 m/s² line window the base drone model is 1.1 m RMS off over 2 s
+(the delivered acceleration is ~0.85 of the command and the model has no such gain).
+
+Machine fault: 33 kernel-logged crashes in 24 h (libusb ×15, python ×5, CUDA ×2, systemd,
+the desktop app) at different addresses inside the interpreter binary, after runs
+complete; no OOM, temperatures normal. Treated as a hardware (RAM) fault: the equivalence
+reference was not re-recorded, and the fit numbers above must be reproduced on a healthy
+machine before use. `scripts/equivalence_check.py` has an untested fresh-process PPO
+variant in `git stash`.
+
