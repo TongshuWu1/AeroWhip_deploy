@@ -1088,3 +1088,25 @@ The user re-weighed the new cable: 17 g with markers, not 16 g. `total_mass_kg` 
 (0.145 + 0.017) kg × g / 4 = 0.39717 N per motor. Geometry unchanged. Checked: tests, the
 hanging-cable rest check on both engines; equivalence reference re-recorded.
 
+## Dated change note — 2026-10-27 cable labels from the marker cloud
+
+The companion flight script now records every OptiTrack marker cloud during a cable
+flight (`cloud.jsonl`). New `aerowhip/takes/cable_labels.py` labels the cable markers from
+it (candidate filtering, an arc-distance start from at least six unambiguous markers, the
+existing `CableTracker`, flags) and reconstructs hidden markers into a separate file with a
+method per position; `aerowhip/ui/takes/cable_review.py` is a 3D review and correction
+window; `scripts/label_cable.py` runs either. See docs/data_and_fitting.md. Design
+decisions with the user: OptiTrack does not see every marker in every frame, so partial
+frames are valid data, ten markers are never forced, and reconstruction is never saved as
+a measurement; an assisted auto-fill pass was tried and dropped (slow, little gain).
+
+Checked: all ten 2026-10-27 cable flights labelled (markers seen per frame 9.7–10.0; all
+ten in 77–100 % of usable frames); reconstruction accuracy on hidden known markers (time
+gaps 1–2 mm, interior 5–10 mm, free end 10–20 mm median); the 3D review window offscreen
+only (opens, draws ~1 ms per frame). The per-flight report is in the companion
+repository's `calibration_data/LABELLING_REPORT.md`. Found: in hover every marker is
+8–12 mm closer to the modelled attachment than its arc distance; c1 is 0.137 m below the
+tracking origin in the body frame against 0.146 m modelled (attachment −0.051 m plus
+0.095 m), so the attachment offset or the first marker distance is off by about 9 mm; not
+yet changed in the model. Not checked: the window on screen; manual review of the flagged
+runs; the fitting tools do not read these files yet.

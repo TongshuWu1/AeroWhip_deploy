@@ -1,9 +1,58 @@
 # Flight data and model fitting
 
-> The recording pipeline is being redesigned: one live recorder (drone pose, raw
-> markers with Motive frame numbers, commands and motor data on one clock), with
-> cable-marker labels added offline from Motive and joined by frame number. This
-> page describes the current take format and tools.
+Two recording formats exist: calibration flights recorded by the companion
+repository's flight script (below), and the earlier takes (Motive CSV plus logger
+sidecars, further down). The fitting tools currently read the earlier takes.
+
+## Calibration flights
+
+The companion repository (`crazyswarm2_jazzy_whipping`, `DATA_COLLECTION.md`) flies a
+fixed series through the acceleration interface and writes one folder per flight under
+`calibration_data/<motion>/`: `parameters.json`, `flight.jsonl` (50 Hz host log),
+`poses.jsonl` (every OptiTrack drone pose) and, with the cable, `cloud.jsonl` (every
+OptiTrack marker cloud, unlabelled, on the same stamps as `poses.jsonl`).
+
+### Cable labels from the marker cloud
+
+`aerowhip.takes.cable_labels` labels the cable markers c1…c10 from `cloud.jsonl`:
+
+- **Candidates:** points further than 7 cm from the drone's tracking origin; points
+  closer than 1 cm to each other are merged.
+- **Start:** the first frame where at least six markers each have exactly one candidate
+  at their distance along the cable from the attachment (±2 cm), and no marker has two.
+  Markers OptiTrack does not see stay unlabelled. This works for a swaying cable.
+- **Tracking:** the geometric/temporal `CableTracker` (beam search over predicted
+  positions with exact cable-length constraints) labels every later frame.
+- **Flags:** a marker that is unlabelled while an unassigned point lies where it is
+  expected, low tracker confidence, a neighbour further than the cable allows, and labels
+  moving more than 8 cm between frames. OptiTrack often does not see every marker; a
+  missing marker alone is normal and not flagged.
+
+Labels go to `cable_labels.npz` (positions with NaN where a marker was not seen, point
+indices, source, confidence, manual labels, checked frames) and a summary
+`cable_labels.json`. Gaps are kept: the labels are measurements only.
+
+### Reconstruction of hidden markers
+
+`reconstruct` fills the gaps separately, into `cable_reconstruction.npz`, with a method
+per position: a marker hidden for at most 10 frames between two measurements is
+interpolated in time (cubic, with the velocities at both ends); a marker with known
+markers on both sides along the cable is placed at the cable distances from its two
+nearest known neighbours, closest to its motion prediction; markers past the last known
+one continue its direction. Measured against hidden known markers on four flights: time
+gaps 1–2 mm, interior markers 5–10 mm, the free end 10–20 mm with outliers. The fit should
+use measured markers as data and the reconstruction only where a complete cable is
+needed (for example a simulation's initial cable state).
+
+```bash
+python scripts/label_cable.py --auto <flight folder> ...   # label and save, no window
+python scripts/label_cable.py <flight folder>              # review window
+```
+
+The review window shows the frame's cloud in 3D with the labelled cable, a timeline of
+labelled markers and flagged runs, and display-only estimates for missing markers. A
+click selects a point; 1–9, 0 label it c1–c10; Delete marks the selected marker not
+visible; Backspace returns it to automatic; A accepts a flagged run; Ctrl+S saves.
 
 ## Takes
 
