@@ -1,6 +1,6 @@
 {
   "drone": {
-    "mass_kg": 0.146,
+    "mass_kg": 0.145,
     "body_drag_s_inv": [
       0.5179687499999999,
       0.5179687499999999,
@@ -44,7 +44,7 @@
     "position_tracking_m": [
       0,
       0,
-      -0.0423
+      -0.055
     ],
     "transmit_direct_moment": true,
     "tangent_body": [
@@ -54,10 +54,10 @@
     ]
   },
   "cable": {
-    "total_mass_kg": 0.017,
+    "total_mass_kg": 0.016,
     "diameter_m": 0.0035,
     "marker_interval_lengths_m": [
-      0.095,
+      0.085,
       0.1,
       0.1,
       0.1,

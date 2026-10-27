@@ -67,7 +67,9 @@ def test_zero_action_holds_hover():
     env = make(2)
     returns, valid, _ = run(env)
     drift = (env.history['drone_positions']-env.history['drone_positions'][:, :1]).norm(dim=-1).max()
-    assert float(drift) < 1e-3 and bool(valid.all())
+    # The firmware commands integer PWM: one count is ~4e-5 of the hover thrust, up to 3e-4 m/s^2
+    # of residual acceleration, i.e. up to ~2.5 mm over the 4 s episode.
+    assert float(drift) < 2.5e-3 and bool(valid.all())
 
 
 def test_runs_are_reproducible_and_lanes_independent():

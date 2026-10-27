@@ -5,22 +5,22 @@
     [
       0.049,
       -0.049,
-      0
+      0.008
     ],
     [
       -0.049,
       -0.049,
-      0
+      0.008
     ],
     [
       -0.049,
       0.049,
-      0
+      0.008
     ],
     [
       0.049,
       0.049,
-      0
+      0.008
     ]
   ],
   "yaw_torque_per_thrust_m": [
@@ -54,5 +54,5 @@
     0.3971693249999999
   ],
   "motor_layout": "crazyflie legacy mixer: M1 front-right, M2 rear-right, M3 rear-left, M4 front-left; x forward, y left",
-  "calibration_note": "arm measured 2026-10-27: adjacent motor centres 9.8 cm (square), so +-0.049 m per body axis (arm 0.0693 m); response time from stage 2 refit with the arm fixed (runs/calibration_2026-10-27/drone_fit_fixed_arm.json)"
+  "calibration_note": "arm measured 2026-10-27: adjacent motor centres 9.8 cm (square), so +-0.049 m per body axis (arm 0.0693 m); propeller plane measured 0.010 m below the tracking origin (marker plane), i.e. 0.008 m above the centre of mass (0.018 m below the origin); response time from stage 2, to be refitted with the measured geometry"
 }
