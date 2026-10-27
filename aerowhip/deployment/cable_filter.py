@@ -17,6 +17,22 @@ No learned components. Costs per frame are O(markers x points) NumPy operations.
 import numpy as np
 
 MARKERS = 10
+DRONE_RADIUS_M = .07        # points this close to the tracking origin are the drone's markers
+DUPLICATE_RADIUS_M = .01    # points this close together are one marker
+
+
+def cable_candidates(points, drone_position, *, drone_radius_m=DRONE_RADIUS_M, duplicate_radius_m=DUPLICATE_RADIUS_M):
+    """The cloud points that may be cable markers: not the drone's own markers (within
+    drone_radius_m of the tracking origin), duplicates merged (the first of points closer than
+    duplicate_radius_m is kept). Same preprocessing offline (cable labels) and in simulation."""
+    xyz = np.asarray(points, float).reshape(-1, 3)
+    xyz = xyz[np.isfinite(xyz).all(1)]
+    xyz = xyz[np.linalg.norm(xyz-np.asarray(drone_position, float), axis=1) > drone_radius_m]
+    kept = []
+    for q in xyz:
+        if not kept or np.min(np.linalg.norm(np.array(kept)-q, axis=1)) > duplicate_radius_m:
+            kept.append(q)
+    return np.array(kept, float).reshape(-1, 3)
 
 
 class CableFilter:

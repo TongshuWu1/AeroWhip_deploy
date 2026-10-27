@@ -52,12 +52,15 @@ class EnvironmentConfig:
     workspace: CylinderWorkspace
     maximum_tilt_deg: float
     minimum_cable_height_m: float
+    sensing: object           # SensingConfig: the OptiTrack model the actor observes through
 
     @classmethod
     def from_dict(cls, raw):
+        from .sensing import SensingConfig
         require_keys(cls, raw, 'environment')
         require_keys(CylinderWorkspace, raw['workspace'], 'environment.workspace')
-        return cls(**dict(raw, workspace=CylinderWorkspace(**raw['workspace'])))
+        return cls(**dict(raw, workspace=CylinderWorkspace(**raw['workspace']),
+                          sensing=SensingConfig.from_dict(raw['sensing'])))
 
     def __post_init__(self):
         object.__setattr__(self, 'duration_s', number('duration_s', self.duration_s))

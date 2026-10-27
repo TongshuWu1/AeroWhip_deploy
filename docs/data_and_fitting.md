@@ -32,6 +32,31 @@ clouds frame by frame and is scored against these labels; its output is kept bes
 (`cable_labels_filter.npz`). `python scripts/label_cable.py <folders>` opens the review
 window to inspect either labelling and correct it by hand.
 
+### OptiTrack sensing statistics
+
+The training environment lets the policy observe through a model of the cameras
+(`aerowhip.envs.sensing`), identified from the same recordings by
+`scripts/identify_sensing.py`. Two levels are kept apart. At the camera level, the points
+within the cable's reach of the attachment are counted against the ten markers: a shortfall
+is a marker the cameras did not report. On the nine cable flights of 2026-10-27 the cameras
+missed at least one marker in 0.1–4.4 % of the frames (the vertical flight worst), and the
+per-marker, per-frame hazard of disappearing is 8·10⁻⁴ at rest, 1–3·10⁻⁴ between 0.25 and
+4 m/s, 7·10⁻⁴ at 4–8 m/s and 0.035 above 8 m/s (22 frames); a hidden marker reappears with
+probability 0.32 per frame (from the filter's labels; the camera-level run length is not
+observable). White position noise of a resting marker is 0.1 mm per axis (drone rigid body
+0.02 mm). The cloud also holds the drone's own markers (two of them 8–9 cm from the tracking
+origin, beyond the 7 cm exclusion) and about three static points elsewhere in the room. At
+the label level, the live filter leaves more gaps than the cameras do (2.6–9.9 % of frames
+on the slow flights, 19 % on the whip flight) because of ambiguous points near the cable.
+`scripts/validate_sensing.py` scores the model at this level: the reconstructed cable of each
+flight is turned into synthetic clouds, the filter labels them, and its label statistics are
+compared with the filter's labels on the real clouds. With the adopted values the synthetic
+clouds give the same order of gaps (slow flights 1.0–2.3 % versus 0.5–9.9 % real, whip 13 %
+versus 19 %), so the model is somewhat optimistic on the fastest motion. The absolute
+capture-to-host latency cannot be measured from these files (receipt jitter is below 0.5 ms;
+the clock offset needs the onboard estimate against OptiTrack), so the latency is an assumed
+range of 0–2 frames, drawn per lane and episode.
+
 ### Reconstruction of hidden markers
 
 `reconstruct` fills the gaps separately, into `cable_reconstruction.npz`, with a method

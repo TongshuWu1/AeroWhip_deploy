@@ -1380,3 +1380,58 @@ above hover are the previous assumptions. The firmware's state estimate is the t
 attitude bias yet). Drone-only identification could be improved by a search that does not stall at
 the delay bound. Coupled validation table with the adopted configuration:
 `runs/calibration_2026-10-27/coupled_validation_adopted.json` (`validate_coupled.py --adopted`, every row reproduced twice): cable shape 25.0–66.6 mm on the fitting flights, held out random_high 45.1 mm and whip 70.6 mm (previous identified-law coupled validation: 60.0 and 73.7); tip 39–131 mm; drone debiased 32–103 mm (line_star worst), held out random_high 46.6 and whip 54.3 (previous 54.7 and 54.2).
+
+## Dated change note — 2026-10-28 OptiTrack sensing model and the live cable filter in the environment (branch `engine-v2`)
+
+Design step 3 of [simulation_package_design.md](simulation_package_design.md) (approved 2026-10-28).
+No reward, task or physics change.
+
+- New [envs/sensing.py](../aerowhip/envs/sensing.py): `SensingConfig` (the `environment.sensing`
+  section of the experiment file, exact keys) and `OptiTrackSensor`, one per lane. Each 100 Hz frame
+  the sensor turns the true state into the cloud the cameras would report — the ten markers minus
+  those hidden by a per-marker visible/hidden Markov chain (hazard of hiding piecewise constant in
+  the marker's speed, constant reappearance probability), white position noise, the drone's own
+  rigid-body markers (body frame) and static room points, in random order — queues it for the lane's
+  latency (drawn per episode from `latency_frames`, uniform), preprocesses it as the offline labeller
+  does (`cable_filter.cable_candidates`: 7 cm drone exclusion, 1 cm duplicate merge, now shared) and
+  runs the live `CableFilter` on it. The first frame of an episode is complete (the policy would not
+  be started before the filter has labelled the hanging cable); until the latency queue has filled the
+  policy sees that first frame. Draws are a function of (`sensing_seed`, lane).
+- [envs/batch_environment.py](../aerowhip/envs/batch_environment.py): the actor frame now holds the
+  sensed pose (delayed), the filter's node positions and velocities relative to the sensed attachment,
+  and ten marker confidences (new slots after the cable velocities); motors/applied command stay critic
+  only. Frame 106 columns, actor 98, critic 186 (unchanged content: true state). History gains
+  `sensed_cable_positions` and `sensed_confidence`; replay arrays gain `sensing_latency_frames`;
+  provenance records the sensing settings.
+- Identification, [fitting/sensing_statistics.py](../aerowhip/fitting/sensing_statistics.py) and
+  [scripts/identify_sensing.py](../scripts/identify_sensing.py) on the nine cf_2 flights
+  (`runs/calibration_2026-10-27/sensing_statistics.json`). Camera level (points within the cable's
+  reach against ten markers): frames with a missing marker 0.1–4.4 % (vertical worst); per-marker
+  per-frame hazard 7.8·10⁻⁴ at rest, 1.3–2.5·10⁻⁴ for 0.25–4 m/s, 6.5·10⁻⁴ for 4–8 m/s, 0.035 above
+  8 m/s (22 frames); reappearance 0.3155 per frame (label level); resting-marker white noise 0.097 mm
+  per axis (drone 0.02 mm); receipt jitter < 0.5 ms; stamps bunched 5–16 ms. Drone body markers at
+  (9,1,0), (−8,−2,0), (0,−4,0), (0,5,0) cm; static room points at about (3.3,−0.3,0.05),
+  (−0.55,3.9,0.7), (2.0,3.2,0.9) m. Adopted as `environment.sensing` in the v6 experiment file.
+  Latency range 0–2 frames is **assumed** (not measurable from these files).
+- Validation, [scripts/validate_sensing.py](../scripts/validate_sensing.py)
+  (`runs/calibration_2026-10-27/sensing_validation.json`, reproduced twice): per flight the longest
+  completely reconstructed cable span becomes the 'true' cable, synthetic clouds go through the
+  filter, and its label statistics are compared with the same filter's labels on the real clouds
+  (`cable_labels_filter.npz`). Frames with a label gap, synthetic / real: circle 1.5 / 2.6 %, decay
+  1.5 / 4.3, figure8 1.6 / 2.6, line_star 2.3 / 9.9, random 1.4 / 0.5, random_high 1.0 / 1.9, strokes
+  1.6 / 1.4, vertical 6.1 / 6.8, whip 12.9 / 19.4; labelled fraction whip 0.903 / 0.862; mean confidence
+  whip 0.941 / 0.862. The long gaps on vertical and whip come from the filter losing the chain in both
+  worlds. The synthetic clouds are optimistic on the slow flights with real clutter near the cable
+  (line_star, decay) and on the whip, because ambiguous real points (partial tape markers, reflections)
+  are not modelled; the camera-level hazards were kept rather than inflated to match.
+- Checks: 103 tests pass (`tests/test_sensing.py`: config validation, cloud contents and candidate
+  preprocessing, Markov statistics against the hazard table within 1 %, latency shifts what the policy
+  sees, hidden markers coast with reduced confidence, draws depend on seed and lane;
+  `tests/test_environment.py`: frame layout and confidences, lane 0 alone equals lane 0 of three).
+  End-to-end environment throughput with zero actions: 1.9k lane-steps/s at 24 lanes, 2.1k at 96
+  (plant alone 2.9k / 4.9k); the Python filter and cloud synthesis take about 60 % of the step.
+- Not done / open: the live display still runs the older `deployment/cable_tracking.CableTracker`;
+  the flight node that will run `CableFilter` and the policy does not exist yet. The firmware's state
+  estimate is still the true state (attitude bias, design §2.5, not added). No training run on the new
+  observations. `scripts/equivalence_check.py` still targets the tensor environment. A C++ port of the
+  filter would restore the batch throughput.

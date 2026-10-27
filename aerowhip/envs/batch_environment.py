@@ -9,9 +9,12 @@ finite state is never scored or continued. Physical-validity violations (tilt, c
 workspace exits are recorded at the 100 Hz samples and do not stop a lane. Rewards come from a
 Task (envs.task). Physics float64 on the CPU, networks float32 on `device`.
 
-The attribute layout (frames, critic_states, history, ledger, ...) is that of the earlier tensor
-environment, so the learner and the evaluation tools are unchanged. Its critic-only slots for the
-motor/wrench state now hold the four motor thrusts and the applied (delayed) command.
+The actor observes through the OptiTrack model (envs.sensing): the frame it sees carries the
+delayed drone pose and the live cable filter's marker positions, velocities and confidences from
+the delayed, partly hidden marker cloud; the critic and the history keep the true state. The
+attribute layout (frames, critic_states, history, ledger, ...) is otherwise that of the earlier
+tensor environment, so the learner and the evaluation tools are unchanged. The frame's critic-only
+slots for the motor/wrench state hold the four motor thrusts and the applied (delayed) command.
 """
 import json
 import math
@@ -19,11 +22,13 @@ import math
 import numpy as np
 import torch
 
+from aerowhip.deployment.cable_filter import MARKERS
 from aerowhip.fitting.flight_drone import firmware_config
 from aerowhip.physics.model import Model, native_module
 from aerowhip.physics.state import quaternion_xyzw_to_rotation_matrix
 from aerowhip.tasks import make_task
 from .configuration import OBSERVATION_PERIOD_S
+from .sensing import OptiTrackSensor
 
 ACTION_INTERFACE = 'acceleration_direct_v1'
 COMMAND_WIDTH = 13      # position(3) velocity(3) acceleration(3) yaw ... as the native flight controller reads it
@@ -32,11 +37,13 @@ COMMAND_WIDTH = 13      # position(3) velocity(3) acceleration(3) yaw ... as the
 class BatchEnvironment:
     @torch.no_grad()
     def __init__(self, config, task_config, model, scene, *, device, lanes, actor_batch=1,
-                 firmware=None, battery_voltage=None, **unused):
+                 firmware=None, battery_voltage=None, sensing_seed=0, **unused):
         """config: EnvironmentConfig; task_config: typed task settings; model: resolved model dict.
 
         actor_batch is the actor batch layout used by policy_action() for one-lane evaluation.
         battery_voltage: per-lane voltages (lanes,) or one value; default the firmware reference.
+        sensing_seed: the sensing model's random draws (dropout, noise, latency) per lane are a
+        function of (sensing_seed, lane), so a lane's observations do not depend on the other lanes.
         `unused` accepts the tensor environment's GPU options (capture, conditional); ignored.
         """
         self.config, self.scene = config, scene
@@ -77,12 +84,19 @@ class BatchEnvironment:
         self.yaw = yaw
         self.hold = torch.tensor([0., 0., 0., yaw], dtype=torch.float64, device=device)
         self.delay = round(model['controller']['command_delay_s']/OBSERVATION_PERIOD_S)
-        self.frame_size = 18+6*n+8+self.action_size+1
-        # Deployable actor inputs: pose, velocities, the marker nodes, previous action, time.
-        self.actor_columns = list(range(18))
-        for offset in (18, 18+3*n):
-            self.actor_columns += [offset+3*int(i)+j for i in m.marker_indices for j in range(3)]
-        self.actor_columns += list(range(18+6*n+8, self.frame_size))
+        if list(m.marker_indices) != list(range(n)) or n != MARKERS+1:
+            raise ValueError('The sensing model expects the attachment node and the ten marker nodes')
+        # Frame: sensed pose (18), sensed cable nodes and velocities (6n, node 0 = attachment),
+        # marker confidences (10), motors and applied command (8, critic only), previous action, time.
+        self.confidence_offset = 18+6*n
+        self.frame_size = 18+6*n+MARKERS+8+self.action_size+1
+        # Deployable actor inputs: the sensed pose, markers and confidences, previous action, time.
+        self.actor_columns = list(range(18+6*n+MARKERS))+list(range(18+6*n+MARKERS+8, self.frame_size))
+        self.sensing = config.sensing
+        arc = np.cumsum(model['cable']['marker_interval_lengths_m'])
+        attachment = np.asarray(model['attachment']['position_tracking_m'], float)
+        self.sensors = [OptiTrackSensor(config.sensing, arc, attachment, np.random.default_rng([int(sensing_seed), lane]))
+                        for lane in range(lanes)]
         self.length = float(rest.sum())
         # Critic physical vector: drone (18) then the free cable nodes and their velocities.
         self.physical_size = 18+6*(n-1)
@@ -140,6 +154,22 @@ class BatchEnvironment:
         return (o[:, :3], o[:, 3:6], o[:, 6:15].reshape(-1, 3, 3), o[:, 15:18],
                 o[:, 18:18+3*n].reshape(-1, n, 3), o[:, 18+3*n:18+6*n].reshape(-1, n, 3))
 
+    def _sense(self, observation, lanes):
+        """What OptiTrack and the cable filter give each lane for this frame: the sensed pose
+        (18), node positions relative to the sensed attachment (n, 3), node velocities relative
+        to it (n, 3) and the marker confidences (10). Lanes that are not sensed keep zeros."""
+        p, v, R, w, q, cv = observation
+        pose = np.zeros((self.batch, 18)); nodes = np.zeros((self.batch, self.nodes, 3))
+        rates = np.zeros((self.batch, self.nodes, 3)); confidence = np.zeros((self.batch, MARKERS))
+        world = np.full((self.batch, MARKERS, 3), np.nan); latency = np.zeros(self.batch, int)
+        for lane in np.flatnonzero(lanes):
+            s = self.sensors[lane].observe(self.index, p[lane], R[lane], v[lane], w[lane], q[lane, 1:], cv[lane, 1:])
+            pose[lane] = np.r_[s['position'], s['rotation'].reshape(9), s['velocity'], s['angular_velocity']]
+            nodes[lane, 1:] = s['cable_positions']-s['root']
+            rates[lane, 1:] = s['cable_velocities']-s['root_velocity']
+            confidence[lane], world[lane], latency[lane] = s['confidence'], s['cable_positions'], s['latency']
+        return dict(pose=pose, nodes=nodes, rates=rates, confidence=confidence, world=world, latency=latency)
+
     def _envelope(self, q, rotation):
         c = self.config
         return ((rotation[:, 2, 2] >= math.cos(math.radians(c.maximum_tilt_deg)))
@@ -167,10 +197,14 @@ class BatchEnvironment:
         self.workspace_breached_np = np.zeros(self.batch, bool)
         shapes = dict(drone_positions=(3,), drone_velocities=(3,), drone_rotations=(3, 3), drone_angular_velocities=(3,),
                       cable_positions=(self.nodes, 3), cable_velocities=(self.nodes, 3), motor_thrust_n=(4,),
-                      requested_wrench=(4,), command=(4,), applied_command=(4,), workspace_violation=())
+                      requested_wrench=(4,), command=(4,), applied_command=(4,), workspace_violation=(),
+                      sensed_cable_positions=(MARKERS, 3), sensed_confidence=(MARKERS,))
         self.history = {name: torch.zeros((self.batch, self.samples, *shape), dtype=torch.float64)
                         for name, shape in shapes.items()}
         self.numerical_valid = torch.zeros((self.batch, self.samples), dtype=torch.bool)
+        for sensor in self.sensors:
+            sensor.reset()
+        self.sensing_latency_frames = np.array([s.latency for s in self.sensors])
         p, v, R, w, q, cv = self._observe()
         envelope = self._envelope(q, R)
         inside = self._inside(p)
@@ -178,7 +212,10 @@ class BatchEnvironment:
             raise ValueError('Initial state is outside the workspace')
         self.active_np &= envelope
         hold = np.tile(self.hold.cpu().numpy(), (self.batch, 1))
-        self._record((p, v, R, w, q, cv), hold, hold, self.active_np.copy(), ~inside)
+        sensed = self._sense((p, v, R, w, q, cv), np.ones(self.batch, bool))
+        if not (sensed['confidence'] == 1.).all():
+            raise ValueError('The cable filter must label the complete initial cable')
+        self._record((p, v, R, w, q, cv), sensed, hold, hold, self.active_np.copy(), ~inside)
         self.task.reset(dict(cable_positions=q, cable_velocities=cv, drone_positions=p,
                              workspace_origin=np.tile(self.origin_np, (self.batch, 1))))
         self.minimum_observed_cable_height = q[:, :, 2].min(-1).copy()
@@ -235,19 +272,22 @@ class BatchEnvironment:
         self.critic_states[:, self.decision] = features
         self.previous_physical = physical
 
-    def _record(self, observation, command, applied, valid, violation):
+    def _record(self, observation, sensed, command, applied, valid, violation):
         p, v, R, w, q, cv = observation
         i, h = self.index, self.history
         motors = self.runtime.motors()
         for name, value in dict(drone_positions=p, drone_velocities=v, drone_rotations=R, drone_angular_velocities=w,
                                 cable_positions=q, cable_velocities=cv, motor_thrust_n=motors,
                                 requested_wrench=applied, command=command, applied_command=applied,
-                                workspace_violation=violation).items():
+                                workspace_violation=violation, sensed_cable_positions=sensed['world'],
+                                sensed_confidence=sensed['confidence']).items():
             h[name][:, i] = torch.as_tensor(np.asarray(value, float) if name != 'workspace_violation' else value)
         self.numerical_valid[:, i] = torch.as_tensor(valid)
         scale = self.length
-        frame = np.concatenate(((p-self.origin_np)/scale, R.reshape(self.batch, 9), v/4, w/4,
-                                ((q-q[:, :1])/scale).reshape(self.batch, -1), ((cv-cv[:, :1])/4).reshape(self.batch, -1),
+        pose = sensed['pose']
+        frame = np.concatenate(((pose[:, :3]-self.origin_np)/scale, pose[:, 3:12], pose[:, 12:15]/4, pose[:, 15:18]/4,
+                                (sensed['nodes']/scale).reshape(self.batch, -1), (sensed['rates']/4).reshape(self.batch, -1),
+                                sensed['confidence'],
                                 motors/self.maximum_thrust, applied/self.command_scale.cpu().numpy(),
                                 self.previous_action.double().cpu().numpy(),
                                 np.full((self.batch, 1), i/self.time_samples)), 1)
@@ -288,7 +328,7 @@ class BatchEnvironment:
                 np.degrees(np.arccos(np.clip(R[:, 2, 2], -1, 1)))), self.maximum_observed_tilt)
             self.failed_np |= failed
             self.active_np = was & ~lost
-            self._record(observation, requested, applied, was & ~failed, ~inside)
+            self._record(observation, self._sense(observation, observed), requested, applied, was & ~failed, ~inside)
             for lane in np.flatnonzero(was):
                 if lost[lane]:
                     elapsed = self.index*OBSERVATION_PERIOD_S
@@ -365,6 +405,7 @@ class BatchEnvironment:
                       command_units=np.array('world acceleration m/s^2; yaw rad'),
                       acceleration_limit_mps2=self.action_limit_np, policy_rate_hz=np.array(self.config.policy_rate_hz))
         arrays['task_record_json'] = np.array(json.dumps(self.episode_records()[lane]))
+        arrays['sensing_latency_frames'] = np.array(int(self.sensing_latency_frames[lane]))
         arrays['terminal_time_s'] = np.array(float(self.terminal_times[lane]))
         arrays['physical_violation'] = np.array(bool(self.physical_violation_np[lane]))
         arrays['numerically_valid'] = np.array(not bool(self.failed_np[lane]))
@@ -390,7 +431,11 @@ class BatchEnvironment:
         return dict(evaluation_backend='native_batch_flight_controller_v2', task=self.task.name,
                     environment_lanes=self.batch, evaluation_actor_batch=self.actor_batch, unique_initial_states=1,
                     firmware=self.firmware, battery_voltage_v=self.voltage.tolist(),
-                    hover_trim_mps2=self.hover_trim.tolist())
+                    hover_trim_mps2=self.hover_trim.tolist(),
+                    sensing=dict(latency_frames=list(self.sensing.latency_frames), position_noise_m=self.sensing.position_noise_m,
+                                 dropout_hazard=[list(row) for row in self.sensing.dropout_hazard],
+                                 reappear_probability=self.sensing.reappear_probability,
+                                 cable_filter='deployment.cable_filter.CableFilter'))
 
 
 def make_batch_environment(experiment, snapshot, scene, *, lanes=None, device=None, **kwargs):

@@ -77,8 +77,24 @@ def test_runs_are_reproducible_and_lanes_independent():
     returns = run(first, actions)[0]
     assert torch.equal(returns, run(second, actions)[0])
     assert torch.equal(first.frames, second.frames) and torch.equal(first.critic_states, second.critic_states)
-    assert torch.equal(run(alone, actions[1:2])[0][0], returns[1])
-    assert torch.equal(alone.frames[0], first.frames[1])
+    # Lane 0 alone sees the same plant and the same sensing draws (seed, lane) as lane 0 of three.
+    assert torch.equal(run(alone, actions[:1])[0][0], returns[0])
+    assert torch.equal(alone.frames[0], first.frames[0])
+
+
+def test_actor_sees_the_sensed_cable_with_confidences():
+    env = make(2)
+    n, m = env.nodes, 10
+    assert env.frame_size == 18+6*n+m+8+3+1 and len(env.actor_columns) == 18+6*n+m+4
+    frame = env.frames[:, 0]
+    assert bool((frame[:, env.confidence_offset:env.confidence_offset+m] == 1.).all())
+    assert torch.equal(env.history['sensed_confidence'][:, 0], torch.ones(2, m, dtype=torch.float64))
+    sensed = env.history['sensed_cable_positions'][:, 0]
+    true = env.history['cable_positions'][:, 0, 1:]
+    assert float((sensed-true).norm(dim=-1).max()) < 2e-3        # the filter's labelled markers, noise only
+    env.step(torch.zeros(2, 3))
+    assert env.replay_arrays(0)['sensing_latency_frames'].shape == ()
+    assert 'sensing' in env.provenance()
 
 
 def test_physical_violation_is_recorded_but_full_horizon_runs(env):

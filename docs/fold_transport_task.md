@@ -35,9 +35,16 @@ The values shown are the file's current values, not constants in code.
 | Policy history | 401 samples; time normalization by 400 observation intervals |
 | Evaluation cadence | First collection, then each 512 completed episodes (collections 8, 16, …), and final |
 
-The actor sees measured state histories, not reward-internal fold tracks or privileged solver
-state. The value function also sees simulator state and task statistics. The actor input has
-88 selected columns from a 96-column frame; the critic receives 219 privileged values.
+The actor sees what OptiTrack and the live cable filter would deliver, not the simulator
+state: each 100 Hz frame carries the drone pose and velocities of a frame 0–2 frames earlier
+(the lane's latency), the cable filter's ten marker positions and velocities relative to the
+attachment from the marker cloud of that frame (markers the cameras missed coast on the
+filter's prediction), the filter's per-marker confidence, the previous action and time. The
+cloud is synthesized by the sensing model (`environment.sensing`, identified on the
+calibration flights; see the data and fitting page): per-marker dropout with a hazard rising
+with marker speed, white position noise, the drone's own markers and static room points. The
+value function sees the true simulator state and task statistics. The actor input has 98
+selected columns from a 106-column frame; the critic receives 186 privileged values.
 Zero acceleration input does **not** brake or hold position. This is acceleration control,
 not commanded drone position.
 

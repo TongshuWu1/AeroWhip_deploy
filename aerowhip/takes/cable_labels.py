@@ -17,13 +17,11 @@ from pathlib import Path
 
 import numpy as np
 
-from aerowhip.deployment.cable_filter import CableFilter
+from aerowhip.deployment.cable_filter import CableFilter, DRONE_RADIUS_M, DUPLICATE_RADIUS_M, cable_candidates
 from aerowhip.paths import ROOT
 from aerowhip.physics.state import quaternion_xyzw_to_rotation_matrix
 
 MODEL = ROOT/'configs/physics/drone_cable.json'
-DRONE_RADIUS_M = .07        # points this close to the tracking origin are the drone's markers
-DUPLICATE_RADIUS_M = .01    # points this close together are one marker
 LOW_CONFIDENCE = .3
 LENGTH_TOLERANCE_M = .02
 JUMP_M = .08                # a label moving further than this between two frames is flagged
@@ -95,13 +93,8 @@ def load_flight(folder):
         p = np.array(pose['position'], float)
         R = quaternion_xyzw_to_rotation_matrix(np.array(pose['quaternion_xyzw'], float))
         xyz = np.array([q[:3] for q in cloud['points']], float).reshape(-1, 3)
-        xyz = xyz[np.linalg.norm(xyz-p, axis=1) > DRONE_RADIUS_M]
-        kept = []
-        for q in xyz:  # merge duplicates: keep the first of points closer than DUPLICATE_RADIUS_M
-            if not kept or np.min(np.linalg.norm(np.array(kept)-q, axis=1)) > DUPLICATE_RADIUS_M:
-                kept.append(q)
         stamps.append(cloud['stamp'])
-        points.append(np.array(kept).reshape(-1, 3))
+        points.append(cable_candidates(xyz, p))      # drone markers removed, duplicates merged
         drone.append(p)
         rotation.append(R)
         root.append(p+R@attachment)

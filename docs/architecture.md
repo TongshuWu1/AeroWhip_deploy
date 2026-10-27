@@ -32,7 +32,7 @@ An experiment is one JSON file in `configs/experiments/`, parsed by
 |---|---|---|
 | `model`, `scene` | paths | Physical model (`configs/simulation.json`) and initial scene (`configs/scenes/*.toml`), shared with simulation, fitting and deployment. |
 | `run` | `learning.configuration.RunConfig` | Device, seed, parallel episodes, episode budget, evaluation interval. |
-| `environment` | `envs.configuration.EnvironmentConfig` | Horizon, policy rate, acceleration limits, workspace, tilt and cable-height validity limits. |
+| `environment` | `envs.configuration.EnvironmentConfig` | Horizon, policy rate, acceleration limits, workspace, tilt and cable-height validity limits, and the OptiTrack sensing model (`sensing`: latency range, position noise, marker dropout hazard by speed, reappearance probability, the drone's own markers and static room points in the cloud). |
 | `task` | registered by `task.name` | Reward settings (fold transport: `tasks.whip.configuration.FoldTransportConfig`). |
 | `ppo` | `learning.configuration.PPOConfig` | Learner, exploration noise and entropy schedule. |
 
@@ -49,10 +49,11 @@ experiment file ──load──▶ Experiment + snapshot (experiment, resolved 
                               │
 python -m aerowhip.learning.worker --run <folder>
       │
-      ├─ BatchEnvironment (lanes) ── steps native plant + flight controller (OpenMP), 200 Hz controller, 30 ms delay
-      │        │ every 100 Hz sample: Task.observe → reward;  on numerical failure: Task.fail
+      ├─ BatchEnvironment (lanes) ── steps native plant + firmware flight law (OpenMP), 500 Hz controller
+      │        │ every 100 Hz sample: OptiTrack model (dropout, noise, latency) → live cable filter → actor frame
+      │        │                      Task.observe → reward;  on numerical failure: Task.fail
       │        ▼
-      │   frames (actor), critic state (privileged), reward ledger
+      │   frames (actor: sensed pose, filtered markers, confidences), critic state (true state), reward ledger
       ├─ PPO.collect_action / optimize (one update per collection)
       └─ deterministic evaluation → round-NNNNN.npz, best.pt, latest.pt, events.jsonl
 ```
