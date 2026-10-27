@@ -55,7 +55,7 @@ def record_collection(directory, env, returns, valid, components, number):
         cable_velocities=env.history['cable_velocities'].cpu().numpy(),
         drone_positions=env.history['drone_positions'].cpu().numpy(),
         state_valid=env.numerical_valid.cpu().numpy(),
-        terminal_time_s=env.terminal_times.cpu().numpy(),
+        terminal_time_s=np.asarray(env.terminal_times, float),
         transition_rewards=env.transition_rewards.cpu().numpy()))
     save_json(directory/f'{prefix}-events.json',
               dict(task=env.task.name, lanes=env.episode_records(), failures=env.failure_records))

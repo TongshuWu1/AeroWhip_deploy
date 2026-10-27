@@ -1821,3 +1821,10 @@ User's request: one systematic, automated data collection with a single calibrat
   2026-10-28, not proven. `ProcessRunner` now uses a ProcessPoolExecutor: a worker that dies raises
   BrokenProcessPool, so the fit fails visibly instead of waiting forever (checked with a killed
   worker; residuals still bit-identical).
+- **Trainer smoke run (2026-10-28):** strike experiment with 8 lanes, 16 training episodes, 4
+  evaluation episodes, CPU: two collections, curriculum events (stage 0, strike rate 0), two
+  evaluations at the final stage (4 model variants, no reference starts), 80 gradient updates,
+  `completed`; 138 s. It exposed `record_collection` reading `terminal_times` as a tensor (a leftover
+  of the tensor environment; the batch environment holds numpy) — fixed. Random-policy returns are
+  −150 on average, dominated by the workspace cost (the drone drifts metres under random 8 m/s²
+  actions); strike bonus 10 is small against that early on. Watch, not changed.
