@@ -136,6 +136,7 @@ def main():
     from rclpy.qos import qos_profile_sensor_data
     from rclpy.time import Time
     from motion_capture_tracking_interfaces.msg import NamedPoseArray
+    from crazyflie_interfaces.msg import FullState, LogDataGeneric, Status
     from sensor_msgs.msg import PointCloud2
     from geometry_msgs.msg import Pose
     from tf2_ros import Buffer, TransformListener
@@ -171,6 +172,20 @@ def main():
             self.parameters = AsyncParameterClient(self, args.capture_node)
             self.subscription = self.create_subscription(NamedPoseArray,
                 args.poses_topic, self.capture, qos_profile_sensor_data)
+            # Battery and link state from each drone's status block (display only).
+            self.status = {}
+            self.status_subscriptions = [self.create_subscription(Status, f'/{name}/status',
+                (lambda message, name=name: self.record_status(name, message)), qos_profile_sensor_data)
+                for name in self.names]
+            # Motor PWM and battery (motor_telemetry log block) and the acceleration command the host
+            # sends (cmd_full_state), per drone, display only.
+            self.motors, self.commands = {}, {}
+            self.motor_subscriptions = [self.create_subscription(LogDataGeneric, f'/{name}/motor_telemetry',
+                (lambda message, name=name: self.record_motors(name, message)), qos_profile_sensor_data)
+                for name in self.names]
+            self.command_subscriptions = [self.create_subscription(FullState, f'/{name}/cmd_full_state',
+                (lambda message, name=name: self.record_command(name, message)), 10)
+                for name in self.names]
             if args.point_cloud_topic:
                 self.cloud_subscription = self.create_subscription(PointCloud2,
                     args.point_cloud_topic, self.capture_cloud, qos_profile_sensor_data)
@@ -180,6 +195,20 @@ def main():
 
         def now_s(self):
             return self.get_clock().now().nanoseconds/1e9
+
+        def record_motors(self, name, message):
+            values = [float(v) for v in message.values]
+            self.motors[name] = dict(pwm=values[:4], battery_v=values[4] if len(values) > 4 else None, time_s=self.now_s())
+
+        def record_command(self, name, message):
+            a, v, p = message.acc, message.twist.linear, message.pose.position
+            self.commands[name] = dict(acceleration_mps2=[a.x, a.y, a.z], velocity_mps=[v.x, v.y, v.z],
+                                       position_m=[p.x, p.y, p.z], time_s=self.now_s())
+
+        def record_status(self, name, message):
+            self.status[name] = dict(battery_v=float(message.battery_voltage), pm_state=int(message.pm_state),
+                                     supervisor_info=int(message.supervisor_info), rssi=int(message.rssi),
+                                     time_s=self.now_s())
 
         def send(self, packet):
             self.peer.sendall(encode(dict(packet, session=args.session)))
@@ -389,6 +418,9 @@ def main():
                 pose_samples=self.pose_samples, pose_samples_complete=self.pose_samples_complete,
                 flight_epochs=self.flight_epochs,
                 seen_names=self.seen_names, missing_robots=[n for n in self.names if n not in self.poses],
+                status={n: dict(v, age_s=now-v['time_s']) for n, v in self.status.items()},
+                motors={n: dict(v, age_s=now-v['time_s']) for n, v in self.motors.items()},
+                commands={n: dict(v, age_s=now-v['time_s']) for n, v in self.commands.items()},
                 issues=self.issues))
             self.pose_samples.clear()
 

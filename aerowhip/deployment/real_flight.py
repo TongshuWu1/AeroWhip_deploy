@@ -231,6 +231,17 @@ class RealFlightFeed(DisplayFeed):
             label += ' · awaiting capture source'
         if packet.get('missing_robots'):
             label += ' · missing: '+', '.join(packet['missing_robots'])
+        for name, status in packet.get('status', {}).items():
+            armed = bool(status.get('supervisor_info', 0) & 2)
+            label += (f" · {name} {status['battery_v']:.2f} V{' armed' if armed else ''}"
+                      + (' (stale)' if status.get('age_s', 0.) > 2.5 else ''))
+        for name, motors in packet.get('motors', {}).items():
+            if motors.get('age_s', 0.) < 1.:
+                label += ' · PWM '+' '.join(f'{v/1000:.1f}k' for v in motors['pwm'])
+        for name, command in packet.get('commands', {}).items():
+            if command.get('age_s', 0.) < 1.:
+                a = command['acceleration_mps2']
+                label += f' · cmd a [{a[0]:+.2f} {a[1]:+.2f} {a[2]:+.2f}] m/s²'
         issues = packet.get('issues', {})
         errors = [f'{name}: {value}' for name, value in issues.items()]
         errors.extend(f'{name}: {cable.error}' for name, cable in self.cables.items() if cable.error)
