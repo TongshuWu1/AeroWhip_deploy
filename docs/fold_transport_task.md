@@ -20,7 +20,7 @@ The values shown are the file's current values, not constants in code.
 
 | Item | Current value |
 |---|---|
-| Cable | 10 links, 11 nodes; rest length 0.9525 m |
+| Cable | 10 links, 11 nodes; rest length 0.995 m |
 | Maximum episode duration | 4 s |
 | Physics maximum step | 1/600 s, unchanged native solver |
 | Controller / observation / policy | 200 / 100 / 50 Hz |
@@ -86,7 +86,7 @@ not a finer physical simulation.
 1. Normalize each link tangent. At the nine internal joints, compute turning angle with
    `atan2(||u_i × u_(i+1)||, u_i · u_(i+1))` and its turning-axis direction.
 2. Spread these angles over material arc length using normalized Gaussian kernels.
-   Bandwidth is `0.075 L / 0.9525` m; the measurement grid has 1,001 points between the
+   Bandwidth is `0.075 L / 0.9525` m (0.0783 m for the current 0.995 m cable); the measurement grid has 1,001 points between the
    first and last internal joints.
 3. Find bend regions and their half-height cores. Associate a region through time only
    when the previous/current core overlap is unique in both directions. Ambiguous

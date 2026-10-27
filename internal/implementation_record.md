@@ -1,6 +1,6 @@
 # Current implementation
 
-Last reviewed: 2026-10-26.
+Last reviewed: 2026-10-27.
 
 ## Active training and handoff
 
@@ -43,8 +43,8 @@ attachment node 0, use world coordinates.
 | Quantity | Default |
 |---|---|
 | Drone mass excluding cable | 0.145 kg |
-| Cable and moving-marker mass | 0.017 kg |
-| Cable length / mesh | 0.9525 m / 11 nodes, 10 edges |
+| Cable and moving-marker mass (total) | 0.016 kg; markers 10 × 0.96 g (unchanged), bare cable 6.4 g |
+| Cable length / mesh | 0.995 m / 11 nodes, 10 edges (0.095 m, then 9 × 0.1 m) |
 | Tracking-to-COM / attachment offset | (0,0,-0.018) / (0,0,-0.051) m |
 | Maximum physics step | 1/600 s |
 | Observation / controller / policy rate | 100 / 200 / 50 Hz for current training |
@@ -324,8 +324,8 @@ propeller rotation or learned-policy deployment is introduced.
 selected robot, using [deployment/cable_tracking.py](../aerowhip/deployment/cable_tracking.py).
 It does not feed the native cable integrator, controller, fitting or policy.
 The selected model's cumulative `marker_interval_lengths_m` define material marker
-arc distances; the user confirmed the real cable retains this spacing. Current
-distances are0.063,0.150,0.250,0.350,0.450,0.550,0.650,0.7525,0.8525,0.9525 m
+arc distances; the user confirmed the real cable has this spacing. Current
+distances are 0.095, 0.195, 0.295, 0.395, 0.495, 0.595, 0.695, 0.795, 0.895, 0.995 m
 from the attachment. Root is the matching measured rigid-body pose plus the same
 body attachment offset used by the display. Length overrides and heuristic
 settings can be provided with `--cable-tracking-config`; the explicit example is
@@ -1054,4 +1054,30 @@ from an unrelated directory (except `gamepad.py`, which needs tkinter, not insta
 training window, settings dialog, policy tester, replay browser and take manager construct offscreen;
 a two-lane CPU run of `python -m aerowhip.learning.worker` completes. Not checked: hardware, the
 Docker launchers end to end, and Windows.
+
+## Dated change note — 2026-10-27 new cable
+
+The old cable is retired; the model describes the new one (user measurements: 16 g with
+markers, same material and 3.5 mm diameter, first marker 0.095 m from the attachment, then
+every 0.1 m, 1 m long).
+
+- `configs/physics/drone_cable.json`: `total_mass_kg` 0.017 → 0.016 (whole cable including
+  markers; the engine subtracts `moving_marker_masses_kg`, kept at 10 × 0.96 g, so the bare
+  cable is 6.4 g — the marker/bare split is carried over, not re-measured);
+  `marker_interval_lengths_m` → 0.095 then 9 × 0.1 (0.995 m).
+- `configs/scenes/default.toml`, `m3.toml`: `cable_segment_lengths_m` to match.
+- `configs/actuators/drone.json`: `initial_thrust_n` is the hover thrust of drone + cable,
+  (0.145 + 0.016) kg × g / 4 = 0.39472 N per motor (was 0.39717 for 17 g). Without this the
+  motors start 0.6 % high and a zero-acceleration hover drifts up (caught by
+  `test_zero_acceleration_command_holds_hanging_cable_at_rest`). Maximum thrust unchanged.
+- EI, Cb, GJ, Ct and drag unchanged (same material; still the earlier working assumptions).
+- Correction to the 2026-10-26 discussion: the old model's cable was 17 g in total, not
+  26.6 g; `total_mass_kg` already included the markers.
+- The fold bandwidth formula `0.075 L / 0.9525` is unchanged and now gives 0.0783 m.
+
+Checked: 90 tests pass; native and tensor engines hold a hanging cable at rest under a zero
+command (drift 0); native edge lengths 0.995 m, node masses 0.016 kg. The equivalence
+reference was re-recorded with the new model (148 tensors, CPU and CUDA, match); the old
+reference is not kept in the repository. Not checked: any training run, fit or replay with
+the new cable; the 2026-10-26 flights were flown with the old cable.
 

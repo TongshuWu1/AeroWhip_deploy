@@ -12,7 +12,7 @@ angular_velocity_body_radps = [0.0, 0.0, 0.0]
 [platform]
 # Centered under the drone and battery, at the battery's bottom surface.
 attachment_offset_body_m = [0.0, 0.0, -0.051]
-cable_segment_lengths_m = [0.063, 0.087, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1025, 0.1, 0.1]
+cable_segment_lengths_m = [0.095, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
 
 [viewer]
 # M3 planned target; visual only.

@@ -249,7 +249,7 @@ Hold the drone/cable with the cable fully visible and approximately vertical,
 clear of the ground, until the display reports **10/10 · tracking**. Initialization
 uses a hanging shape within3.5 cm of the configured marker positions; it cannot
 initialize an arbitrary coil. Marker arc distances come from the selected model
-(currently0.063,0.150,0.250,0.350,0.450,0.550,0.650,0.7525,0.8525,0.9525 m
+(currently 0.095, 0.195, 0.295, 0.395, 0.495, 0.595, 0.695, 0.795, 0.895, 0.995 m
 from the attachment). Once initialized, move it slowly by hand first. The tracker
 uses temporal prediction and maximum chord distances from the known arc lengths.
 Velocity updates damp spikes caused by closely bunched receipt timestamps.
