@@ -18,6 +18,7 @@ correlated (neighbouring frames and segments); the classical s²(JᵀJ)⁻¹, wh
 residuals, is reported beside it and is much too small. Both are local (linearised at the optimum).
 """
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait
+from concurrent.futures.process import BrokenProcessPool
 import math
 import multiprocessing
 import os
@@ -67,21 +68,41 @@ class ProcessRunner:
     `prepare` builds what the items share (e.g. one replay model) once per chunk. Same results and
     failure handling as `run_all`, in item order."""
 
+    RETRIES = 2
+
     def __init__(self, items, prepare, *, workers=None, chunks_per_worker=3):
-        global _ITEMS, _PREPARE
-        _ITEMS, _PREPARE = list(items), prepare
+        self.items, self.prepare = list(items), prepare
         self.workers = workers or os.cpu_count()
-        # an executor, not multiprocessing.Pool: a worker that dies raises BrokenProcessPool in the fit
-        # (which then fails visibly) instead of leaving it waiting forever
-        self.pool = ProcessPoolExecutor(self.workers, mp_context=multiprocessing.get_context('fork'))
-        wait([self.pool.submit(_ready) for _ in range(self.workers)])          # fork every worker now, with the items
-        count = max(1, min(len(_ITEMS), self.workers*chunks_per_worker))
-        edges = np.linspace(0, len(_ITEMS), count+1).round().astype(int)
+        self.restarts = 0
+        self._start()
+        count = max(1, min(len(self.items), self.workers*chunks_per_worker))
+        edges = np.linspace(0, len(self.items), count+1).round().astype(int)
         self.ranges = [(int(a), int(b)) for a, b in zip(edges[:-1], edges[1:]) if b > a]
 
+    def _start(self):
+        # an executor, not multiprocessing.Pool: a worker that dies raises BrokenProcessPool instead of
+        # leaving the fit waiting forever
+        global _ITEMS, _PREPARE
+        _ITEMS, _PREPARE = self.items, self.prepare
+        self.pool = ProcessPoolExecutor(self.workers, mp_context=multiprocessing.get_context('fork'))
+        wait([self.pool.submit(_ready) for _ in range(self.workers)])          # fork every worker now, with the items
+
     def __call__(self, parameters):
-        parts = self.pool.map(_chunk, [(parameters, a, b) for a, b in self.ranges])
-        return [r for part in parts for r in part]
+        """A worker process that dies (this machine shows sporadic memory faults in any program) does
+        not end the fit: the evaluation is repeated on new workers, at most RETRIES times. The
+        computation is deterministic, so a repeated evaluation gives the same numbers; each restart is
+        counted (`restarts`) and printed."""
+        for attempt in range(self.RETRIES+1):
+            try:
+                parts = self.pool.map(_chunk, [(parameters, a, b) for a, b in self.ranges])
+                return [r for part in parts for r in part]
+            except BrokenProcessPool:
+                if attempt == self.RETRIES:
+                    raise
+                self.restarts += 1
+                print(f'a worker process died; repeating the evaluation on new workers (restart {self.restarts})', flush=True)
+                self.pool.shutdown(wait=False, cancel_futures=True)
+                self._start()
 
     def close(self):
         self.pool.shutdown(cancel_futures=True)
