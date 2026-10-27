@@ -6,7 +6,10 @@ of the attachment and a constant-velocity model per marker, projected onto the c
 length constraints. Points are associated to markers by nearest-to-prediction within a
 gate, each point to at most one marker, and the whole chain is checked against the cable
 lengths; markers that were seen are corrected towards their measurement, hidden markers
-coast on the prediction. The same code runs offline over a recorded cloud (`cable_labels`)
+coast on the prediction. When markers are missing and free points remain, a chain search
+from the attachment (each next point at the cable length from the previous one, the first
+below the attachment) re-labels the cable from the cloud: it recovers a cable that moved
+faster than the prediction, e.g. folding in a whip snap. The same code runs offline over a recorded cloud (`cable_labels`)
 and live, so what is validated on recordings is what flies.
 
 No learned components. Costs per frame are O(markers x points) NumPy operations.
@@ -19,7 +22,7 @@ MARKERS = 10
 class CableFilter:
     def __init__(self, arc, *, dt=.01, gate_m=.06, gate_growth_m=.5, noise_m=.004, length_tolerance_m=.015,
                  start_tolerance_m=.02, start_minimum=6, max_hidden_s=.5, projection_iterations=3,
-                 max_speed_mps=12., reacquire_m=.05):
+                 max_speed_mps=12., reacquire_m=.05, search_limit=4000, prediction_weight=.25):
         """arc: distance of each marker along the cable from the attachment (m).
         gate_m: association radius for a marker seen in the previous frame; the gate grows by
         gate_growth_m per second hidden. noise_m: OptiTrack position noise, sets how much a
@@ -31,6 +34,7 @@ class CableFilter:
         self.tolerance, self.start_tolerance, self.start_minimum = length_tolerance_m, start_tolerance_m, start_minimum
         self.max_hidden, self.iterations = max_hidden_s, projection_iterations
         self.max_speed, self.reacquire = max_speed_mps, reacquire_m
+        self.search_limit, self.prediction_weight = search_limit, prediction_weight
         self.reset()
 
     def reset(self):
@@ -145,6 +149,27 @@ class CableFilter:
                 measured[k] = points[j]
                 chain[k+1] = points[j]
                 self.velocities[k] = 0.
+        # 3c. chain search: markers still missing and free points left -> re-label from the root
+        jumped = np.zeros(MARKERS, bool)
+        if (~seen).any() and len(points) > seen.sum():
+            chain = self._search(root, points, predicted)
+            if chain is not None and len(chain) > seen[:len(chain)].sum() and len(chain) >= np.flatnonzero(np.r_[seen, True])[0]:
+                for k, j in enumerate(chain):
+                    if index[k] != j:
+                        jumped[k] = np.linalg.norm(points[j]-predicted[k]) > gates[k]
+                    index[k], seen[k] = j, True
+                    measured[k] = points[j]
+                used = set(chain)
+                for k in range(len(chain), MARKERS):     # keep later labels only if not reused
+                    if seen[k] and index[k] in used:
+                        index[k], seen[k] = -1, False
+                        measured[k] = predicted[k]
+                while True:
+                    bad = self._worst_violation(root, measured, seen)
+                    if bad is None:
+                        break
+                    index[bad], seen[bad] = -1, False
+                    measured[bad] = predicted[bad]
         # 4. correct: seen markers move to their measurement (noise-weighted), hidden ones coast
         new = predicted.copy()
         new[seen] = measured[seen]
@@ -154,6 +179,7 @@ class CableFilter:
         velocity = velocity*np.minimum(1., self.max_speed/np.maximum(speed, 1e-9))
         alpha = np.where(seen, .5, .1)[:, None]          # velocity smoothing; hidden markers keep their velocity
         self.velocities = self.velocities+alpha*(velocity-self.velocities)
+        self.velocities[jumped] = 0.                      # re-labelled far from the prediction
         self.positions = new
         self.hidden_s = np.where(seen, 0., self.hidden_s+dt)
         self.index = index
@@ -161,6 +187,50 @@ class CableFilter:
         return self.state()
 
     # ------------------------------------------------------------------ helpers
+    def _search(self, root, points, predicted):
+        """Best chain of point indices for markers 1..L from the attachment, L as large as the
+        cloud allows. Each link within the length tolerance; the first point below the
+        attachment (drone markers sit above it at similar distances). Score: squared length
+        errors plus prediction_weight x squared distance to the prediction. Markers on which
+        the best and an equally long, nearly as good chain disagree are cut off."""
+        distance_root = np.linalg.norm(points-root, axis=1)
+        reach = distance_root <= self.arc[-1]+self.tolerance
+        best, runner = [None, np.inf, 0], [None, np.inf]
+        budget = [self.search_limit]
+
+        def go(previous, used, cost):
+            depth = len(used)
+            if depth > best[2] or (depth == best[2] and cost < best[1]):
+                if depth == best[2] and best[0] is not None:
+                    runner[0], runner[1] = best[0], best[1]
+                else:
+                    runner[0], runner[1] = None, np.inf
+                best[0], best[1], best[2] = tuple(used), cost, depth
+            elif depth == best[2] and cost < runner[1]:
+                runner[0], runner[1] = tuple(used), cost
+            if depth == MARKERS or budget[0] <= 0:
+                return
+            budget[0] -= 1
+            error = np.abs(np.linalg.norm(points-previous, axis=1)-self.segments[depth])
+            ok = (error < self.tolerance) & reach & (distance_root <= self.arc[depth]+self.tolerance)
+            if depth == 0:
+                ok &= points[:, 2] < root[2]
+            for j in np.flatnonzero(ok):
+                if j in used:
+                    continue
+                miss = np.linalg.norm(points[j]-predicted[depth])
+                go(points[j], used+[int(j)], cost+error[j]**2+self.prediction_weight*min(miss, .2)**2/100)
+        go(root, [], 0.)
+        chain = best[0]
+        if not chain:
+            return None
+        if runner[0] is not None and len(runner[0]) == len(chain) and runner[1] < 1.5*best[1]+1e-6:
+            agree = 0
+            while agree < len(chain) and chain[agree] == runner[0][agree]:
+                agree += 1
+            chain = chain[:agree]
+        return list(chain) if chain else None
+
     def _fill_hidden(self, root):
         """Place markers without a position between their known neighbours along the cable."""
         chain = np.vstack([root, self.positions])

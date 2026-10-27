@@ -14,37 +14,50 @@ nodes, including the attachment node 0, are world positions. All quantities are 
 ## Default parameters
 
 Defined in [configs/physics/drone_cable.json](../configs/physics/drone_cable.json),
-[configs/controllers/geometric.toml](../configs/controllers/geometric.toml) and
+[configs/controllers/geometric.toml](../configs/controllers/geometric.toml),
+[configs/controllers/crazyflie_flight.toml](../configs/controllers/crazyflie_flight.toml) and
 [configs/actuators/drone.json](../configs/actuators/drone.json), combined by
 [configs/simulation.json](../configs/simulation.json).
 
 | Quantity | Default |
 |---|---|
-| Drone mass (without cable) | 0.145 kg |
+| Drone mass (with battery and clamp, without cable) | DRONE_MASS |
 | Cable and marker mass (total) | 0.017 kg |
 | Cable length / mesh | 0.995 m / 10 edges between 11 nodes (the marker intervals: 0.095 m, then 9 × 0.1 m) |
 | Tracking origin → centre of mass / → attachment | (0, 0, −0.018) / (0, 0, −0.0423) m (attachment from the hanging cable in ten flights) |
-| Bending stiffness EI / bending damping Cb | 1.179e−8 N m² / 8.174e−5 N m² s |
-| Torsional stiffness GJ / torsional damping Ct | 1.179e−8 N m² / 8.174e−6 N m² s |
-| External cable drag | 0.0814 s⁻¹ (linear in node velocity) |
+| Bending stiffness EI / bending damping Cb | CABLE_EI / CABLE_CB |
+| Cable diameter / normal drag coefficient Cd / air density | 3.5 mm / CABLE_CD / 1.2 kg m⁻³ |
+| Linear drag | CABLE_LINEAR (on node velocity, mass proportional) |
 | Maximum physics step | 1/600 s |
 | Output / controller rate | 100 / 200 Hz |
-| Command delay | 0.03 s |
-| Motor response time | 0.015 s (first order, uncalibrated) |
+| Attitude loop (x, y) / command delay / motor response | DRONE_ATTITUDE / DRONE_DELAY / DRONE_MOTOR |
+| Thrust map | T = 0.553 (1 + 0.177 (V − 7.2 V)) T_cmd^2.2 N, T_cmd the firmware thrust in N |
+| Motor thrust limit | 0.85 N per motor (peak measured collective thrust 3.39 N) |
 
-The cable parameters are working assumptions from an earlier model and are to be
-refitted from new flight data; they are not identified properties of the hardware.
+The cable and drone values are identified on the 2026-10-27 calibration flights
+(see [Flight data and model fitting](data_and_fitting.md)); the held-out flights and
+the residual errors are reported there.
 
 ## Cable
 
 The cable is a discrete elastic rod: inextensible edges, naturally straight and
-isotropic, with objective bending and twist and Kelvin–Voigt material damping
-([native/material_frame.inc](../native/material_frame.inc)). External drag is a
-separate linear term. A point clamp attaches node 0 to the drone, prescribing its
-position and the body-down tangent; the first edge may bend away from that
-tangent, and the clamp's bending moment acts on the drone. The tip is free.
-There is no cable self-contact, ground or wall contact, or wind. Collapsed edges
-and antiparallel adjacent edges are rejected as invalid states.
+isotropic. Twist is quasi-static: with an isotropic section and a free tip the twisting
+moment vanishes, so the material frame is the frame parallel-transported from the clamp
+and no material angle is a state (the discrete viscous threads assumption,
+Bergou et al. 2010). Bending energy is (EI/2l)|κb|² per vertex; bending damping is
+Kelvin–Voigt, with dissipation (Cb/2l)|dk/dt|² on the material curvature (k₁, k₂) in that frame,
+which is objective: a rigid motion of drone and cable together dissipates nothing
+([native/material_frame.inc](../native/material_frame.inc)). Air acts on each node through its
+tributary length ℓ: a quadratic normal drag −½ρ C_d d ℓ |v_n| v_n on the cylinder (v_n is the
+velocity normal to the local tangent; still air) plus a small linear term. A point clamp
+attaches node 0 to the drone, prescribing its position and the body-down tangent; the first
+edge may bend away from that tangent, and the clamp's bending moment acts on the drone. The
+tip is free. There is no self-contact, ground or wall contact, or wind. Collapsed edges and
+antiparallel adjacent edges are rejected as invalid states.
+
+On the identified values the cable is gravity dominated (EI/(m g L²) ≈ 3·10⁻⁷) and its bending
+is strongly damped (Cb/EI of order 10³–10⁴ s): its shape is set by gravity, inertia, bending
+damping and air drag, and EI is not identifiable from flight data (any small value fits).
 
 ## Integration
 
@@ -58,30 +71,34 @@ convergence does not by itself establish physical accuracy.
 
 ## Controller and actuators
 
-`aerowhip.control.geometric_controller` (NumPy) and `tensor_controller` (Torch)
-implement a geometric controller with a static cable-weight trim
-((drone + cable mass) × g). Two command paths exist:
+Two controllers drive the plant:
 
-- **Position/velocity/acceleration (PVA)** tracking for scripted flights.
-- **Direct acceleration** (`acceleration_direct_v1`), used by training: a world
-  acceleration request (excluding gravity) becomes the desired force, then attitude,
-  collective thrust and body torque. It has no position or velocity feedback, so a
-  zero command holds weight but does not brake or hold position.
+- **Flight pipeline** (`FlightController`, [native/flight_controller.hpp](../native/flight_controller.hpp)):
+  the Crazyflie's onboard Mellinger controller with its translation gains zeroed, as flown.
+  The sent world acceleration a (trims included) becomes the firmware thrust vector
+  F = m_fw (a + g ẑ) with the firmware's mass m_fw = 0.144 kg; the body z axis is driven
+  towards F/|F| by an attitude PD loop; the firmware thrust T_cmd = F · z_body is mapped to the
+  delivered thrust by the identified open-loop thrust map above (nonlinear in T_cmd and
+  dependent on battery voltage V). An optional constant world acceleration bias models the
+  slowly varying disturbances seen in flight (about 0.1 m/s²) for randomization.
+- **Geometric controller** (`aerowhip.control.geometric_controller`): position/velocity/
+  acceleration tracking with a static weight trim, used by the interactive simulator and the
+  scripted-flight tools.
 
-Motor commands are mixed with per-motor clipping; a first-order motor response
-produces the delivered wrench.
+Motor commands are mixed with per-motor clipping; a first-order motor response produces the
+delivered wrench.
 
 ## Batched execution
 
-Training and fitting use the batched tensor model (`aerowhip.physics.tensor_model`)
-on CUDA, with the same equations. One Picard iteration is compiled and replayed
-with CUDA graphs; on Linux with Torch built for CUDA ≥ 12.8 (and on Windows) the
-iteration loop itself runs on the GPU. `AEROWHIP_CONDITIONAL_SOLVER=0` forces the
-host-controlled loop. Both paths keep the same convergence limits.
+`BatchRuntime` steps many independent lanes of one model in parallel on the CPU (OpenMP),
+each lane with its own flight controller (battery voltage, acceleration bias); a lane that
+raises is marked failed and left unchanged. Lanes reproduce a single runtime bit for bit.
+The calibration replays (cable with the measured clamp motion; drone and coupled model driven
+by the sent commands) run windows in parallel threads on the same engine.
 
 ## Exact checks
 
-`tests/test_physics.py` verifies, without fitted parameters: free fall at −g·t
-with no thrust or drag; a zero acceleration command holding a hanging cable
-exactly at rest; and conservation of total momentum (to 1e−16) while a cable
-bends internally during free fall, with edge lengths preserved to 1e−12 m.
+`tests/test_native_physics.py` verifies, without fitted parameters: free fall at −g·t with no
+thrust or drag; a weight-equal thrust holding a hanging cable exactly at rest; conservation of
+total momentum (to 1e−12) while a cable bends internally during free fall, with edge lengths
+preserved to 1e−12 m; and batch lanes reproducing a single runtime exactly.

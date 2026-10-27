@@ -73,6 +73,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--iterations', type=int, default=60)
+    parser.add_argument('--start', type=float, nargs=4, metavar=('LOG10_EI', 'LOG10_CB', 'CD', 'LOG10_DRAG'),
+                        help='search start (default: the configured values)')
+    parser.add_argument('--step', type=float, nargs=4, default=[.5, .5, .6, .5])
     args = parser.parse_args()
     config = load_model_configuration(DEFAULT_MODEL)
     train, held = split('cf_2')
@@ -81,6 +84,8 @@ def main():
     start = {k: float(config['cable'][k]) for k in NAMES}
     x0 = [math.log10(start['EI_n_m2']), math.log10(start['Cb_n_m2_s']), start['normal_drag_coefficient'],
           math.log10(start['external_drag_s_inv'])]
+    if args.start:
+        x0 = list(args.start)
     evaluations = []
 
     def objective(x):
@@ -95,7 +100,7 @@ def main():
     initial_train, initial_per = score(config, train, start)
     initial_held, initial_held_per = score(config, held, start)
     print(f'start: fit {initial_train*1e3:.2f} mm, held out {initial_held*1e3:.2f} mm', flush=True)
-    x, value, history = nelder_mead(objective, x0, [.5, .5, .6, .5], iterations=args.iterations)
+    x, value, history = nelder_mead(objective, x0, args.step, iterations=args.iterations)
     best = to_values(x)
     passes = [score(config, train, best)+score(config, held, best) for _ in range(2)]
     reproduced = passes[0] == passes[1]
@@ -110,7 +115,8 @@ def main():
                    held_out_per_flight_rms_m=initial_held_per),
         best=dict(values=best, fit_rms_m=fit_rms, fit_per_flight_rms_m=fit_per, held_out_rms_m=held_rms,
                   held_out_per_flight_rms_m=held_per, reproduced_twice=reproduced),
-        search=dict(method='Nelder-Mead on (log10 EI, log10 Cb, Cd, log10 linear drag)', history=history,
+        search=dict(method='Nelder-Mead on (log10 EI, log10 Cb, Cd, log10 linear drag)', start=list(map(float, x0)),
+                    step=args.step, history=history,
                     evaluations=evaluations), seconds=time.time()-t0), indent=1))
 
 
