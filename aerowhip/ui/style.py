@@ -46,7 +46,7 @@ QLabel#value, QLabel#smallMetric {{ font-size: 17px; font-weight: 600; }}
 QLabel#cardTitle {{ color: {t['muted']}; font-weight: 600; }}
 QLabel#success {{ font-weight: 600; }}
 QFrame#card {{ background: {t['panel']}; border: 1px solid {t['border']}; border-radius: 4px; }}
-QLabel#error {{ color: {t['error']}; background: {t['error_bg']}; border-radius: 3px; padding: 6px; }}
+QLabel#error {{ color: {t['error']}; }}
 QGroupBox {{ border: 1px solid {t['border']}; border-radius: 4px; margin-top: 10px; padding: 8px 6px 6px 6px; background: {t['panel']}; }}
 QGroupBox::title {{ subcontrol-origin: margin; left: 8px; padding: 0 3px; color: {t['muted']}; font-weight: 600; }}
 QPushButton, QToolButton, QComboBox, QLineEdit {{

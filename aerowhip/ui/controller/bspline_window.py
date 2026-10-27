@@ -55,7 +55,7 @@ class BSplineWindow(QtWidgets.QDialog):
         layout.addLayout(row)
         self.error = QtWidgets.QLabel()
         self.error.setWordWrap(True)
-        self.error.setStyleSheet('color: #c24444;')
+        self.error.setObjectName('error')
         layout.addWidget(self.error)
         buttons = QtWidgets.QDialogButtonBox()
         buttons.addButton('Use trajectory', QtWidgets.QDialogButtonBox.ButtonRole.AcceptRole)

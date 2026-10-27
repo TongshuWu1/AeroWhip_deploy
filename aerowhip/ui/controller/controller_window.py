@@ -7,77 +7,38 @@ from aerowhip.trajectories.full_state import FullStateTrajectory, COLUMNS
 from aerowhip.paths import ROOT, project_path
 from aerowhip.ui.controller.bspline_window import BSplineWindow
 from aerowhip.ui.controller.preset_window import PresetWindow
+from aerowhip.ui import style
+from aerowhip.ui.plotting import PlotCanvas
+from aerowhip.ui.style import AXIS
 
 
-class TrajectoryPlot(QtWidgets.QWidget):
+class TrajectoryPlot(PlotCanvas):
+    """Reference position, velocity or acceleration per world axis, with the playback time."""
     def __init__(self):
-        super().__init__()
-        self.setMinimumSize(400, 250)
-        self.values = None
-        self.duration = 1.
+        super().__init__(dark=True, minimum=(400, 250))
         self.cursor = 0.
-        self.unit = 'm'
-        self.cache = None
+        self._shown = None
 
     def set_trajectory(self, trajectory, component):
-        self.values = trajectory.preview(component)
-        self.times = trajectory.time_s
-        self.duration = trajectory.duration_s
-        self.unit = {'Position': 'm', 'Velocity': 'm/s', 'Acceleration': 'm/s²'}[component]
-        self.cache = None
-        self.update()
+        values = trajectory.preview(component)
+        unit = {'Position': 'm', 'Velocity': 'm/s', 'Acceleration': 'm/s²'}[component]
+        with self.style():
+            self.reset()
+            axes = self.figure.subplots(3, 1, sharex=True)
+            for axis, ax in enumerate(axes):
+                ax.plot(trajectory.time_s, values[:, axis], color=AXIS[axis])
+                ax.set_ylabel(f"{'xyz'[axis]} ({unit})")
+                self.add_cursor(ax, 0.)
+            axes[0].set_title(f'Reference {component.lower()} (world, tracking origin)')
+            axes[-1].set_xlabel('time (s)')
+            axes[-1].set_xlim(0, trajectory.duration_s)
+        self._shown = None
+        self.draw_idle()
 
-    def resizeEvent(self, event):
-        self.cache = None
-        super().resizeEvent(event)
-
-    def rectangles(self):
-        h = (self.height()-24)/3
-        return [QtCore.QRectF(65, 8+i*h, self.width()-82, h-22) for i in range(3)]
-
-    def paintEvent(self, event):
-        if self.values is None:
-            return
-        if self.cache is None:
-            ratio = self.devicePixelRatioF()
-            self.cache = QtGui.QPixmap(round(self.width()*ratio), round(self.height()*ratio))
-            self.cache.setDevicePixelRatio(ratio)
-            self.cache.fill(self.palette().base().color())
-            painter = QtGui.QPainter(self.cache)
-            painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
-            for axis, rect in enumerate(self.rectangles()):
-                values = self.values[:, axis]
-                lo, hi = float(values.min()), float(values.max())
-                margin = max((hi-lo)*.1, .01)
-                lo -= margin
-                hi += margin
-                painter.setPen(self.palette().mid().color())
-                painter.drawRect(rect)
-                painter.setPen(self.palette().text().color())
-                painter.drawText(4, int(rect.top()+14), f'{"XYZ"[axis]} ({self.unit})')
-                painter.drawText(4, int(rect.top()+31), f'{hi:.3g}')
-                painter.drawText(4, int(rect.bottom()), f'{lo:.3g}')
-                path = QtGui.QPainterPath()
-                for i, value in enumerate(values):
-                    point = QtCore.QPointF(rect.left()+rect.width()*self.times[i]/self.duration,
-                                          rect.bottom()-rect.height()*(value-lo)/(hi-lo))
-                    if i == 0:
-                        path.moveTo(point)
-                    else:
-                        path.lineTo(point)
-                painter.setPen(QtGui.QPen(QtGui.QColor(('#397dcc', '#349765', '#cf7650')[axis]), 1.7))
-                painter.drawPath(path)
-            painter.setPen(self.palette().text().color())
-            painter.drawText(65, self.height()-4, '0 s')
-            painter.drawText(self.width()-85, self.height()-4, f'{self.duration:g} s')
-            painter.end()
-        painter = QtGui.QPainter(self)
-        painter.drawPixmap(0, 0, self.cache)
-        painter.setPen(QtGui.QPen(self.palette().text().color(), 1, QtCore.Qt.PenStyle.DashLine))
-        for rect in self.rectangles():
-            x = rect.left()+rect.width()*min(self.cursor/self.duration, 1.)
-            painter.drawLine(QtCore.QPointF(x, rect.top()), QtCore.QPointF(x, rect.bottom()))
-        painter.end()
+    def show_cursor(self, time_s):
+        if time_s != self._shown:
+            self._shown = time_s
+            self.set_cursor(time_s)
 
 
 class ControllerWindow(QtWidgets.QWidget):
@@ -92,7 +53,10 @@ class ControllerWindow(QtWidgets.QWidget):
         self.preset_window = None
         self.previous_controller = previous_controller
         self.setWindowTitle('Full-State Controller')
-        self.resize(550, 530)
+        self.resize(600, 620)
+        self.setObjectName('page')
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_StyledBackground, True)
+        style.apply(self, dark=True)
         layout = QtWidgets.QVBoxLayout(self)
         row = QtWidgets.QHBoxLayout()
         self.preset_button = QtWidgets.QPushButton('Presets…')
@@ -119,12 +83,12 @@ class ControllerWindow(QtWidgets.QWidget):
         layout.addWidget(self.component)
         self.plot = TrajectoryPlot()
         layout.addWidget(self.plot, 1)
-        units = QtWidgets.QLabel('World P/V/A: m, m/s, m/s² · Yaw: rad · Desired body rates: rad/s')
+        units = QtWidgets.QLabel('World P/V/A: m, m/s, m/s² · Yaw: rad · Desired body rates: rad/s', objectName='note')
         units.setWordWrap(True)
         units.setToolTip('CSV header: '+','.join(COLUMNS)+'\nOriginal timestamps, starting at zero. Position uses the tracking origin. Acceleration excludes gravity.')
         layout.addWidget(units)
         self.error = QtWidgets.QLabel()
-        self.error.setStyleSheet('color: #c24444;')
+        self.error.setObjectName('error')
         self.error.setWordWrap(True)
         layout.addWidget(self.error)
         self.status = QtWidgets.QLabel()
@@ -290,8 +254,7 @@ class ControllerWindow(QtWidgets.QWidget):
         self.load_button.setEnabled(not sim.running)
         self.spline_button.setEnabled(not sim.running)
         self.progress.setValue(self.trajectory.index_at(elapsed if active else 0.))
-        self.plot.cursor = elapsed if active else 0.
-        self.plot.update()
+        self.plot.show_cursor(elapsed if active else 0.)
 
     def closeEvent(self, event):
         if not self._closing:

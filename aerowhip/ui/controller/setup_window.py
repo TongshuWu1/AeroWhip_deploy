@@ -8,6 +8,7 @@ from aerowhip.physics.actuator import Actuator
 from aerowhip.physics.state import quaternion_xyzw_to_rotation_matrix
 from aerowhip.trajectories.full_state import FullStateTrajectory
 from aerowhip.paths import project_path
+from aerowhip.ui import style
 
 
 class SetupWindow(QtWidgets.QDialog):
@@ -17,6 +18,7 @@ class SetupWindow(QtWidgets.QDialog):
         self.model_path = project_path(model_path)
         self.selection = None
         self.setWindowTitle('Full-State Controller')
+        style.apply(self)
         self.setMinimumWidth(480)
         layout = QtWidgets.QVBoxLayout(self)
         form = QtWidgets.QFormLayout()
@@ -44,7 +46,7 @@ class SetupWindow(QtWidgets.QDialog):
         self.details = QtWidgets.QLabel()
         self.error = QtWidgets.QLabel()
         self.error.setWordWrap(True)
-        self.error.setStyleSheet('color: #c24444;')
+        self.error.setObjectName('error')
         layout.addWidget(self.details)
         layout.addWidget(self.error)
         buttons = QtWidgets.QDialogButtonBox()

@@ -11,6 +11,7 @@ from aerowhip.evaluation.records import RUNS, discover_runs, evaluation_contract
 from aerowhip.paths import ROOT, project_path
 from aerowhip.physics.state import quaternion_xyzw_to_rotation_matrix
 from aerowhip.learning.artifacts import read_json
+from aerowhip.ui import style
 from aerowhip.ui.training.preview import EvaluationPreview
 
 
@@ -19,11 +20,7 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.setWindowTitle('AeroWhip · Policy simulation tester')
         self.resize(1480,960)
-        self.setStyleSheet('QWidget#testerControls {background:#edf2f6;} '
-            'QWidget#testerControls QLabel {color:#213547;} '
-            'QWidget#testerControls QDoubleSpinBox, QWidget#testerControls QLineEdit, '
-            'QWidget#testerControls QComboBox {background:white;color:#213547;padding:4px;} '
-            'QWidget#testerControls QPushButton {background:white;color:#213547;padding:7px;border:1px solid #ccd8e2;}')
+        style.apply(self)
         self.info=self.scene=self.experiment=self.directory=None
         self.closing=False
         self.process=QtCore.QProcess(self)
@@ -35,7 +32,7 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
         outer=QtWidgets.QHBoxLayout(central)
         controls=QtWidgets.QWidget(objectName='testerControls')
         panel=QtWidgets.QVBoxLayout(controls)
-        panel.addWidget(QtWidgets.QLabel('<h2>Test a learned policy</h2>'))
+        panel.addWidget(QtWidgets.QLabel('Policy test', objectName='heading'))
         self.runs=QtWidgets.QComboBox()
         self.runs.setSizeAdjustPolicy(QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self.runs.setMinimumContentsLength(10)
@@ -48,7 +45,7 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
         self.checkpoint=QtWidgets.QLineEdit(); self.checkpoint.setReadOnly(True)
         browse=QtWidgets.QPushButton('Choose checkpoint…'); browse.clicked.connect(self.browse)
         panel.addWidget(self.checkpoint); panel.addWidget(browse)
-        self.source=QtWidgets.QLabel(); self.source.setWordWrap(True); panel.addWidget(self.source)
+        self.source=QtWidgets.QLabel(objectName='muted'); self.source.setWordWrap(True); panel.addWidget(self.source)
         self.inputs=QtWidgets.QWidget(); form=QtWidgets.QFormLayout(self.inputs)
         self.values={}
         def triple(key,title):
@@ -68,8 +65,9 @@ class PolicyTesterWindow(QtWidgets.QMainWindow):
         triple('velocity','Initial world velocity [m/s]')
         triple('omega','Initial body rate [rad/s]')
         panel.addWidget(self.inputs)
-        self.warning=QtWidgets.QLabel(); self.warning.setWordWrap(True); panel.addWidget(self.warning)
-        self.test=QtWidgets.QPushButton('Run simulation test'); self.test.clicked.connect(self.start)
+        self.warning=QtWidgets.QLabel(objectName='note'); self.warning.setWordWrap(True); panel.addWidget(self.warning)
+        self.test=QtWidgets.QPushButton('Run simulation test', objectName='primary'); self.test.clicked.connect(self.start)
+        self.test.setEnabled(False)  # until a checkpoint is loaded
         self.stop=QtWidgets.QPushButton('Stop this test'); self.stop.clicked.connect(self.request_stop); self.stop.setEnabled(False)
         row=QtWidgets.QHBoxLayout(); row.addWidget(self.test); row.addWidget(self.stop); panel.addLayout(row)
         self.status=QtWidgets.QLabel('Choose a checkpoint. Nothing runs until you press Run.'); self.status.setWordWrap(True)

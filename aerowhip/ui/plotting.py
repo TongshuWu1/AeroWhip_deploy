@@ -44,7 +44,7 @@ class PlotCanvas(FigureCanvasQTAgg):
         self._background = None
 
     def add_cursor(self, ax, x=0.):
-        line = ax.axvline(x, color=ROLE['measured'], linewidth=.9, alpha=.75, animated=True)
+        line = ax.axvline(x, color=self.rc['text.color'], linewidth=.9, alpha=.75, animated=True)
         self.cursors.append(line)
         return line
 
