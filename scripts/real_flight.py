@@ -127,6 +127,7 @@ def main():
     parser.add_argument('--config', type=Path, default=ROOT/'configs/scenes/default.toml', help='Existing viewer/world geometry settings')
     parser.add_argument('--model', type=Path, default=DEFAULT_MODEL, help='Existing physical model for the measured-motion cable simulation')
     parser.add_argument('--no-cable', action='store_true', help='Drone without cable: show only the drone, no simulated cable')
+    parser.add_argument('--no-simulated-cable', action='store_true', help='Do not simulate or draw the model cable (default with --track-cable)')
     parser.add_argument('--port', type=int, default=0, help='Loopback viewer port; zero chooses an unused port')
     parser.add_argument('--output', type=Path)
     parser.add_argument('--headless', action='store_true')
@@ -154,8 +155,8 @@ def main():
     args.poses_topic = '/'+args.poses_topic.lstrip('/')
     args.capture_node = '/'+args.capture_node.lstrip('/')
     args.point_cloud_topic = '/'+args.point_cloud_topic.lstrip('/')
-    if args.no_cable and args.track_cable:
-        parser.error('--track-cable needs the cable; drop --no-cable')
+    if args.track_cable and not args.no_simulated_cable:
+        args.no_simulated_cable = True      # the labelled cable is the display; the simulation is not drawn
     if args.cable_tracking_config and not args.track_cable:
         parser.error('--cable-tracking-config requires --track-cable')
     if not args.attach and (args.poses_topic != '/poses' or args.capture_node != '/motion_capture_tracking'):
@@ -217,10 +218,10 @@ def main():
             if nodes:
                 raise RuntimeError(f'Real ROS nodes already exist: {nodes}. Use --attach; no existing process was stopped.')
         model_path = project_path(args.model)
-        cable_model = None if args.no_cable else Model(model_path)
+        cable_model = None if (args.no_cable or args.no_simulated_cable) else Model(model_path)
         tracking_settings = (TrackingSettings.load(
             project_path(args.cable_tracking_config) if args.cable_tracking_config else None,
-            cable_model.config['cable']['marker_interval_lengths_m']) if args.track_cable else None)
+            Model(model_path).config['cable']['marker_interval_lengths_m']) if args.track_cable else None)
         feed = RealFlightFeed(configuration, robots, frame, session, cable_model=cable_model,
             tracking_settings=tracking_settings, capture_only=args.capture_only)
         transport = RealFlightTransport(feed, evidence, port=args.port)
