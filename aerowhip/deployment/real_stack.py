@@ -40,6 +40,37 @@ def stack_command(paths, capture_only=False):
         f'motion_capture_yaml_file:={paths["motion_capture"]}']
 
 
+def wait_for_radios(crazyflies_yaml, timeout_s=90.):
+    """Block until every enabled Crazyflie answers a radio scan (a drone that was just powered
+    takes seconds to boot; launching before that makes the server lose the link at once and
+    die). Returns the URIs found; raises after timeout_s with the ones still missing."""
+    import time
+    import yaml
+    import cflib.crtp
+    robots = yaml.safe_load(crazyflies_yaml)['robots']
+    wanted = {name: robot['uri'].lower() for name, robot in robots.items() if robot.get('enabled')}
+    if not wanted:
+        return {}
+    cflib.crtp.init_drivers()
+    deadline, last = time.monotonic()+timeout_s, 0.
+    missing = dict(wanted)
+    while missing:
+        for name, uri in list(missing.items()):
+            address = int(uri.rsplit('/', 1)[-1], 16)
+            if any(found.lower() == uri for found, _ in cflib.crtp.scan_interfaces(address)):
+                print(f'{name} answers on {uri}', flush=True)
+                del missing[name]
+        if not missing:
+            break
+        if time.monotonic() > deadline:
+            raise SystemExit('Not answering on the radio: '+', '.join(f'{n} ({u})' for n, u in missing.items())
+                             +'. Power the drone, wait for it to boot, check the Crazyradio, then start again.')
+        if time.monotonic()-last > 5.:
+            print('Waiting for '+', '.join(missing)+' on the radio ...', flush=True); last = time.monotonic()
+        time.sleep(1.)
+    return wanted
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--session', required=True)
@@ -47,6 +78,8 @@ def main():
     parser.add_argument('--capture-only', action='store_true')
     args = parser.parse_args()
     configuration = json.loads(args.configuration)
+    if not args.capture_only:
+        wait_for_radios(configuration['crazyflies'])
     if args.capture_only:
         configuration['motion_capture'] = capture_configuration(configuration)
     record = Path('/tmp')/f'aerowhip-real-{args.session}.json'
