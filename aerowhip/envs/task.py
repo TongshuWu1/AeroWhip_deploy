@@ -32,8 +32,9 @@ class Task:
         """Score one 100 Hz sample of one lane (arrays without the batch axis); return its reward."""
         raise NotImplementedError
 
-    def fail(self, lane, time_s):
-        """The lane's physics failed numerically at time_s; return the reward correction."""
+    def fail(self, lane, time_s, reason='numerical_failure'):
+        """The lane ended early at time_s (numerical failure, or an envelope violation when the
+        environment terminates on it); return the reward correction."""
         raise NotImplementedError
 
     def done(self, lane):

@@ -6,12 +6,15 @@ from aerowhip.envs.configuration import integer, number, require_keys
 
 @dataclass(frozen=True)
 class RunConfig:
-    """Compute and budget. evaluation_actor_batch only sets the actor's batch layout during
-    deterministic evaluation (one physical lane repeated); it is not a number of trials."""
+    """Compute and budget. evaluation_episodes deterministic episodes (independent lanes, the
+    final curriculum stage, randomised model draws) are scored at every evaluation; with one,
+    evaluation_actor_batch sets the actor's batch layout for that single lane (one physical lane
+    repeated, not extra trials)."""
     device: str
     seed: int
     parallel_environments: int
     evaluation_actor_batch: int
+    evaluation_episodes: int
     training_episodes: int
     evaluation_interval_episodes: int
 
@@ -24,7 +27,7 @@ class RunConfig:
         if self.device not in ('cpu', 'cuda'):
             raise ValueError('device must be cpu or cuda')
         integer('seed', self.seed, 0)
-        for name in ('parallel_environments', 'evaluation_actor_batch', 'training_episodes',
+        for name in ('parallel_environments', 'evaluation_actor_batch', 'evaluation_episodes', 'training_episodes',
                      'evaluation_interval_episodes'):
             integer(name, getattr(self, name))
 

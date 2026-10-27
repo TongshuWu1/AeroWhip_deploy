@@ -10,9 +10,9 @@ cable tip, so the cable extends the drone's reach. This repository contains
 - tools for recorded OptiTrack flights and for fitting the model to them;
 - ROS 2 / Crazyswarm adapters, a custom simulation server and a live viewer.
 
-**Status.** The simulator and training pipeline run; the current task (fold
-transport toward +X, [docs](docs/fold_transport_task.md)) has not yet produced a
-trained policy. Cable parameters are working assumptions awaiting refits from new
+**Status.** The simulator and training pipeline run; the current task (strike a
+target beyond the drone's reach with the cable tip, [docs](docs/strike_task.md)) has
+not yet produced a trained policy. Cable parameters are working assumptions awaiting refits from new
 flight data. Running a learned policy on hardware is not implemented yet.
 
 ## Layout
@@ -64,7 +64,8 @@ MSVC and a Windows SDK installed. The viewer needs a desktop OpenGL session.
 
 - [Architecture](docs/architecture.md): packages, experiment files, data flow, units.
 - [Simulation model](docs/simulation_model.md): physics, parameters, solver, controller.
-- [Fold-transport task](docs/fold_transport_task.md): reward, fold measurement, validity, training settings.
+- [Strike task](docs/strike_task.md): reward, hit and whip-event definitions, curriculum, randomisation, evaluation.
+- [Fold-transport task](docs/fold_transport_task.md): the retired objective, kept as a diagnostic.
 - [Flight data and fitting](docs/data_and_fitting.md): takes, checks, clock alignment, fitting stages.
 - [Simulation and flight](docs/simulation_and_flight.md): Crazyswarm simulation server, real-flight viewer, cable tracking and recording.
 

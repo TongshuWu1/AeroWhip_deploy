@@ -20,7 +20,7 @@ from aerowhip.physics.model_configuration import load_model_configuration
 from aerowhip.tasks import task_config
 from aerowhip.learning.configuration import PPOConfig, RunConfig
 
-DEFAULT = ROOT/'configs/experiments/stage1_fold_x_v6.json'
+DEFAULT = ROOT/'configs/experiments/strike_x_v1.json'
 SECTIONS = {'model', 'scene', 'run', 'environment', 'task', 'ppo'}
 RUN_SCHEMA = 'aerowhip_run_v1'
 

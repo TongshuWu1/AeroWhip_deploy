@@ -23,10 +23,12 @@ def edited(path, value):
 
 
 def test_default_experiment_loads_and_round_trips():
-    experiment, snapshot, _ = load(DEFAULT)
+    experiment, snapshot, _ = load(DEFAULT)                # the strike task
     assert Experiment.from_dict(snapshot['experiment']) == experiment
-    assert experiment.environment.observations == 400
-    assert experiment.run.collections == 200
+    assert experiment.environment.observations == 500 and experiment.environment.terminate_on_violation
+    assert experiment.run.collections == 400 and len(experiment.task.curriculum.stages) == 3
+    fold = Experiment.from_dict(RAW)                       # the retired fold-transport experiment
+    assert fold.environment.observations == 400 and fold.run.collections == 200
 
 
 @pytest.mark.parametrize('path, value', [

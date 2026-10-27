@@ -87,7 +87,7 @@ def test_runs_are_reproducible_and_lanes_independent():
 def test_actor_sees_the_sensed_cable_with_confidences():
     env = make(2)
     n, m = env.nodes, 10
-    assert env.frame_size == 18+6*n+m+8+3+1 and len(env.actor_columns) == 18+6*n+m+4
+    assert env.frame_size == 18+6*n+m+3+8+3+1 and len(env.actor_columns) == 18+6*n+m+3+4   # +3: task target columns
     frame = env.frames[:, 0]
     assert bool((frame[:, env.confidence_offset:env.confidence_offset+m] == 1.).all())
     assert torch.equal(env.history['sensed_confidence'][:, 0], torch.ones(2, m, dtype=torch.float64))

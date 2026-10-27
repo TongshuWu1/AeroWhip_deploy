@@ -186,8 +186,8 @@ class FoldTransportTask(Task):
         return self.episodes[lane].observe(time_s, observation['cable_positions'], observation['cable_velocities'],
                                            drone_position=observation['drone_positions'])
 
-    def fail(self, lane, time_s):
-        return self.episodes[lane].fail(time_s, 'numerical_failure')
+    def fail(self, lane, time_s, reason='numerical_failure'):
+        return self.episodes[lane].fail(time_s, reason)
 
     def done(self, lane):
         return self.episodes[lane].terminal is not None

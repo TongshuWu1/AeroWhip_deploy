@@ -5,17 +5,28 @@ between decisions. Each lane runs the real flight pipeline natively (firmware th
 tilt/voltage-scaled thrust map, attitude loop, command delay); lanes step in parallel on the CPU
 (`BatchRuntime`, OpenMP) and are bit-identical to a single `Runtime`. Observations and task reward
 at 100 Hz. Episodes finish independently. A lane the solver rejects stops at that step; its last
-finite state is never scored or continued. Physical-validity violations (tilt, cable height) and
-workspace exits are recorded at the 100 Hz samples and do not stop a lane. Rewards come from a
-Task (envs.task). Physics float64 on the CPU, networks float32 on `device`.
+finite state is never scored or continued. Physical-validity violations (tilt, cable height) are
+recorded at the 100 Hz samples and, with `terminate_on_violation`, end the lane with the task's
+termination cost; workspace exits are recorded and never stop a lane. Rewards come from a Task
+(envs.task). Physics float64 on the CPU, networks float32 on `device`.
 
 The actor observes through the OptiTrack model (envs.sensing): the frame it sees carries the
 delayed drone pose and the live cable filter's marker positions, velocities and confidences from
-the delayed, partly hidden marker cloud; the critic and the history keep the true state. The
-attribute layout (frames, critic_states, history, ledger, ...) is otherwise that of the earlier
-tensor environment, so the learner and the evaluation tools are unchanged. The frame's critic-only
-slots for the motor/wrench state hold the four motor thrusts and the applied (delayed) command.
+the delayed, partly hidden marker cloud, plus the task's target when it has one; the critic and
+the history keep the true state. The attribute layout (frames, critic_states, history, ledger, ...)
+is otherwise that of the earlier tensor environment, so the learner and the evaluation tools are
+unchanged. The frame's critic-only slots for the motor/wrench state hold the four motor thrusts
+and the applied (delayed) command.
+
+Domain randomisation (`environment.randomisation`, when `randomised`): every reset draws, per
+lane, the battery voltage and a constant world acceleration bias (native per-lane inputs) and,
+per group of lanes, a model variant (body drag, bending damping, motor response, command delay);
+one native batch runtime per group is built for the cohort. Reference-state starts: a fraction of
+the lanes start from a recorded whip state (the task's curriculum reference bank) translated to
+the scene origin, the rest from hover; a reference state the cable filter cannot label from its
+first frame, or that the engine rejects, falls back to hover and is counted.
 """
+from copy import deepcopy
 import json
 import math
 
@@ -30,21 +41,70 @@ from aerowhip.tasks import make_task
 from .configuration import OBSERVATION_PERIOD_S
 from .observation import actor_columns, frame_row, frame_size
 from .sensing import OptiTrackSensor
+from .workspace import CylinderWorkspace
 
 ACTION_INTERFACE = 'acceleration_direct_v1'
 COMMAND_WIDTH = 13      # position(3) velocity(3) acceleration(3) yaw ... as the native flight controller reads it
 
 
+class RuntimeGroup:
+    """Several native batch runtimes (one model variant each) presented as one batch; lane
+    order is the concatenation of the runtimes' lanes."""
+
+    def __init__(self, runtimes):
+        self.runtimes = list(runtimes)
+        self.sizes = [r.size for r in self.runtimes]
+        self.bounds = np.cumsum([0, *self.sizes])
+
+    def _split(self, rows):
+        return [rows[a:b] for a, b in zip(self.bounds[:-1], self.bounds[1:])]
+
+    def reinitialize(self, states):
+        for r, part in zip(self.runtimes, self._split(states)):
+            r.reinitialize(part)
+
+    def set_voltage(self, voltage):
+        for r, part in zip(self.runtimes, self._split(voltage)):
+            r.set_voltage(part)
+
+    def set_bias(self, bias):
+        for r, part in zip(self.runtimes, self._split(bias)):
+            r.set_bias(part)
+
+    def step(self, commands):
+        for r, part in zip(self.runtimes, self._split(commands)):
+            r.step(part)
+
+    def observations(self):
+        return np.concatenate([r.observations() for r in self.runtimes])
+
+    def motors(self):
+        return np.concatenate([r.motors() for r in self.runtimes])
+
+    @property
+    def failed(self):
+        return [f for r in self.runtimes for f in r.failed]
+
+    @property
+    def errors(self):
+        return [e for r in self.runtimes for e in r.errors]
+
+
 class BatchEnvironment:
     @torch.no_grad()
     def __init__(self, config, task_config, model, scene, *, device, lanes, actor_batch=1,
-                 firmware=None, battery_voltage=None, sensing_seed=0, **unused):
+                 firmware=None, battery_voltage=None, sensing_seed=0, randomised=False, randomisation_seed=None,
+                 reference_states=True, **unused):
         """config: EnvironmentConfig; task_config: typed task settings; model: resolved model dict.
 
         actor_batch is the actor batch layout used by policy_action() for one-lane evaluation.
-        battery_voltage: per-lane voltages (lanes,) or one value; default the firmware reference.
+        battery_voltage: per-lane voltages (lanes,) or one value; default the firmware reference
+        (ignored when randomised draws voltages).
         sensing_seed: the sensing model's random draws (dropout, noise, latency) per lane are a
         function of (sensing_seed, lane), so a lane's observations do not depend on the other lanes.
+        randomised: draw the model, voltage and bias per reset from config.randomisation (a
+        function of (randomisation_seed, cohort)); reference_states: start the task's reference
+        fraction of lanes from its reference bank (training only).
         `unused` accepts the tensor environment's GPU options (capture, conditional); ignored.
         """
         self.config, self.scene = config, scene
@@ -55,10 +115,14 @@ class BatchEnvironment:
         if abs(m.dt-OBSERVATION_PERIOD_S) > 1e-12 or abs(scene.timestep_s-OBSERVATION_PERIOD_S) > 1e-12:
             raise ValueError('Environments require a 100 Hz observation clock')
         if m.n != 11:
-            raise ValueError('The fold reward measures a ten-link (eleven-node) cable')
+            raise ValueError('The tasks measure a ten-link (eleven-node) cable')
         self.nodes = n = m.n
         rest = np.asarray(m.rest, float)
         self.task = make_task(task_config, config, rest)
+        self.workspace = config.workspace
+        self.stage = None
+        if hasattr(self.task, 'set_stage'):
+            self.set_curriculum_stage(self.task.stage)
         self.action_interface = ACTION_INTERFACE
         self.firmware = firmware_config() if firmware is None else firmware
         initial = scene.initial_state
@@ -107,38 +171,101 @@ class BatchEnvironment:
         self.command_scale = torch.cat((self.action_limit, torch.tensor([math.pi], dtype=torch.float64, device=device)))
         self.critic_state_size = (2*self.physical_size+4+4+4*self.delay+self.action_size+1
                                   +self.task.critic_feature_size)
-        voltage = self.firmware['reference_voltage_v'] if battery_voltage is None else battery_voltage
-        self.voltage = np.broadcast_to(np.asarray(voltage, float), (lanes,)).copy()
-        # Zero action means hover: a vertical feed-forward acceleration per lane makes the delivered
-        # thrust (thrust map at that lane's voltage) equal the weight of drone and cable. The real
-        # host PID supplies this trim in flight.
-        weight = (model['drone']['mass_kg']+model['cable']['total_mass_kg'])*-model['simulation']['gravity_world_m_s2'][2]
-        self.hover_trim = np.zeros((lanes, 3))
-        for lane in range(lanes):
-            probe = self.native.FlightController(self.firmware, model, float(self.voltage[lane]))
-            low, high = -5., 12.
-            for _ in range(60):
-                mid = .5*(low+high)
-                command = np.zeros(COMMAND_WIDTH); command[8] = mid; command[9] = yaw
-                if probe(self.seed, command)[0] < weight:
-                    low = mid
-                else:
-                    high = mid
-            self.hover_trim[lane, 2] = .5*(low+high)
-        probe = self.native.FlightController(self.firmware, model, float(self.voltage[0]))
-        hold_row = self._command(self.hover_trim[:1])[0]
-        actuator = {k: (list(v) if isinstance(v, (list, tuple)) else v) for k, v in model['actuator'].items()}
-        thrust = float(probe(self.seed, hold_row)[0])
-        low, high = actuator['minimum_thrust_n'], actuator['maximum_thrust_n']
-        actuator['initial_thrust_n'] = [float(np.clip(thrust/4, low[i], high[i])) for i in range(4)]
-        self.controllers = [self.native.FlightController(self.firmware, model, float(self.voltage[i])) for i in range(lanes)]
-        self.runtime = self.native.BatchRuntime(m.native, self.seed, hold_row, model['controller']['controller_period_s'],
-                                                model['controller']['command_delay_s'], self.native.Actuator(actuator),
-                                                self.controllers)
-        self.execution_backend = f'native_batch_openmp_{self.native.BatchRuntime.threads()}_threads'
+        self.weight = (model['drone']['mass_kg']+model['cable']['total_mass_kg'])*-model['simulation']['gravity_world_m_s2'][2]
+        self.randomisation = config.randomisation
+        self.randomised = bool(randomised) and self.randomisation.active
+        self.randomisation_rng_seed = int(sensing_seed)+1 if randomisation_seed is None else int(randomisation_seed)
+        self.cohort = 0
+        self.nominal_voltage = self.firmware['reference_voltage_v'] if battery_voltage is None else battery_voltage
+        self.voltage = np.broadcast_to(np.asarray(self.nominal_voltage, float), (lanes,)).copy()
+        self.bias = np.zeros((lanes, 3))
+        self.variants = []            # per lane: index of its model variant in self.variant_models
+        self.variant_models = [model]
+        self.variant_draws = []
+        self.reference = None
+        curriculum = getattr(task_config, 'curriculum', None)
+        if reference_states and curriculum is not None and curriculum.reference_state_fraction > 0:
+            self.reference = load_reference_bank(curriculum.reference_bank, self.seed.shape[0])
+            self.reference_fraction = curriculum.reference_state_fraction
+        self.reference_lanes = np.zeros(lanes, bool)
+        self.reference_fallbacks = 0
+        self._build_runtime([model], [lanes])
         self.reset()
         if not bool(self.active.all()):
             raise ValueError('Initial state is outside the task envelope')
+
+    # ------------------------------------------------------------------ construction
+    def _hover_trim(self, model, voltage):
+        """Vertical feed-forward (m/s²) making the delivered thrust equal the weight of drone and
+        cable at this voltage, so zero action means hover (the host PID supplies it in flight)."""
+        probe = self.native.FlightController(self.firmware, model, float(voltage))
+        low, high = -5., 12.
+        for _ in range(60):
+            mid = .5*(low+high)
+            command = np.zeros(COMMAND_WIDTH); command[8] = mid; command[9] = self.yaw
+            if probe(self.seed, command)[0] < self.weight:
+                low = mid
+            else:
+                high = mid
+        return .5*(low+high)
+
+    def _build_runtime(self, models, sizes):
+        """One native batch runtime per model variant; lanes are assigned in order."""
+        self.variant_models = list(models)
+        self.variants = np.repeat(np.arange(len(models)), sizes)
+        self.hover_trim = np.zeros((self.batch, 3))
+        for lane in range(self.batch):
+            self.hover_trim[lane, 2] = self._hover_trim(models[self.variants[lane]], self.voltage[lane])
+        runtimes, controllers, start = [], [], 0
+        for model, size in zip(models, sizes):
+            native_model = self.model.native if model is self.model_config else Model(model, load_weights=False).native
+            probe = self.native.FlightController(self.firmware, model, float(self.voltage[start]))
+            hold_row = self._command(self.hover_trim[start:start+1])[0]
+            actuator = {k: (list(v) if isinstance(v, (list, tuple)) else v) for k, v in model['actuator'].items()}
+            thrust = float(probe(self.seed, hold_row)[0])
+            low, high = actuator['minimum_thrust_n'], actuator['maximum_thrust_n']
+            actuator['initial_thrust_n'] = [float(np.clip(thrust/4, low[i], high[i])) for i in range(4)]
+            lane_controllers = [self.native.FlightController(self.firmware, model, float(self.voltage[i]))
+                                for i in range(start, start+size)]
+            controllers.extend(lane_controllers)
+            runtimes.append(self.native.BatchRuntime(native_model, self.seed, hold_row, model['controller']['controller_period_s'],
+                                                     model['controller']['command_delay_s'], self.native.Actuator(actuator),
+                                                     lane_controllers))
+            start += size
+        self.controllers = controllers
+        self.runtime = runtimes[0] if len(runtimes) == 1 else RuntimeGroup(runtimes)
+        self.execution_backend = f'native_batch_openmp_{self.native.BatchRuntime.threads()}_threads'
+
+    def _draw(self):
+        """This cohort's randomisation: per-lane voltage and bias, per-group model variants."""
+        r, rng = self.randomisation, np.random.default_rng([self.randomisation_rng_seed, self.cohort])
+        self.voltage = rng.uniform(*r.battery_voltage_v, self.batch)
+        self.bias = rng.normal(0., 1., (self.batch, 3))*np.asarray(r.acceleration_bias_sd_mps2)
+        groups = min(r.groups, self.batch)
+        sizes = [len(part) for part in np.array_split(np.arange(self.batch), groups)]
+        models, draws = [], []
+        for _ in range(groups):
+            drag = math.exp(rng.uniform(*np.log(r.body_drag_scale))) if r.body_drag_scale[0] > 0 else 1.
+            damping = math.exp(rng.uniform(*np.log(r.bending_damping_scale))) if r.bending_damping_scale[0] > 0 else 1.
+            response = rng.uniform(*r.motor_response_s)
+            delay = rng.uniform(*r.command_delay_s)
+            model = deepcopy(self.model_config)
+            model['drone']['body_drag_s_inv'] = [float(v*drag) for v in model['drone']['body_drag_s_inv']]
+            model['cable']['Cb_n_m2_s'] = float(model['cable']['Cb_n_m2_s']*damping)
+            model['actuator']['response_time_s'] = [float(response)]*4
+            model['controller'] = dict(model['controller'], command_delay_s=float(delay))
+            models.append(model)
+            draws.append(dict(body_drag_scale=drag, bending_damping_scale=damping, motor_response_s=float(response),
+                              command_delay_s=float(delay)))
+        self.variant_draws = draws
+        self._build_runtime(models, sizes)
+
+    def set_curriculum_stage(self, stage):
+        """Workspace radius and the task's target/threshold for the next cohorts (strike task)."""
+        w = self.config.workspace
+        self.workspace = CylinderWorkspace(stage.workspace_radius_m, w.height_lower_world_m, w.height_upper_world_m)
+        self.stage = stage
+        self.task.set_stage(stage, self.workspace)
 
     def _command(self, acceleration):
         command = np.zeros((len(acceleration), COMMAND_WIDTH))
@@ -166,12 +293,52 @@ class BatchEnvironment:
                 & (q[:, :, 2].min(-1) >= c.minimum_cable_height_m))
 
     def _inside(self, p):
-        return self.config.workspace.contains(torch.as_tensor(p[:, None]), self.origin.cpu().expand(self.batch, 3))[:, 0].numpy()
+        return self.workspace.contains(torch.as_tensor(p[:, None]), self.origin.cpu().expand(self.batch, 3))[:, 0].numpy()
+
+    def _initial_states(self, rng):
+        """Per-lane initial state rows: the hover seed, or a reference-bank state for the
+        reference fraction of the lanes (translated to the scene origin)."""
+        rows = np.tile(self.seed, (self.batch, 1))
+        self.reference_lanes[:] = False
+        if self.reference is None:
+            return rows
+        chosen = rng.random(self.batch) < self.reference_fraction
+        picks = rng.integers(0, len(self.reference['states']), self.batch)
+        for lane in np.flatnonzero(chosen):
+            rows[lane] = translate_state(self.reference['states'][picks[lane]], self.origin_np, self.nodes-1)
+            self.reference_lanes[lane] = True
+        return rows
+
+    def _start(self, rows):
+        """Reinitialize the lanes; a reference state the engine rejects or the cable filter cannot
+        label falls back to the hover seed (counted). Returns the observation and the sensed frames."""
+        self.runtime.reinitialize(rows)
+        self.runtime.set_voltage(self.voltage)
+        self.runtime.set_bias(self.bias)
+        for sensor in self.sensors:
+            sensor.reset()
+        rejected = np.asarray(self.runtime.failed, bool)
+        observation = self._observe()
+        sensed = self._sense(observation, ~rejected)
+        complete = np.array([s is not None and bool((s['confidence'] == 1.).all()) for s in sensed])
+        fallback = self.reference_lanes & (rejected | ~complete)
+        if fallback.any():
+            self.reference_fallbacks += int(fallback.sum())
+            rows = rows.copy(); rows[fallback] = self.seed
+            self.reference_lanes &= ~fallback
+            return self._start(rows)
+        if rejected.any():
+            raise ValueError(f'Initial state rejected: {[e for e in self.runtime.errors if e][:1]}')
+        if not complete.all():
+            raise ValueError('The cable filter must label the complete initial cable')
+        return observation, sensed
 
     @torch.no_grad()
     def reset(self):
-        self.runtime.reinitialize(np.tile(self.seed, (self.batch, 1)))
-        self.runtime.set_voltage(self.voltage)
+        self.cohort += 1
+        rng = np.random.default_rng([self.randomisation_rng_seed, self.cohort, 7])
+        if self.randomised:
+            self._draw()
         self.index, self.decision = 0, 0
         self.queue = np.zeros((self.batch, self.delay, 4))
         self.queue[:, :, 3] = self.yaw
@@ -192,22 +359,18 @@ class BatchEnvironment:
         self.history = {name: torch.zeros((self.batch, self.samples, *shape), dtype=torch.float64)
                         for name, shape in shapes.items()}
         self.numerical_valid = torch.zeros((self.batch, self.samples), dtype=torch.bool)
-        for sensor in self.sensors:
-            sensor.reset()
+        observation, sensed = self._start(self._initial_states(rng))
         self.sensing_latency_frames = np.array([s.latency for s in self.sensors])
-        p, v, R, w, q, cv = self._observe()
+        p, v, R, w, q, cv = observation
         envelope = self._envelope(q, R)
         inside = self._inside(p)
-        if not inside.all():
+        if not inside[~self.reference_lanes].all():
             raise ValueError('Initial state is outside the workspace')
         self.active_np &= envelope
         hold = np.tile(self.hold.cpu().numpy(), (self.batch, 1))
-        sensed = self._sense((p, v, R, w, q, cv), np.ones(self.batch, bool))
-        if not all((s['confidence'] == 1.).all() for s in sensed):
-            raise ValueError('The cable filter must label the complete initial cable')
-        self._record((p, v, R, w, q, cv), sensed, hold, hold, self.active_np.copy(), ~inside)
         self.task.reset(dict(cable_positions=q, cable_velocities=cv, drone_positions=p,
                              workspace_origin=np.tile(self.origin_np, (self.batch, 1))))
+        self._record((p, v, R, w, q, cv), sensed, hold, hold, self.active_np.copy(), ~inside)
         self.minimum_observed_cable_height = q[:, :, 2].min(-1).copy()
         self.maximum_observed_tilt = np.degrees(np.arccos(np.clip(R[:, 2, 2], -1, 1)))
         self.physical_violation_np = ((self.minimum_observed_cable_height < self.config.minimum_cable_height_m)
@@ -279,12 +442,22 @@ class BatchEnvironment:
         self.numerical_valid[:, i] = torch.as_tensor(valid)
         critic = np.concatenate((motors/self.maximum_thrust, applied/self.command_scale.cpu().numpy()), 1)
         previous = self.previous_action.double().cpu().numpy()
+        targets = self.task.targets() if hasattr(self.task, 'targets') else [None]*self.batch
         frame = np.zeros((self.batch, self.frame_size))
         for lane, s in enumerate(sensed):
             if s is not None:
                 frame[lane] = frame_row(s, origin=self.origin_np, length=self.length, previous_action=previous[lane],
-                                        progress=i/self.time_samples, nodes=self.nodes, critic=critic[lane])
+                                        progress=i/self.time_samples, nodes=self.nodes, critic=critic[lane],
+                                        target=targets[lane])
         self.frames[:, i] = torch.as_tensor(frame, device=self.device).float()
+
+    def _end(self, lane, elapsed, reason, position):
+        self.active_np[lane] = False
+        self.terminal_times[lane] = self.task.end_time(lane)
+        self.failure_reasons[lane] = reason
+        self.failure_records.append(dict(lane=int(lane), time_s=elapsed, reason=reason,
+                                         error=self.runtime.errors[lane] if reason == 'numerical_failure' else '',
+                                         drone_position_m=position.tolist()))
 
     @torch.no_grad()
     def step(self, action):
@@ -296,9 +469,11 @@ class BatchEnvironment:
         was_decision = self.active_np.copy()
         self.actions[:, self.decision] = torch.where(self.active[:, None], action, 0.)
         self.previous_action = torch.where(self.active[:, None], action, self.previous_action)
-        acceleration = action.double().cpu().numpy()*self.action_limit_np
+        action_np = action.double().cpu().numpy()
+        acceleration = action_np*self.action_limit_np
         requested = np.concatenate((acceleration, np.full((self.batch, 1), self.yaw)), 1)   # policy part, as recorded
         sent = acceleration+self.hover_trim
+        terminate = self.config.terminate_on_violation
         for _ in range(self.stride):
             was = self.active_np.copy()
             applied = self.queue[:, 0].copy() if self.delay else requested
@@ -322,20 +497,21 @@ class BatchEnvironment:
             self.failed_np |= failed
             self.active_np = was & ~lost
             self._record(observation, self._sense(observation, observed), requested, applied, was & ~failed, ~inside)
+            elapsed = self.index*OBSERVATION_PERIOD_S
             for lane in np.flatnonzero(was):
                 if lost[lane]:
-                    elapsed = self.index*OBSERVATION_PERIOD_S
                     reward = self.task.fail(lane, elapsed)
-                    self.failure_reasons[lane] = 'numerical_failure'
-                    self.failure_records.append(dict(lane=int(lane), time_s=elapsed, reason='numerical_failure',
-                        error=self.runtime.errors[lane], drone_position_m=p[lane].tolist()))
+                    self._end(lane, elapsed, 'numerical_failure', p[lane])
                 else:
-                    reward = self.task.observe(lane, self.index*OBSERVATION_PERIOD_S,
-                        dict(cable_positions=q[lane], cable_velocities=cv[lane], drone_positions=p[lane]))
+                    reward = self.task.observe(lane, elapsed, dict(cable_positions=q[lane], cable_velocities=cv[lane],
+                                                                   drone_positions=p[lane], action=action_np[lane]))
+                    if terminate and not safe[lane] and not self.task.done(lane):
+                        reward += self.task.fail(lane, elapsed, 'envelope_violation')
+                        self._end(lane, elapsed, 'envelope_violation', p[lane])
+                    elif self.task.done(lane):
+                        self.active_np[lane] = False
+                        self.terminal_times[lane] = self.task.end_time(lane)
                 self.ledger[lane, self.decision] += reward
-                if self.task.done(lane):
-                    self.active_np[lane] = False
-                    self.terminal_times[lane] = self.task.end_time(lane)
             self.executed_np += was
             if not self.active_np.any():
                 break
@@ -357,7 +533,8 @@ class BatchEnvironment:
         components.update(net_episode_return=returns, failure=self.failed.double(),
             executed_duration_s=tensor(self.terminal_times), physical_violation=self.physical_violation.double(),
             numerically_valid=(~self.failed).double(), minimum_cable_height_m=tensor(self.minimum_observed_cable_height),
-            maximum_tilt_deg=tensor(self.maximum_observed_tilt))
+            maximum_tilt_deg=tensor(self.maximum_observed_tilt),
+            reference_start=tensor(self.reference_lanes.astype(float)))
         if not torch.allclose(self.ledger.sum(1), returns, atol=1e-12, rtol=1e-12):
             raise RuntimeError('Reward ledger does not telescope to the episode returns')
         self.transition_rewards = self.ledger.float()
@@ -370,12 +547,15 @@ class BatchEnvironment:
             row.update(task=self.task.name, physical_violation=bool(self.physical_violation_np[lane]),
                        numerically_valid=not bool(self.failed_np[lane]),
                        minimum_cable_height_m=float(self.minimum_observed_cable_height[lane]),
-                       maximum_tilt_deg=float(self.maximum_observed_tilt[lane]))
+                       maximum_tilt_deg=float(self.maximum_observed_tilt[lane]),
+                       reference_start=bool(self.reference_lanes[lane]), terminated=self.failure_reasons[lane],
+                       battery_voltage_v=float(self.voltage[lane]), acceleration_bias_mps2=self.bias[lane].tolist(),
+                       model_variant=self.variant_draws[self.variants[lane]] if self.variant_draws else None)
         return records
 
     def workspace_metrics(self):
         mask = self.numerical_valid[:, 1:]
-        radial, vertical = self.config.workspace.excess(self.history['drone_positions'], self.origin.cpu().expand(self.batch, 3))
+        radial, vertical = self.workspace.excess(self.history['drone_positions'], self.origin.cpu().expand(self.batch, 3))
         radial, vertical = radial[:, 1:], vertical[:, 1:]
         dev = self.device
         return dict(boundary_breached=self.workspace_breached.clone(),
@@ -421,14 +601,40 @@ class BatchEnvironment:
         return callback(self.frames.repeat(self.actor_batch, 1, 1), self.indices().repeat(self.actor_batch))[:1]
 
     def provenance(self):
+        stage = None if self.stage is None else dict(target_distance_m=self.stage.target_distance_m,
+                                                      speed_threshold_mps=self.stage.speed_threshold_mps,
+                                                      workspace_radius_m=self.stage.workspace_radius_m)
         return dict(evaluation_backend='native_batch_flight_controller_v2', task=self.task.name,
-                    environment_lanes=self.batch, evaluation_actor_batch=self.actor_batch, unique_initial_states=1,
+                    environment_lanes=self.batch, evaluation_actor_batch=self.actor_batch,
+                    unique_initial_states=int(1+self.reference_lanes.sum()),
                     firmware=self.firmware, battery_voltage_v=self.voltage.tolist(),
-                    hover_trim_mps2=self.hover_trim.tolist(),
+                    hover_trim_mps2=self.hover_trim.tolist(), randomised=self.randomised,
+                    model_variants=list(self.variant_draws), curriculum_stage=stage,
+                    reference_starts=int(self.reference_lanes.sum()), reference_fallbacks=self.reference_fallbacks,
                     sensing=dict(latency_frames=list(self.sensing.latency_frames), position_noise_m=self.sensing.position_noise_m,
                                  dropout_hazard=[list(row) for row in self.sensing.dropout_hazard],
                                  reappear_probability=self.sensing.reappear_probability,
                                  cable_filter='deployment.cable_filter.CableFilter'))
+
+
+def translate_state(state, origin, nodes):
+    """A reference-bank state (drone tracking origin at the bank's zero) moved so that its hover
+    origin is at `origin`: the centre of mass and every free cable node (nodes = 10) are shifted."""
+    s = np.array(state, float)
+    s[:3] += origin
+    s[18:18+3*nodes] += np.tile(origin, nodes)
+    return s
+
+
+def load_reference_bank(path, width):
+    """Reference states written by scripts/build_reset_bank.py: 'states' (K, state width) relative to
+    the recorded hover origin, with their provenance."""
+    from aerowhip.paths import project_path
+    bank = np.load(project_path(path))
+    states = np.asarray(bank['states'], float)
+    if states.ndim != 2 or states.shape[1] != width or not len(states):
+        raise ValueError(f'{path}: expected reference states of width {width}')
+    return dict(states=states, source=str(bank['source']) if 'source' in bank else '', count=len(states))
 
 
 def make_batch_environment(experiment, snapshot, scene, *, lanes=None, device=None, **kwargs):

@@ -1,8 +1,11 @@
-# Fold-transport task (Stage 1)
+# Fold-transport task (retired objective)
 
-An implemented experiment, **not a validated whipping classifier**. It is the
-default experiment, [`configs/experiments/stage1_fold_x_v6.json`](../configs/experiments/stage1_fold_x_v6.json),
-registered as task `continuous_directional_whip_four_second_v6`.
+**No longer the training objective.** The default experiment is the [strike task](strike_task.md);
+the fold measure described here remains available as a diagnostic of a learned motion, and the
+task stays registered as `continuous_directional_whip_four_second_v6`
+([`configs/experiments/stage1_fold_x_v6.json`](../configs/experiments/stage1_fold_x_v6.json)) so its
+earlier runs can be read. It was an implemented experiment, **not a validated whipping
+classifier**: the recorded scripted whips never cross its 90° fold threshold.
 
 The task asks the drone to generate a coherently moving fold and the associated
 outward cable opening in **world +X**. Sideways or backward preparation is

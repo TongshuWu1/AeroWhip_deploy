@@ -77,6 +77,46 @@ def record_collection(directory, env, returns, valid, components, number):
                 policy_measurement='stochastic pre-update collection')
 
 
+class Curriculum:
+    """Stage of the strike task's curriculum: advances when the score (strike) rate over the last
+    window_episodes training episodes reaches advance_strike_rate; the final stage is kept."""
+
+    def __init__(self, config):
+        self.config, self.stages = config, config.stages
+        self.index, self.outcomes = 0, []
+
+    @property
+    def stage(self):
+        return self.stages[self.index]
+
+    @property
+    def final(self):
+        return self.stages[-1]
+
+    @property
+    def rate(self):
+        return float(sum(self.outcomes)/len(self.outcomes)) if self.outcomes else 0.
+
+    def record(self, outcomes):
+        """Add a cohort's outcomes; True when the stage advanced (the window restarts)."""
+        self.outcomes = (self.outcomes+[float(v) for v in outcomes])[-self.config.window_episodes:]
+        if (len(self.outcomes) >= self.config.window_episodes and self.rate >= self.config.advance_strike_rate
+                and self.index < len(self.stages)-1):
+            self.index += 1
+            self.outcomes = []
+            return True
+        return False
+
+    def state_dict(self):
+        return dict(index=self.index, outcomes=list(self.outcomes))
+
+    def load_state_dict(self, saved):
+        self.index = int(saved.get('index', 0))
+        self.outcomes = [float(v) for v in saved.get('outcomes', [])]
+        if not 0 <= self.index < len(self.stages):
+            raise ValueError('Checkpoint curriculum stage is outside this experiment')
+
+
 def run(directory):
     directory = project_path(directory)
     # Never attach another worker to a run, even when a stale lock needs review.
@@ -116,8 +156,12 @@ def run(directory):
             return environments[width]
 
         env = environment(min(run_config.parallel_environments, run_config.training_episodes))
-        evaluation_env = make_environment(experiment, snapshot, scene, lanes=1)
+        # Evaluation: independent deterministic episodes at the final curriculum stage with their own
+        # sensing and model draws; no reference-state starts.
+        evaluation_env = make_environment(experiment, snapshot, scene, lanes=run_config.evaluation_episodes,
+                                          sensing_seed=1, randomisation_seed=2, randomised=True, reference_states=False)
         agent = make_agent(experiment, env)
+        curriculum = Curriculum(experiment.task.curriculum) if hasattr(experiment.task, 'curriculum') else None
         rollout = None
         request = read_json(directory/'request.json')
         if request['resume']:
@@ -135,6 +179,8 @@ def run(directory):
                 raise ValueError('Checkpoint completed-episode entropy clock differs from training episodes')
             best, best_replay = saved['best_return'], saved.get('best_replay')
             best_rollout, best_event = saved.get('best_rollout'), saved.get('best_event')
+            if curriculum is not None:
+                curriculum.load_state_dict(saved.get('curriculum') or {})
             if best_rollout is not None:
                 best_replay = 'inherited-best.npz'
                 save_arrays(directory/best_replay, replay_from_checkpoint(best_rollout))
@@ -152,6 +198,7 @@ def run(directory):
                 snapshot=snapshot, agent=agent.state_dict(), round=round_number,
                 episodes=episodes, steps=steps, evaluation_steps=evaluation_steps,
                 best_return=best, best_replay=best_replay, best_rollout=best_rollout, best_event=best_event,
+                curriculum=None if curriculum is None else curriculum.state_dict(),
                 rng_cpu=torch.get_rng_state(),
                 rng_cuda=torch.cuda.get_rng_state_all() if env.device == 'cuda' else []))
             last_saved_round = round_number
@@ -159,6 +206,8 @@ def run(directory):
         def collect(deterministic=False):
             """Run one batch to completion; False if a stop was requested first."""
             nonlocal steps, evaluation_steps, rollout
+            if curriculum is not None:
+                env.set_curriculum_stage(curriculum.final if deterministic else curriculum.stage)
             env.reset()
             previous_raw = previous_index = None
             if not deterministic:
@@ -174,7 +223,10 @@ def run(directory):
                 if stop(): return False
                 active = int(env.active.sum())
                 if deterministic:
-                    action = env.policy_action(lambda h, i: agent.action(h, i, True))
+                    if env.batch == 1:
+                        action = env.policy_action(lambda h, i: agent.action(h, i, True))
+                    else:
+                        action = agent.action(env.frames, env.indices(), True)
                     evaluation_steps += active
                 else:
                     action, *policy = agent.collect_action(env.frames, env.indices(), env.critic_states[:, env.decision],
@@ -197,6 +249,8 @@ def run(directory):
         while episodes < run_config.training_episodes and round_number < run_config.collections and not stop():
             # A narrower final batch keeps the exact episode budget without padded episodes.
             env = environment(min(run_config.parallel_environments, run_config.training_episodes-episodes))
+            if curriculum is not None:
+                env.randomised = env.randomisation.active
             if not collect():
                 event(phase='discarded', message='Interrupted cohort omitted from learning data', decisions=env.decision)
                 break
@@ -213,6 +267,13 @@ def run(directory):
                 value_gradient_updates=agent.value_updates, **m))
             rollout = None  # Never carry on-policy data to a later collection.
             round_number += 1
+            if curriculum is not None:
+                advanced = curriculum.record(components[env.task.score_component].tolist())
+                event(phase='curriculum', round=round_number, stage=curriculum.index, stages=len(curriculum.stages),
+                      stage_strike_rate=curriculum.rate, stage_episodes=len(curriculum.outcomes), advanced=advanced,
+                      target_distance_m=curriculum.stage.target_distance_m,
+                      speed_threshold_mps=curriculum.stage.speed_threshold_mps,
+                      workspace_radius_m=curriculum.stage.workspace_radius_m)
             event(phase='round', round=round_number, total_rounds=total_rounds, episodes=episodes,
                 total_episodes=run_config.training_episodes, collection_episodes=env.batch,
                 scheduled_gradient_updates=updates, steps=steps, gradient_updates=agent.updates,
@@ -231,18 +292,20 @@ def run(directory):
                 env = evaluation_env
                 if collect(deterministic=True):
                     evaluated, valid, components = env.finish()
-                    # One physical case repeated in the actor batch layout, not independent trials.
-                    result = float(evaluated[0])
+                    # Mean over the evaluation episodes (one physical case repeated in the actor batch
+                    # layout when there is a single lane). The replay is the first lane's.
+                    result = float(evaluated.mean())
                     arrays = env.replay_arrays(0)
                     filename = f'round-{round_number:05d}.npz' if arrays is not None else None
                     if arrays is not None: save_arrays(directory/filename, arrays)
                     improved = result > best
                     if improved: best, best_replay = result, filename
                     evaluation_event = dict(phase='evaluation', round=round_number, evaluation_return=result,
-                        best_return=best, valid=bool(valid[0]), replay=filename,
-                        components={k: float(v[0]) for k, v in components.items()},
+                        best_return=best, valid=bool(valid[0]), valid_fraction=float(valid.float().mean()),
+                        evaluation_episodes=env.batch, replay=filename,
+                        components={k: float(torch.nanmean(v.double())) for k, v in components.items()},
                         evaluation_steps=evaluation_steps, **env.provenance(),
-                        workspace={k: float(v[0]) for k, v in env.workspace_metrics().items()})
+                        workspace={k: float(v.double().mean()) for k, v in env.workspace_metrics().items()})
                     if improved:
                         best_event, best_rollout = evaluation_event, checkpoint_replay(arrays)
                     event(**evaluation_event)

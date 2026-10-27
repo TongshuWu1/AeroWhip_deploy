@@ -1772,3 +1772,40 @@ User's request: one systematic, automated data collection with a single calibrat
   7.9×, 16 workers 9.0×, 24 workers 10.0× (threads gave about 6.7×): the CPU is the limit (8
   performance cores). A profile puts about 0.5 ms of the 15 ms per segment in Python; the rest is the
   native physics and firmware (about 30 µs per 2 ms step), so a batched native replay would gain little.
+
+## Dated change note — 2026-10-28 strike task, curriculum, reference-state starts, domain randomisation
+
+- **Research decisions approved by the user** (recorded in the session memory): the training
+  objective is a target strike by outcome; the whip event is defined by tip speed, amplification over
+  the attachment and extension; the fold is a diagnostic only; a simple curriculum with reference-state
+  starts; one strike plus recovery per episode; randomisation from the fitted intervals. The exact
+  numbers in `configs/experiments/strike_x_v1.json` were approved as drafted.
+- [tasks/strike](../aerowhip/tasks/strike) (`strike_x_v1`): `StrikeEpisode`/`StrikeTask`
+  (potential-based progress, bounded approach credit, strike and speed bonus, recovery bonus,
+  workspace/action/termination costs; hit on the tip's inter-sample segment; whip event, closest
+  approach and sharpest joint angle reported; `set_stage`, `targets`). Spec: [docs/strike_task.md](../docs/strike_task.md).
+  The fold task stays registered (retired objective; its doc says so). `Task.fail` takes a reason.
+- [envs/batch_environment.py](../aerowhip/envs/batch_environment.py): `RuntimeGroup` (several native
+  batch runtimes, one model variant each); per-cohort draws (`environment.randomisation`: per-lane
+  voltage and acceleration bias through the native `set_voltage`/`set_bias`, per-group drag, Cb,
+  motor response and command delay); `terminate_on_violation` ends a lane with the task's
+  termination cost (`envelope_violation`); reference-state starts from the task's bank with hover
+  fallback (counted); `set_curriculum_stage` (workspace radius + task stage); the task's action in the
+  observation; target columns in the frame ([envs/observation.py](../aerowhip/envs/observation.py):
+  frame +3, actor-visible; the flight node passes `target=None` → zeros until a strike policy is deployed).
+  The critic's command-queue slots keep the nominal delay.
+- [learning/worker.py](../aerowhip/learning/worker.py): `Curriculum` (window strike rate, checkpointed
+  and resumed); the training env runs randomised; evaluation on `run.evaluation_episodes` independent
+  lanes (sensing seed 1, randomisation seed 2, no reference starts, final stage), deterministic
+  policy, mean return and mean components logged; `evaluation_episodes` added to `RunConfig`.
+- [scripts/build_reset_bank.py](../scripts/build_reset_bank.py): `runs/reset_bank/whip.npz`, 1302
+  states from whip/001–002 (tip speeds to 4.2 m/s), hover origin at zero, hover yaw removed.
+- Experiment files: `strike_x_v1.json` (default; provisional randomisation ranges, to be replaced by
+  the fitted 95 % intervals); `stage1_fold_x_v6.json` carries the new required keys with no effect.
+- **Checks:** `tests/test_strike.py` (11 tests: target, segment hit, shaping telescoping and single
+  bonus, slow pass is no hit, recovery end, termination cost, stage workspace, whip-event conditions,
+  batch targets/features, curriculum advance/resume, stage threshold); whole suite: 122 pass. Smoke
+  rollout of the strike environment (8 lanes, 5 s, 4 variants, 3 reference starts, 0 fallbacks,
+  22.7 s): a scripted stroke gave whip events (tip 4.4–4.7 m/s, amplification 2.3–2.6, extension 0.99)
+  and no strike; ledgers telescoped. **Not done:** no training run; the training window's fold-specific
+  panels were not exercised on a strike run; the flight node does not yet pass a target.

@@ -109,6 +109,9 @@ class LearningCurves(QtWidgets.QWidget):
             plotted = False
             for key, label, color in (('valid_fraction', 'task-valid', ROLE['model']),
                                       ('components.completed_horizon', 'full horizon', PALETTE['green']),
+                                      ('components.strike', 'strike', PALETTE['green']),
+                                      ('components.whip_event', 'whip event', PALETTE['purple']),
+                                      ('components.recovered', 'recovered', PALETTE['sky']),
                                       ('components.physical_violation', 'physical violation', ROLE['error']),
                                       ('components.numerically_valid', 'numerically valid', ROLE['reference'])):
                 sx, sy = _series(rounds, key)
@@ -125,6 +128,7 @@ class LearningCurves(QtWidgets.QWidget):
             # Return decomposition in task units (mean over the collection).
             plotted = False
             for key, label, color in (('components.continuous_whip_credit', 'accrued credit', PALETTE['green']),
+                                      ('components.shaping_credit', 'shaping + bonuses', PALETTE['green']),
                                       ('components.workspace_cost', 'workspace cost (subtracted)', PALETTE['orange']),
                                       ('components.failure_cost', 'abort cost (subtracted)', ROLE['error']),
                                       ('components.net_episode_return', 'net return', ROLE['measured'])):

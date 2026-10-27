@@ -460,6 +460,16 @@ class TrainingWindow(QtWidgets.QMainWindow):
         def number(value): return '—' if value is None else f'{value:.5g}'
         c=latest.get('components',{})
         raw=latest.get('evaluation_return')
+        if 'strike' in c:
+            n=latest.get('evaluation_episodes',1)
+            self.latest_result.setText(
+                f"Collection {latest['round']} · {n} evaluation episodes · mean return {number(raw)}\n"
+                f"Strike rate: {number(c.get('strike'))}\nWhip-event rate: {number(c.get('whip_event'))}\nRecovered: {number(c.get('recovered'))}\n"
+                f"Peak tip speed: {number(c.get('peak_tip_speed_mps'))} m/s · amplification {number(c.get('amplification_at_peak'))} · extension {number(c.get('extension_at_peak'))}\n"
+                f"Closest approach: {number(c.get('closest_approach_m'))} m · sharpest joint {number(c.get('max_joint_turn_deg'))}°\n"
+                f"Workspace cost: {number(c.get('workspace_cost'))} · termination cost: {number(c.get('failure_cost'))} · valid {number(latest.get('valid_fraction'))}")
+            self.latest_summary.setText(f"Collection {latest['round']} · strike rate {number(c.get('strike'))} · whip events {number(c.get('whip_event'))} · mean return {number(raw)}")
+            return
         if 'continuous_whip_credit' in c:
             outcome=('Full horizon completed' if latest.get('valid') else 'INVALID physical envelope · full horizon completed') if c.get('completed_horizon')==1 else 'INVALID numerical abort / saved prefix'
             self.latest_result.setText(

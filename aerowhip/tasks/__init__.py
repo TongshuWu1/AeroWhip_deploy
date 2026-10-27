@@ -1,8 +1,11 @@
 """Task registry: the experiment file's task.name selects the reward definition."""
+from aerowhip.tasks.strike.configuration import StrikeConfig
+from aerowhip.tasks.strike.strike import StrikeTask
 from aerowhip.tasks.whip.configuration import FoldTransportConfig
 from aerowhip.tasks.whip.fold_transport import FoldTransportTask
 
-TASKS = {'continuous_directional_whip_four_second_v6': (FoldTransportConfig, FoldTransportTask)}
+TASKS = {'strike_x_v1': (StrikeConfig, StrikeTask),
+         'continuous_directional_whip_four_second_v6': (FoldTransportConfig, FoldTransportTask)}
 
 
 def task_config(raw):

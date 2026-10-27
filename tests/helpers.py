@@ -9,7 +9,9 @@ from aerowhip.paths import ROOT, project_path
 from aerowhip.learning.ppo import PPO
 
 # The default experiment file, parsed once.
-EXPERIMENT, SNAPSHOT, SCENE = load(DEFAULT)
+# The retired fold-transport experiment: these fixtures exercise its task and the unterminated
+# envelope behaviour; the strike task has tests/test_strike.py.
+EXPERIMENT, SNAPSHOT, SCENE = load(ROOT/'configs/experiments/stage1_fold_x_v6.json')
 TASK, ENVIRONMENT = EXPERIMENT.task, EXPERIMENT.environment
 
 
