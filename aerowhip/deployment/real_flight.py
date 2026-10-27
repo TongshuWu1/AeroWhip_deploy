@@ -41,6 +41,15 @@ def select_real_robots(base, selected=None):
     return robots
 
 
+def fresh(packet, name, key, max_age_s=.5):
+    """A command echo from the relay packet if it is recent (the flight script sends at 50 Hz), else None."""
+    command = packet.get('commands', {}).get(name, {})
+    if key not in command:
+        return None
+    age = packet.get('ros_time_s', 0.)-command.get(key+'_time_s', -1e9)
+    return np.asarray(command[key], float) if age <= max_age_s else None
+
+
 class PoseDerivatives:
     """Velocity, body rate and acceleration of a tracked body from its recent OptiTrack poses, for
     display: endpoint derivatives of least-squares quadratics over fixed time spans (velocity and
@@ -229,7 +238,9 @@ class RealFlightFeed(DisplayFeed):
                 cable=cable,
                 cable_tracking=(self.tracking_display if self.tracking_display is not None
                     and self.tracking_display.time_s <= time_s else None),
-                trajectory_epoch=packet.get('flight_epochs', {}).get(name, 0)))
+                trajectory_epoch=packet.get('flight_epochs', {}).get(name, 0),
+                commanded_acceleration_world_mps2=fresh(packet, name, 'acceleration_mps2'),
+                desired_acceleration_world_mps2=fresh(packet, name, 'desired_mps2')))
         label = self.source_label
         if self.cables:
             label += ' · simulated cable'
@@ -256,7 +267,7 @@ class RealFlightFeed(DisplayFeed):
             if motors.get('age_s', 0.) < 1.:
                 label += ' · PWM '+' '.join(f'{v/1000:.1f}k' for v in motors['pwm'])
         for name, command in packet.get('commands', {}).items():
-            if command.get('age_s', 0.) < 1.:
+            if command.get('age_s', 0.) < 1. and 'acceleration_mps2' in command:
                 a = command['acceleration_mps2']
                 label += f' · cmd a [{a[0]:+.2f} {a[1]:+.2f} {a[2]:+.2f}] m/s²'
         issues = packet.get('issues', {})

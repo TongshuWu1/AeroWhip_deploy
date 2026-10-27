@@ -5,13 +5,14 @@ import numpy as np
 
 
 COLORS = {'reference': '#008c82', 'trail': '#9653b5', 'tip_trail': '#dd517b',
-          'thrust': '#287ad5', 'cable': '#e07925'}
+          'thrust': '#287ad5', 'cable': '#e07925', 'command': '#e8b400'}
 
 
 class SimulationOverlays:
     def __init__(self, plotter, pv, state, *, prefix=''):
         self.visible = dict.fromkeys(COLORS, True)
         self.force_scale = .25  # displayed metres per newton; no clipping/normalization
+        self.acceleration_scale = .08  # displayed metres per m/s^2 (commanded acceleration arrow)
         self.trail = deque(maxlen=2000)
         self.tip_trail = deque(maxlen=2000)
         self.last_time = None
@@ -24,7 +25,7 @@ class SimulationOverlays:
             self.actors[key] = plotter.add_mesh(line, name=f'{prefix}motion_{key}',
                 color=COLORS[key], line_width=2 if key == 'reference' else 3,
                 lighting=False, pickable=False, reset_camera=False)
-        for key in ('thrust', 'cable'):
+        for key in ('thrust', 'cable', 'command'):
             self.actors[key] = plotter.add_mesh(
                 pv.Arrow(start=(0, 0, 0), direction=(1, 0, 0), scale=1.,
                          tip_length=.22, tip_radius=.055, shaft_radius=.018),
@@ -60,7 +61,8 @@ class SimulationOverlays:
         line.points = np.asarray(points, dtype=float)
         line.lines = np.r_[len(points), np.arange(len(points))]
 
-    def _arrow(self, key, origin, force):
+    def _arrow(self, key, origin, force, scale=None):
+        scale = self.force_scale if scale is None else scale
         magnitude = float(np.linalg.norm(force))
         actor = self.actors[key]
         show = self.visible[key] and magnitude > 1e-10
@@ -75,7 +77,7 @@ class SimulationOverlays:
         # Only length encodes magnitude. A fixed transverse width keeps the
         # smaller reaction arrow visible against the physical cable geometry.
         transform[:3, :3] = np.column_stack((direction, side, np.cross(direction, side))) @ np.diag(
-            (magnitude*self.force_scale, .17, .17))
+            (magnitude*scale, .17, .17))
         transform[:3, 3] = origin
         actor.user_matrix = transform
 
@@ -98,6 +100,11 @@ class SimulationOverlays:
         self.actors['trail'].SetVisibility(self.visible['trail'] and len(self.trail) > 1)
         self.actors['tip_trail'].SetVisibility(self.visible['tip_trail'] and len(self.tip_trail) > 1)
         self.actors['reference'].SetVisibility(self.visible['reference'] and self.reference_count > 1)
+        command = getattr(state, 'commanded_acceleration_world_mps2', None)
+        if command is None:
+            self.actors['command'].SetVisibility(False)
+        else:
+            self._arrow('command', state.drone.position_world_m, command, self.acceleration_scale)
         if state.forces is None:
             for key in ('thrust', 'cable'):
                 self.actors[key].SetVisibility(False)

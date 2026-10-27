@@ -118,8 +118,15 @@ class RobotDisplay:
     forces: ForceTelemetry | None = None
     trajectory_epoch: int = 0
     cable_tracking: CableTrackingDisplay | None = None
+    # Real flights: the acceleration the host sent this cycle (trims and feedback included) and the
+    # planned reference acceleration, world frame, gravity excluded. None when not available.
+    commanded_acceleration_world_mps2: np.ndarray | None = None
+    desired_acceleration_world_mps2: np.ndarray | None = None
 
     def __post_init__(self):
+        for name in ('commanded_acceleration_world_mps2', 'desired_acceleration_world_mps2'):
+            if getattr(self, name) is not None:
+                object.__setattr__(self, name, _array(getattr(self, name), (3,), name))
         if type(self.trajectory_epoch) is not int or self.trajectory_epoch < 0:
             raise ValueError('Trajectory epoch must be a nonnegative integer')
         if not isinstance(self.name, str) or not self.name or not np.isfinite(self.time_s):

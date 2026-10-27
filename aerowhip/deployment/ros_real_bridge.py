@@ -185,9 +185,10 @@ def main():
             self.motor_subscriptions = [self.create_subscription(LogDataGeneric, f'/{name}/motor_telemetry',
                 (lambda message, name=name: self.record_motors(name, message)), qos_profile_sensor_data)
                 for name in self.names]
-            self.command_subscriptions = [self.create_subscription(Vector3Stamped, f'/{name}/sent_acceleration',
-                (lambda message, name=name: self.record_command(name, message)), 10)
-                for name in self.names]
+            self.command_subscriptions = [self.create_subscription(Vector3Stamped, f'/{name}/{topic}',
+                (lambda message, name=name, key=key: self.record_command(name, message, key)), 10)
+                for name in self.names for topic, key in (('sent_acceleration', 'acceleration_mps2'),
+                                                          ('desired_acceleration', 'desired_mps2'))]
             if args.point_cloud_topic:
                 self.cloud_subscription = self.create_subscription(PointCloud2,
                     args.point_cloud_topic, self.capture_cloud, qos_profile_sensor_data)
@@ -202,9 +203,11 @@ def main():
             values = [float(v) for v in message.values]
             self.motors[name] = dict(pwm=values[:4], battery_v=values[4] if len(values) > 4 else None, time_s=self.now_s())
 
-        def record_command(self, name, message):
+        def record_command(self, name, message, key):
             a = message.vector
-            self.commands[name] = dict(acceleration_mps2=[a.x, a.y, a.z], time_s=self.now_s())
+            entry = self.commands.setdefault(name, {})
+            entry[key] = [a.x, a.y, a.z]
+            entry[key+'_time_s'] = entry['time_s'] = self.now_s()
 
         def record_status(self, name, message):
             self.status[name] = dict(battery_v=float(message.battery_voltage), pm_state=int(message.pm_state),
