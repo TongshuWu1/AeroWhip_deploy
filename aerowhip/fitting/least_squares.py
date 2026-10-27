@@ -106,6 +106,12 @@ class Fit:
             self.best = min(self.best, value)
         return r
 
+    @staticmethod
+    def budget(parameters, max_evaluations):
+        """Most residual evaluations `solve` can make: each step one trial plus a 2-point
+        Jacobian (one evaluation per parameter)."""
+        return max_evaluations*(parameters+1)+parameters
+
     def solve(self, x0, *, lower, upper, diff_step, max_evaluations):
         return least_squares(self, np.asarray(x0, float), bounds=(lower, upper), method='trf', jac='2-point',
                              diff_step=diff_step, x_scale='jac', max_nfev=max_evaluations, xtol=1e-6, ftol=1e-6)

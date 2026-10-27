@@ -3,13 +3,18 @@
 A fit script writes `<result>.progress.jsonl` next to its result file:
 
     {"kind": "start", "stage": ..., "parameters": [...], "x0": [...], "unit": "m", "time": ...}
-    {"kind": "evaluation", "n": 1, "x": [...], "value": 0.123, "time": ...}
+    {"kind": "plan", "phases": ["loading flights", ...], "evaluations": [2, ...], "time": ...}
+    {"kind": "phase", "index": 0, "label": "loading flights", "time": ...}
+    {"kind": "evaluation", "n": 1, "phase": 2, "x": [...], "value": 0.123, "time": ...}
+    {"kind": "phase_done", "index": 2, "label": "delay 0 ms", "value": 0.0563, "x": [...], "time": ...}
     {"kind": "iteration", "n": 0, "best": 0.12, "x": [...], "time": ...}
     {"kind": "note", "text": "...", "time": ...}
     {"kind": "done", "result": "<result file>", "best": [...], "value": ..., "time": ...}
     {"kind": "failed", "error": "...", "time": ...}
 
-Lines are flushed as written, so the window (or `tail -f`) sees a fit started anywhere.
+Lines are flushed as written, so the window (or `tail -f`) sees a fit started anywhere. The plan
+gives each phase an upper bound on its residual evaluations (a least-squares phase can converge
+earlier), which the window turns into a progress bar and an estimate of the time left.
 """
 import json
 import math
@@ -28,6 +33,7 @@ class Progress:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.file = self.path.open('w', buffering=1)
         self.evaluations = 0
+        self.current = None
         self.write(kind='start', stage=stage, parameters=list(parameters), x0=[float(v) for v in x0], unit=unit,
                    result=str(result))
 
@@ -35,9 +41,22 @@ class Progress:
         values['time'] = time.time()
         self.file.write(json.dumps(values, allow_nan=True)+'\n')
 
+    def plan(self, phases, evaluations):
+        """Phase labels and the most residual evaluations each can take."""
+        self.labels = list(phases)
+        self.write(kind='plan', phases=self.labels, evaluations=[int(n) for n in evaluations])
+
+    def phase(self, index):
+        self.current = int(index)
+        self.write(kind='phase', index=self.current, label=self.labels[self.current])
+
+    def phase_done(self, value, x=()):
+        self.write(kind='phase_done', index=self.current, label=self.labels[self.current],
+                   value=float(value) if math.isfinite(value) else None, x=[float(v) for v in x])
+
     def evaluation(self, x, value):
         self.evaluations += 1
-        self.write(kind='evaluation', n=self.evaluations, x=[float(v) for v in x],
+        self.write(kind='evaluation', n=self.evaluations, phase=self.current, x=[float(v) for v in x],
                    value=float(value) if math.isfinite(value) else None)
 
     def iteration(self, n, best, x):

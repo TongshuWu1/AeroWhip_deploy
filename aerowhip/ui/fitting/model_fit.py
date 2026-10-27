@@ -283,6 +283,7 @@ class StageCard(QtWidgets.QFrame):
 
 class Pipeline(QtWidgets.QWidget):
     run_clicked = QtCore.Signal(object)
+    run_all_clicked = QtCore.Signal()
     open_clicked = QtCore.Signal(object)
 
     def __init__(self):
@@ -292,6 +293,11 @@ class Pipeline(QtWidgets.QWidget):
         layout.setSpacing(8)
         self.next = label('', wrap=True)
         layout.addWidget(self.next)
+        self.run_all = QtWidgets.QPushButton('Run stages 1–3 in turn')
+        self.run_all.setToolTip('Thrust map, drone dynamics and cable, one after another (each starts from the '
+                                'configuration as it is; nothing is adopted)')
+        self.run_all.clicked.connect(self.run_all_clicked)
+        layout.addWidget(self.run_all)
         self.cards = []
         for i, stage in enumerate(stages.STAGES):
             card = StageCard(i+1, stage)
@@ -322,12 +328,42 @@ class Pipeline(QtWidgets.QWidget):
                            'pending': f'Next: review the <b>{stage.title.lower()}</b> result.'}
                           .get(status, f'Next: <b>{stage.title.lower()}</b> of the adopted model.'))
 
-    def set_running(self, running):
+    def set_running(self, active=None, queued=()):
+        """active: key of the stage running now (None if idle); queued: keys waiting their turn."""
         for card in self.cards:
-            card.run.setEnabled(not running)
+            key = card.stage.key
+            card.run.setEnabled(key != active and key not in queued)
+            card.run.setText('Running…' if key == active else 'Queued' if key in queued else 'Queue' if active else 'Run')
+        self.run_all.setEnabled(active is None)
 
 
 # ---------------------------------------------------------------- progress
+
+def plan_progress(events):
+    """(fraction done, label of the current phase, phase index, phase count, evaluations left at
+    most) from the plan and phase events; None without a plan. A phase counts in full once it is
+    finished; the running phase counts its evaluations against its budget."""
+    plan = next((e for e in events if e['kind'] == 'plan'), None)
+    if plan is None:
+        return None
+    budget = plan['evaluations']
+    current, finished, used = 0, set(), {}
+    for e in events:
+        if e['kind'] == 'phase':
+            current = e['index']
+            finished.update(range(current))
+        elif e['kind'] == 'phase_done':
+            finished.add(e['index'])
+        elif e['kind'] == 'evaluation' and e.get('phase') is not None:
+            used[e['phase']] = used.get(e['phase'], 0)+1
+        elif e['kind'] == 'done':
+            finished.update(range(len(budget)))
+    done = sum(budget[i] for i in finished)
+    if current not in finished:
+        done += min(used.get(current, 0), budget[current])
+    total = sum(budget)
+    return done/total, plan['phases'][current], current, len(budget), total-done
+
 
 class ProgressView(QtWidgets.QWidget):
     stop_clicked = QtCore.Signal()
@@ -352,10 +388,19 @@ class ProgressView(QtWidgets.QWidget):
         layout.addLayout(top)
         self.summary = label('', wrap=True)
         layout.addWidget(self.summary)
-        self.loss = PlotCanvas(minimum=(300, 200))
-        self.parameters = PlotCanvas(minimum=(300, 200))
+        bar = QtWidgets.QHBoxLayout()
+        self.bar = QtWidgets.QProgressBar()
+        self.bar.setRange(0, 1000)
+        self.bar.setTextVisible(False)
+        self.bar.setFixedHeight(10)
+        bar.addWidget(self.bar, 1)
+        self.bar_label = label('', 'note')
+        bar.addWidget(self.bar_label)
+        layout.addLayout(bar)
+        self.loss = PlotCanvas(minimum=(300, 220))
+        self.parameters = PlotCanvas(minimum=(300, 180))
         layout.addWidget(self.loss, 5)
-        layout.addWidget(self.parameters, 4)
+        layout.addWidget(self.parameters, 3)
         self.console = QtWidgets.QPlainTextEdit()
         self.console.setReadOnly(True)
         self.console.setMaximumBlockCount(20000)
@@ -372,16 +417,21 @@ class ProgressView(QtWidgets.QWidget):
         self.console.setVisible(shown)
         self.output_toggle.setText('Hide output' if shown else 'Show output')
 
-    def show_events(self, events, *, source='', running=False):
+    def show_events(self, events, *, source='', running=False, exit_code=None):
+        """exit_code: the exit code of a fit started here that has ended (None if still running or
+        started elsewhere)."""
         start = next((e for e in events if e['kind'] == 'start'), None)
         if start is None:
-            self.title.setText('No progress recorded')
+            self.title.setText('Starting…' if running else 'No progress recorded')
             self.summary.setText('')
+            self.bar.setValue(0)
+            self.bar_label.setText('')
             self.source.setText(source)
             return
         stage = stages.BY_KEY.get(start['stage']) or next((s for s in stages.STAGES if s.title.lower() == start['stage']), None)
         self.title.setText(stage.title if stage else start['stage'])
-        self._summary(events, start, running)
+        state = self._summary(events, start, running, exit_code)
+        self._bar(events, state)
         signature = (source, len(events))
         if signature == self.signature:
             return                                      # only the clock moved
@@ -393,92 +443,156 @@ class ProgressView(QtWidgets.QWidget):
         else:
             self._search(events, start)
 
-    def _summary(self, events, start, running):
+    def _summary(self, events, start, running, exit_code):
         last = events[-1]
         evaluations = [e for e in events if e['kind'] == 'evaluation']
-        iterations = [e for e in events if e['kind'] == 'iteration']
         flights = sum(e['kind'] == 'flight' for e in events)
         factor, unit = display_unit(start.get('unit'))
         if last['kind'] == 'done':
-            state = status_chip('done', GOOD)
-        elif last['kind'] == 'failed':
-            state = status_chip(f'failed: {last.get("error", "")}', BAD)
-        elif running or time.time()-last.get('time', 0) < STALLED_S:
-            state = status_chip('running', PALETTE['blue'])
+            state = 'done'
+            chip = status_chip('done', GOOD)
+        elif last['kind'] == 'failed' or exit_code not in (None, 0, 'stopped'):
+            state = 'failed'
+            chip = status_chip(f'failed: {last.get("error", f"exit code {exit_code}")}', BAD)
+        elif running or (exit_code is None and time.time()-last.get('time', 0) < STALLED_S):
+            state = 'running'
+            chip = status_chip('running', PALETTE['blue'])
         else:
-            state = status_chip('stopped (no result written)', BAD)
-        parts = [state]
+            state = 'stopped'
+            chip = status_chip('stopped (no result written)', BAD)
+        parts = [chip]
+        start_value = next((e['value'] for e in events if e['kind'] == 'phase_done' and e['value'] is not None), None)
         values = [e['value'] for e in evaluations if e['value'] is not None]
-        rejected = sum(1 for e in evaluations if e['value'] is None or e['value'] >= 1.)
-        if values or iterations:
-            first = values[0] if values else iterations[0]['best']
-            best = min(values) if values else iterations[-1]['best']
+        if values:
+            first = start_value if start_value is not None else values[0]
+            best = min(values)
             c, colour = change(first, best)
             parts.append(f'best <b style="font-size:16px">{best*factor:.4g} {unit}</b>' +
-                         (f' <span style="color:{colour or "inherit"}">({c:+.1f} % from start)</span>' if c is not None else ''))
+                         (f' <span style="color:{colour or "inherit"}">({c:+.1f} % from {first*factor:.4g})</span>' if c is not None else ''))
+        elif start_value is not None:
+            parts.append(f'start {start_value*factor:.4g} {unit}')
         if evaluations:
-            parts.append(f'{len(evaluations)} evaluations' + (f', <span style="color:{BAD}">{rejected} rejected</span>' if rejected else ''))
+            rejected = sum(1 for e in evaluations if e['value'] is None)
+            parts.append(f'{len(evaluations)} evaluations' + (f', <span style="color:{BAD}">{rejected} with failed segments</span>' if rejected else ''))
         if flights:
             parts.append(f'{flights} flights scored')
         if 'time' in start:
-            seconds = (time.time() if 'running' in state else last.get('time', start['time']))-start['time']
+            seconds = (time.time() if state == 'running' else last.get('time', start['time']))-start['time']
             parts.append(f'{seconds:.0f} s' if seconds < 60 else f'{seconds/60:.1f} min')
         self.summary.setText('&nbsp;&nbsp;·&nbsp;&nbsp;'.join(parts))
+        return state
 
-    def _curves(self, events):
-        """(index, best loss, best x) at the start and at each iteration that improved the best (the
-        knots of the smooth curves: between improvements the best point does not change, and the jumps
-        between simplex vertices are not drawn as steps); before the first iteration, the evaluations."""
-        iterations = [e for e in events if e['kind'] == 'iteration']
-        if iterations:
-            keep = improvements([e['best'] for e in iterations])
-            if keep[-1] != len(iterations)-1:
+    def _bar(self, events, state):
+        p = plan_progress(events)
+        if p is None:
+            self.bar.setVisible(state == 'running')
+            self.bar.setRange(0, 0 if state == 'running' else 1000)      # busy indicator without a plan
+            self.bar_label.setText('')
+            return
+        fraction, phase, index, count, left = p
+        self.bar.setVisible(True)
+        self.bar.setRange(0, 1000)
+        self.bar.setValue(int(1000*(1. if state == 'done' else fraction)))
+        if state != 'running':
+            self.bar_label.setText({'done': 'complete'}.get(state, f'stopped in {phase}'))
+            return
+        times = [e['time'] for e in events if e['kind'] == 'evaluation'][-30:]
+        eta = ''
+        if len(times) >= 3:
+            per = (times[-1]-times[0])/(len(times)-1)
+            minutes = left*per/60
+            eta = f' · at most {minutes:.0f} min left' if minutes >= 1 else ' · under a minute left'
+        self.bar_label.setText(f'{phase} ({index+1}/{count}) · {fraction*100:.0f} %{eta}')
+
+    @staticmethod
+    def _phase_curves(events):
+        """{phase: (evaluation numbers, best-so-far values, best x)} at the start of each phase and
+        at every evaluation that improved its phase's best; phase None without phase events."""
+        curves = {}
+        if not any(e['kind'] == 'evaluation' for e in events):     # older results: per-iteration best only
+            iterations = [e for e in events if e['kind'] == 'iteration']
+            keep = improvements([e['best'] for e in iterations]) if iterations else []
+            if keep and keep[-1] != len(iterations)-1:
                 keep.append(len(iterations)-1)
-            return (np.array([iterations[i]['n'] for i in keep], float), np.array([iterations[i]['best'] for i in keep]),
-                    np.array([iterations[i]['x'] for i in keep]), 'iteration')
-        evaluations = [e for e in events if e['kind'] == 'evaluation']
-        if not evaluations:
-            return None
-        v = np.array([np.inf if e['value'] is None else e['value'] for e in evaluations])
-        best = np.minimum.accumulate(v)
-        x = np.array([evaluations[int(np.argmin(v[:i+1]))]['x'] for i in range(len(v))])
-        return np.arange(1, len(v)+1, dtype=float), best, x, 'evaluation'
+            return {None: (np.array([iterations[i]['n'] for i in keep], float), np.array([iterations[i]['best'] for i in keep]),
+                           np.array([iterations[i]['x'] for i in keep]))} if keep else {}
+        for e in events:
+            if e['kind'] != 'evaluation' or e['value'] is None:
+                continue
+            n, v, x = curves.setdefault(e.get('phase'), ([], [], []))
+            if not v or e['value'] < v[-1]:
+                n.append(e['n']); v.append(e['value']); x.append(e['x'])
+        last = {}
+        for e in events:                                   # extend each curve to its phase's last evaluation
+            if e['kind'] == 'evaluation':
+                last[e.get('phase')] = e['n']
+        out = {}
+        for phase, (n, v, x) in curves.items():
+            if last[phase] > n[-1]:
+                n, v, x = n+[last[phase]], v+[v[-1]], x+[x[-1]]
+            out[phase] = (np.array(n, float), np.array(v), np.array(x))
+        return out
 
     def _search(self, events, start):
         factor, unit = display_unit(start.get('unit'))
-        curves = self._curves(events)
         names = start['parameters']
+        curves = self._phase_curves(events)
+        plan = next((e for e in events if e['kind'] == 'plan'), None)
+        labels = plan['phases'] if plan else []
+        current = max((e['index'] for e in events if e['kind'] == 'phase'), default=None)
+        finished = events[-1]['kind'] == 'done'
+        profile = [(e['label'], e['value'], e['x']) for e in events
+                   if e['kind'] == 'phase_done' and e['label'].startswith('delay') and e['value'] is not None]
+        start_value = next((e['value'] for e in events if e['kind'] == 'phase_done' and e['value'] is not None), None)
         for canvas in (self.loss, self.parameters):
             canvas.reset()
-        if curves is None:
-            self.loss.draw_idle()
-            self.parameters.draw_idle()
-            return
-        n, best, X, axis = curves
-        shown = np.where(best < 1., best, np.nan)*factor     # 1.0 is the objective's rejection value
         with self.loss.style():
-            ax = self.loss.figure.add_subplot(111)
-            xs, ys = smooth(n, shown)
-            ax.plot(xs, ys, color=ROLE['model'], lw=2.2)
-            if np.isfinite(shown).any():
-                ax.plot(n[np.isfinite(shown)][-1], shown[np.isfinite(shown)][-1], 'o', color=ROLE['model'], ms=6)
-                ax.axhline(shown[np.isfinite(shown)][0], color=ROLE['reference'], ls='--', lw=1)
-            ax.set_title(f'Best loss ({unit})' if unit else 'Best loss')
-            ax.set_xlabel(axis)
+            if profile or (plan and any(l.startswith('delay') for l in labels)):
+                grid = self.loss.figure.add_gridspec(1, 2, width_ratios=(3, 1))
+                ax, side = self.loss.figure.add_subplot(grid[0]), self.loss.figure.add_subplot(grid[1])
+            else:
+                ax, side = self.loss.figure.add_subplot(111), None
+            for phase, (n, v, _) in sorted(curves.items(), key=lambda item: -1 if item[0] is None else item[0]):
+                live = phase == current and not finished
+                xs, ys = smooth(n, v*factor)
+                ax.plot(xs, ys, color=ROLE['model'] if live or phase is None else ROLE['reference'],
+                        lw=2.2 if live or phase is None else 1.3, alpha=1 if live or phase is None else .8)
+                ax.plot(n[-1], v[-1]*factor, 'o', ms=5 if live else 3.5,
+                        color=ROLE['model'] if live or phase is None else ROLE['reference'])
+                if phase is not None and len(labels) > phase and labels[phase].startswith('delay') and not live:
+                    ax.annotate(labels[phase].replace('delay ', ''), (n[-1], v[-1]*factor), xytext=(3, 3),
+                                textcoords='offset points', fontsize=7, color=ROLE['reference'])
+            if start_value is not None:
+                ax.axhline(start_value*factor, color=ROLE['reference'], ls='--', lw=1)
+            ax.set_title(f'Loss ({unit}): best so far in each phase' if plan else f'Best loss ({unit})')
+            ax.set_xlabel('evaluation')
             ax.grid(axis='y', alpha=.3)
+            if side is not None:
+                if profile:
+                    d = [float(l.split()[1]) for l, _, _ in profile]
+                    side.plot(d, [v*factor for _, v, _ in profile], 'o-', color=ROLE['model'], lw=1.5, ms=5)
+                    best = int(np.argmin([v for _, v, _ in profile]))
+                    side.plot(d[best], profile[best][1]*factor, 'o', ms=9, mfc='none', color=ROLE['highlight'])
+                side.set_title('Delay profile')
+                side.set_xlabel('command delay (ms)')
+                side.grid(alpha=.3)
             self.loss.figure.tight_layout()
         self.loss.draw_idle()
         with self.parameters.style():
-            if names:
+            if names and curves:
                 axes = self.parameters.figure.subplots(1, len(names), squeeze=False).ravel()
-                for i, ax in enumerate(axes):
-                    xs, ys = smooth(n, X[:, i])
-                    ax.plot(xs, ys, color=ROLE['model'], lw=1.8)
-                    ax.axhline(start['x0'][i], color=ROLE['reference'], ls='--', lw=.9)
-                    ax.set_title(f'{names[i]}\n{fmt(float(X[-1, i]))}', fontsize=8.5)
-                    ax.tick_params(labelsize=7)
-                    ax.locator_params(axis='y', nbins=4)
-                    ax.locator_params(axis='x', nbins=3)
+                for i, axp in enumerate(axes):
+                    for phase, (n, _, X) in curves.items():
+                        live = phase == current and not finished
+                        xs, ys = smooth(n, X[:, i])
+                        axp.plot(xs, ys, color=ROLE['model'] if live or phase is None else ROLE['reference'],
+                                 lw=1.8 if live or phase is None else 1., alpha=1 if live or phase is None else .7)
+                    axp.axhline(start['x0'][i], color=ROLE['reference'], ls='--', lw=.9)
+                    newest = max(curves.items(), key=lambda item: item[1][0][-1])[1][2][-1, i]
+                    axp.set_title(f'{names[i]}\n{fmt(float(newest))}', fontsize=8.5)
+                    axp.tick_params(labelsize=7)
+                    axp.locator_params(axis='y', nbins=4)
+                    axp.locator_params(axis='x', nbins=3)
                 self.parameters.figure.tight_layout()
         self.parameters.draw_idle()
 
@@ -829,7 +943,10 @@ class ModelFitWindow(QtWidgets.QMainWindow):
         self.setWindowTitle('AeroWhip Model Fit')
         style.apply(self)
         self.process = None
+        self.stopping = False
         self.running = None          # (stage, result path) of the fit started here
+        self.queue = []              # stages waiting their turn (fits run one at a time)
+        self.exits = {}              # progress file -> exit code of fits started here that have ended
         self.watched = None          # progress file shown in the Progress tab
         self.pipeline = Pipeline()
         left = QtWidgets.QScrollArea()
@@ -849,6 +966,7 @@ class ModelFitWindow(QtWidgets.QMainWindow):
         self.setCentralWidget(split)
         self.statusBar().showMessage(f'Calibration data: {calibration_set.DEFAULT_ROOT}')
         self.pipeline.run_clicked.connect(self.start)
+        self.pipeline.run_all_clicked.connect(lambda: [self.start(s) for s in stages.STAGES if s.adoptable])
         self.pipeline.open_clicked.connect(self.open)
         self.runs.open_clicked.connect(self.open)
         self.progress.stop_clicked.connect(self.stop)
@@ -900,10 +1018,25 @@ class ModelFitWindow(QtWidgets.QMainWindow):
         if self.watched is None or not self.watched.exists():
             return
         running = self.running is not None and progress_file.progress_path(self.running[1]) == self.watched
-        self.progress.show_events(progress_file.read(self.watched), source=str(self.watched), running=running)
+        self.progress.show_events(progress_file.read(self.watched), source=str(self.watched), running=running,
+                                  exit_code=self.exits.get(self.watched))
 
-    # fits started here
+    # fits started here, one at a time
     def start(self, stage):
+        """Run a stage now, or queue it behind the running one (two fits at once slow each other
+        down several times over: each already uses every core)."""
+        if self.running is not None:
+            if stage is not self.running[0] and stage not in self.queue:
+                self.queue.append(stage)
+                self.statusBar().showMessage(f'Queued: {", ".join(s.title.lower() for s in self.queue)}')
+            self._buttons()
+            return
+        self._launch(stage)
+
+    def _buttons(self):
+        self.pipeline.set_running(self.running[0].key if self.running else None, [s.key for s in self.queue])
+
+    def _launch(self, stage):
         output = stage.output()
         output.parent.mkdir(parents=True, exist_ok=True)
         command = stage.command(output)
@@ -916,13 +1049,14 @@ class ModelFitWindow(QtWidgets.QMainWindow):
         self.progress.console.clear()
         self.progress.console.appendPlainText('$ '+' '.join(command))
         self.progress.stop.setVisible(True)
-        self.pipeline.set_running(True)
+        self.stopping = False
+        self._buttons()
         self.watched = progress_file.progress_path(output)
         self.progress.signature = None
         self.progress.title.setText(f'{stage.title}: starting…')
         self.tabs.setCurrentWidget(self.progress)
         self.statusBar().showMessage(f'Running {stage.title.lower()} → {output.relative_to(ROOT)}')
-        self.process.start(command[0], command[1:])
+        self.process.start('nice', ['-n', '10', *command])      # the window stays responsive
 
     def _output(self):
         text = bytes(self.process.readAllStandardOutput()).decode(errors='replace')
@@ -931,15 +1065,19 @@ class ModelFitWindow(QtWidgets.QMainWindow):
         self.progress.console.ensureCursorVisible()
 
     def stop(self):
+        """Stop the running fit and empty the queue."""
+        self.queue.clear()
         if self.process is not None and self.process.state() != QtCore.QProcess.ProcessState.NotRunning:
+            self.stopping = True
             self.process.terminate()
             QtCore.QTimer.singleShot(3000, self.process.kill)
+        self._buttons()
 
     def _finished(self, code, _status):
         stage, output = self.running
         self.running = None
+        self.exits[progress_file.progress_path(output)] = 'stopped' if self.stopping else code
         self.progress.stop.setVisible(False)
-        self.pipeline.set_running(False)
         self.progress.console.appendPlainText(f'\n[exit code {code}]')
         self.poll()
         self.refresh()
@@ -947,7 +1085,12 @@ class ModelFitWindow(QtWidgets.QMainWindow):
             self.statusBar().showMessage(f'{stage.title} finished: {output.relative_to(ROOT)}')
             self.result.show_result(output)
         else:
-            self.statusBar().showMessage(f'{stage.title} ended with exit code {code}; no result written')
+            self.statusBar().showMessage(f'{stage.title} {"stopped" if self.stopping else f"ended with exit code {code}"}; '
+                                         'no result written')
+        if self.queue:
+            self._launch(self.queue.pop(0))
+        else:
+            self._buttons()
 
     def closeEvent(self, event):
         if self.process is not None and self.process.state() != QtCore.QProcess.ProcessState.NotRunning:

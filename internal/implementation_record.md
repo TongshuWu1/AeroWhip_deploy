@@ -1737,3 +1737,12 @@ User's request: one systematic, automated data collection with a single calibrat
   The user chose 200 Hz from now on; the command delay is to be fitted per camera rate; the
   training sensing model and the live estimator still assume 100 Hz.
 - 111 tests pass.
+- **Model Fit window runs the fits** (same day): fits started from the window run one at a time
+  (Run while one is running queues the stage; "Run stages 1–3 in turn"); child processes run at
+  nice 10; a fit's exit code is kept, so a crash shows as failed and Stop (which empties the queue)
+  as stopped. Progress protocol: `plan` (phase labels with an upper bound of residual evaluations
+  each, `least_squares.Fit.budget`), `phase`, `phase_done` and the phase of every evaluation; the
+  Progress tab shows a progress bar with the phase and an upper bound of the time left, the best loss
+  per phase (current phase blue, finished ones grey and labelled), the delay profile as each delay
+  finishes, and the parameters per phase. Checked visibly with the thrust map and a drone fit started
+  from the window (cable queued behind it).

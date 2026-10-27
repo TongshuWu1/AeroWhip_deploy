@@ -89,11 +89,18 @@ def main():
     args = parser.parse_args()
     t0 = time.time()
     config = load_model_configuration(DEFAULT_MODEL)
-    train, held = split('cf_2', duration_s=args.horizon, stride_s=args.horizon)
     now = {k: float(config['cable'][k]) for k in KEYS}
     x_now = np.array([math.log10(now['EI_n_m2']), math.log10(now['Cb_n_m2_s']), now['normal_drag_coefficient'],
                       math.log10(now['external_drag_s_inv'])])
     lower, upper = np.array([-9., -7., 0., -4.]), np.array([-3., -1., 6., .5])
+    progress = Progress(args.output, stage='cable', parameters=list(NAMES), x0=x_now, unit='m')
+    # loading weighs about three residual evaluations; the final check is two passes
+    progress.plan(['loading flights', 'start point', 'least squares', 'final check'],
+                  [3, 2, Fit.budget(4, args.evaluations), 3])
+    progress.phase(0)
+    train, held = split('cf_2', duration_s=args.horizon, stride_s=args.horizon)
+    progress.phase_done(math.nan)
+    progress.phase(1)
     residuals = Residuals(config, train)
     errors, messages = residuals.errors(x_now)
     dropped = {n: m for n, m in messages.items() if m}
@@ -108,12 +115,15 @@ def main():
     r0, _, per0 = residuals(x_now)
     start = dict(x=x_now.tolist(), values=now, rms_m=value(r0), per_flight_rms_m=per0)
     print(f'start: {start["rms_m"]*1e3:.2f} mm', flush=True)
-    progress = Progress(args.output, stage='cable', parameters=list(NAMES), x0=x_now, unit='m')
+    progress.phase_done(start['rms_m'], x_now)
+    progress.phase(2)
     fit = Fit(lambda x: residuals(x)[:2], value, progress=progress)
     out = fit.solve(np.clip(x_now, lower, upper), lower=lower, upper=upper, diff_step=np.full(4, 1e-2),
                     max_evaluations=args.evaluations)
     x = out.x
+    progress.phase_done(value(out.fun), x)
     u = uncertainty(out.jac, out.fun, residuals.flight_groups(), NAMES)
+    progress.phase(3)
     passes = [residuals(x) for _ in range(2)]
     reproduced = bool(np.array_equal(passes[0][0], passes[1][0]))
     r, failures, per = passes[0]

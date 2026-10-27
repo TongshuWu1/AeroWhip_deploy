@@ -127,7 +127,15 @@ def main():
     delay_now = float(base['controller']['command_delay_s'])
     lower = np.array([max(.3, J[2][2]/(J[0][0]+J[1][1])*1.001), .001, 0., 0.])     # triangle inequality Ixx + Iyy >= Izz
     upper = np.array([3., .08, 3., 3.])
+    progress = Progress(args.output, stage='drone', parameters=[*NAMES, 'command_delay_s'],
+                        x0=[*x_now, delay_now], unit='m')
+    # loading weighs about ten residual evaluations; the final check is two passes
+    progress.plan(['loading flights', 'start point', *(f'delay {d:.0f} ms' for d in args.delays_ms), 'final check'],
+                  [10, 2, *[Fit.budget(4, args.evaluations)]*len(args.delays_ms), 3])
+    progress.phase(0)
     train, held = segments('cf_2_nocable', args.horizon)
+    progress.phase_done(math.nan)
+    progress.phase(1)
     residuals = Residuals(base, firmware, train)
     # Segments that fail at the configuration now are dropped once, with their reasons.
     errors, messages = residuals.errors(x_now, delay_now)
@@ -141,11 +149,11 @@ def main():
     r0, _, biases0, per0 = residuals(x_now, delay_now)
     start = dict(x=x_now.tolist(), command_delay_s=delay_now, rms_m=value(r0), per_flight_rms_m=per0, bias_m_s2=biases0)
     print(f'start: {start["rms_m"]*1e3:.2f} mm (bias removed per flight)', flush=True)
-    progress = Progress(args.output, stage='drone', parameters=[*NAMES, 'command_delay_s'],
-                        x0=[*x_now, delay_now], unit='m')
+    progress.phase_done(start['rms_m'], [*x_now, delay_now])
     profile, x = [], x_now.copy()
     fits = {}
-    for d in args.delays_ms:
+    for k, d in enumerate(args.delays_ms):
+        progress.phase(2+k)
         delay = d/1e3
         fit = Fit(lambda u: residuals(u*SCALE, delay)[:2], value, progress=progress,
                   extra=lambda u: [*(u*SCALE), delay])
@@ -155,6 +163,7 @@ def main():
         loss = value(out.fun)
         fits[d] = (out, fit)
         profile.append(dict(command_delay_s=delay, rms_m=loss, x=x.tolist(), status=int(out.status), **fit.counts()))
+        progress.phase_done(loss, [*x, delay])
         print(f'delay {d:4.0f} ms: {loss*1e3:.3f} mm  x {np.round(x, 4).tolist()}  ({fit.evaluations} evaluations, '
               f'{fit.failed_evaluations} with failed segments)', flush=True)
     best = min(range(len(profile)), key=lambda i: profile[i]['rms_m'])
@@ -162,6 +171,7 @@ def main():
     out, fit = fits[args.delays_ms[best]]
     x = out.x*SCALE
     u = uncertainty(out.jac/SCALE, out.fun, residuals.flight_groups(), NAMES)   # Jacobian per physical unit
+    progress.phase(2+len(args.delays_ms))
     passes = [residuals(x, delay) for _ in range(2)]
     reproduced = bool(np.array_equal(passes[0][0], passes[1][0]))
     r, failures, biases, per = passes[0]
