@@ -8,9 +8,24 @@ sidecars, further down). The fitting tools currently read the earlier takes.
 
 The companion repository (`crazyswarm2_jazzy_whipping`, `DATA_COLLECTION.md`) flies a
 fixed series through the acceleration interface and writes one folder per flight under
-`calibration_data/<motion>/`: `parameters.json`, `flight.jsonl` (50 Hz host log),
-`poses.jsonl` (every OptiTrack drone pose) and, with the cable, `cloud.jsonl` (every
-OptiTrack marker cloud, unlabelled, on the same stamps as `poses.jsonl`).
+`calibration_data/<setup>/<take>/<NNN>/`: `parameters.json`, `flight.jsonl` (50 Hz host log),
+`poses.jsonl` (every OptiTrack drone pose), `motors.jsonl` (motor PWM and battery, 30 Hz) and,
+with the cable, `cloud.jsonl` (every OptiTrack marker cloud, unlabelled, on the same stamps as
+`poses.jsonl`).
+
+The pose stamps are host receipt times: they jitter by a few milliseconds (5th–95th percentile
+8.6–12.1 ms between 100 Hz frames) while the cameras deliver exactly one frame per period, and
+frames are occasionally dropped. `aerowhip.takes.calibration_flights.camera_frames` recovers each
+pose's camera frame number: a late pose raises its offset from the nominal clock only until the
+next pose catches up, a dropped frame raises it for every later pose, so the dropped count is the
+suffix minimum of the whole-frame offset; the drift between the camera and host clocks (−79 to
++73 ppm across the flights) is fitted and removed first. On every flight the recovered drop count
+equals the count implied by the recording length, and second-difference accelerations computed on
+camera frame times have 0–16 spikes above 20 m/s² per flight where receipt times give 185–539.
+Captures at 200 Hz are thinned to the even camera frames (the 100 Hz grid); they drop more frames
+(up to 1.7 %, in bursts of up to 150 ms) than 100 Hz captures (0.1–0.8 %) but give more complete
+cable labels. Fitting segments require consecutive camera frames (no dropped frame), and their
+times are camera frame times.
 
 ### Cable labels from the marker cloud
 
@@ -153,8 +168,8 @@ saved with `clock_verified: false`.
 
 ## Fitting
 
-Fitting uses the calibration flights through the native engine, on 2 s windows every 1 s
-inside each flight's usable span (`aerowhip.fitting.calibration_set`). Flights are stored by
+Fitting uses the calibration flights through the native engine
+(`aerowhip.fitting.calibration_set`), inside each flight's usable span. Flights are stored by
 category (`<setup>/<take>/<NNN>/`) and every flight of a category is pooled, whatever the day.
 Which flights exist, their roles (`fit`, `held_out`, `hover`, `excluded`), usable spans and
 logs, the vehicle measurements and the bench tests all come from one manifest beside the
@@ -180,6 +195,31 @@ adoption is appended to `runs/fits/adoptions.jsonl`. New results are written to
    about their mean in flight, which the simulated firmware does not reproduce; because the map
    is convex this raises the real mean thrust, and the measured factor (about 1.07) is folded
    into the collective κ the simulation uses.
+
+**Least squares on short segments** (`aerowhip.fitting.least_squares`; current stages 2 and 3).
+Each flight is cut into consecutive segments (1 s by default, `--horizon`), and every segment is
+replayed from the measured state at its start (multiple shooting), so errors cannot build up over
+long open-loop horizons. The residuals are per-frame position errors; scipy's trust-region least
+squares fits the parameters within bounds with a finite-difference Jacobian. Segments that fail at
+the start point are dropped once, with their reasons recorded; a failure during the search is
+counted and gives a large fixed residual, so the step is rejected; only numerical failures are
+caught. The 95 % intervals use the covariance clustered by flight (sandwich estimate), because
+residuals within a flight are strongly correlated; on synthetic data with flight-level errors it
+matches the true scatter of the estimates (0.106 against 0.109), whereas the independent-residual
+formula is 5–9 times too small.
+
+- **Drone** (`scripts/fit_drone_segments.py`, drone-only flights): roll/pitch inertia, motor
+  response and body drag (the measured motor arm kept). One constant acceleration bias per flight
+  and axis is removed analytically (attitude-estimate offsets and trims the host loop absorbs);
+  three numbers per flight cannot absorb dynamics as a per-window bias can. The command delay
+  acts only at the 2 ms controller ticks, so the loss is a staircase in it: the other parameters
+  are fitted at each delay of a grid and the profile is reported. Commands still in the delay line
+  at a segment start are applied (`DroneReplay.run(pipeline=True)`).
+- **Cable** (`scripts/fit_cable_segments.py`, cable flights): log10 EI, log10 Cb, Cd and log10
+  linear drag; the measured drone pose drives the clamp and each segment starts from the measured
+  markers; residuals are the marker position errors of every seen marker.
+
+The earlier Nelder–Mead fits below are kept for their retained results.
 
 1. **Drone pipeline** (`aerowhip.fitting.flight_drone`, `scripts/fit_drone_flights.py`,
    `scripts/fit_firmware_drone.py`): the sent acceleration commands drive the flight

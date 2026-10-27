@@ -45,6 +45,11 @@ def _write_toml_value(path, key, value):
     Path(path).write_text(text)
 
 
+def _strong(u, threshold=.9):
+    names, c = u['parameters'], u['correlation']
+    return [(names[i], names[j], c[i][j]) for i in range(len(names)) for j in range(i+1, len(names)) if abs(c[i][j]) >= threshold]
+
+
 def _mm(v):
     return None if v is None or (isinstance(v, float) and not math.isfinite(v)) else v*1e3
 
@@ -150,6 +155,8 @@ class Drone(Stage):
                     command_delay_s=max(0., float(x[3])), body_drag_s_inv=[float(x[4]), float(x[4]), float(x[5])])
 
     def summary(self, r):
+        if r.get('method') == 'least_squares':
+            return self._segments_summary(r)
         start, best = r['start'], r['best']
         try:
             adopt = self.adopt_values(r)
@@ -176,6 +183,31 @@ class Drone(Stage):
             flights=dict(columns=['flight', 'raw before', 'raw after', 'debiased before', 'debiased after'], rows=rows),
             notes=[f"reproduced twice: {best.get('reproduced_twice')}"])
 
+    def _segments_summary(self, r):
+        """Least squares on short segments (scripts/fit_drone_segments.py)."""
+        start, best, adopt, u = r['start'], r['best'], r['adopt'], r['uncertainty']
+        sd = dict(zip(u['parameters'], u['standard_deviation']))
+        inertia_now = adopt['inertia_xy_kg_m2']/best['x'][0]
+        x0 = start['x']
+        before = [inertia_now*x0[0], self.current()['motor arm (m)'], x0[1], start['command_delay_s'], x0[2], x0[3]]
+        after = [adopt['inertia_xy_kg_m2'], self.current()['motor arm (m)'], adopt['motor_response_s'],
+                 adopt['command_delay_s'], *adopt['body_drag_s_inv'][1:]]
+        ci = [f"± {1.96*sd['inertia_scale_xy']*inertia_now:.2g}", 'measured', f"± {1.96*sd['motor_response_s']:.2g}",
+              'profiled', f"± {1.96*sd['body_drag_xy_s_inv']:.2g}", f"± {1.96*sd['body_drag_z_s_inv']:.2g}"]
+        rows = [[name, _mm(start['per_flight_rms_m'].get(name)), _mm(value)] for name, value in best['per_flight_rms_m'].items()]
+        headline = [('position error, 1 s segments (mm)', _mm(start['rms_m']), _mm(best['rms_m']))]
+        if best.get('held_out'):
+            headline.append(('held out (mm)', None, _mm(best['held_out']['rms_m'])))
+        profile = ', '.join(f"{p['command_delay_s']*1e3:.0f} ms {p['rms_m']*1e3:.2f}" for p in r['delay_profile'])
+        strong = [f'{a} / {b} {c:+.2f}' for a, b, c in _strong(u)]
+        return dict(
+            headline=headline, parameters=[(n, b, a, c) for n, b, a, c in zip(self.current(), before, after, ci)],
+            flights=dict(columns=['flight', 'error before', 'error after'], rows=rows),
+            notes=[f'Loss: {r["loss"]}.', f'Delay profile (mm): {profile}.',
+                   'Intervals: 95 %, clustered by flight, linearised.' + (f' Strongly correlated: {"; ".join(strong)}.' if strong else ''),
+                   f"Failed segment replays during the search: {sum(p['failed_segment_replays'] for p in r['delay_profile'])}; "
+                   f"reproduced twice: {best['reproduced_twice']}"])
+
     def adopt(self, r):
         values = self.adopt_values(r)
         if abs(values['arm_scale']-1) > 1e-9:
@@ -201,6 +233,8 @@ class Cable(Stage):
                 'normal drag Cd': cable['normal_drag_coefficient'], 'linear drag (1/s)': cable['external_drag_s_inv']}
 
     def summary(self, r):
+        if r.get('method') == 'least_squares':
+            return self._segments_summary(r)
         start, best = r['start'], r['best']
         rows = [[name, _mm(start['fit_per_flight_rms_m'].get(name)), _mm(value)] for name, value in best['fit_per_flight_rms_m'].items()]
         return dict(
@@ -208,6 +242,25 @@ class Cable(Stage):
             parameters=[(n, start['values'][k], best['values'][k]) for n, k in zip(self.current(), self.KEYS)],
             flights=dict(columns=['flight', 'before', 'after'], rows=rows),
             notes=[f"reproduced twice: {best.get('reproduced_twice')}"])
+
+    def _segments_summary(self, r):
+        """Least squares on short segments (scripts/fit_cable_segments.py)."""
+        start, best, u = r['start'], r['best'], r['uncertainty']
+        sd = u['standard_deviation']
+        ci = [f'×/÷ {10**(1.96*sd[0]):.3g}', f'×/÷ {10**(1.96*sd[1]):.3g}', f'± {1.96*sd[2]:.2g}', f'×/÷ {10**(1.96*sd[3]):.3g}']
+        rows = [[name, _mm(start['per_flight_rms_m'].get(name)), _mm(value)] for name, value in best['per_flight_rms_m'].items()]
+        headline = [('marker error, 1 s segments (mm)', _mm(start['rms_m']), _mm(best['rms_m']))]
+        if best.get('held_out'):
+            headline.append(('held out (mm)', None, _mm(best['held_out']['rms_m'])))
+        strong = [f'{a} / {b} {c:+.2f}' for a, b, c in _strong(u)]
+        return dict(
+            headline=headline,
+            parameters=[(n, start['values'][k], best['values'][k], c) for n, k, c in zip(self.current(), self.KEYS, ci)],
+            flights=dict(columns=['flight', 'error before', 'error after'], rows=rows),
+            notes=[f'Loss: {r["loss"]}.', 'Intervals: 95 %, clustered by flight, linearised.' +
+                   (f' Strongly correlated: {"; ".join(strong)}.' if strong else ''),
+                   f"Failed segment replays during the search: {r['counts']['failed_segment_replays']}; "
+                   f"reproduced twice: {best['reproduced_twice']}"])
 
     def adopt(self, r):
         physics = _json(PHYSICS)
@@ -237,11 +290,13 @@ class Coupled(Stage):
 STAGES = [
     ThrustMap('thrust_map', 'Thrust map', 'Motor PWM to thrust, from the motor logs of the drone-only flights.',
               'scripts/fit_thrust_map.py', [], 'drone-only flights with motor logs', 'log ratio'),
-    Drone('drone', 'Drone dynamics', 'Roll/pitch inertia, motor response, command delay and air drag, open-loop replay '
-          'of the drone-only flights; the measured motor arm is kept.',
-          'scripts/fit_drone_joint.py', ['--fix-arm'], 'drone-only flights', 'm'),
-    Cable('cable', 'Cable', 'Bending stiffness and damping and air drag, with the measured drone pose driving the clamp.',
-          'scripts/fit_cable_flights.py', [], 'cable flights', 'm'),
+    Drone('drone', 'Drone dynamics', 'Roll/pitch inertia, motor response and air drag by least squares on 1 s segments '
+          'of the drone-only flights restarted from the measured state, one constant bias per flight removed; the '
+          'command delay profiled on a grid; the measured motor arm is kept.',
+          'scripts/fit_drone_segments.py', [], 'drone-only flights', 'm'),
+    Cable('cable', 'Cable', 'Bending stiffness and damping and air drag by least squares on 1 s segments, the measured '
+          'drone pose driving the clamp and the cable starting from the measured markers.',
+          'scripts/fit_cable_segments.py', [], 'cable flights', 'm'),
     Coupled('coupled', 'Coupled validation', 'The whole model, free from the sent commands; nothing is fitted.',
             'scripts/validate_coupled.py', ['--adopted'], 'cable flights', 'm', adoptable=False),
 ]

@@ -29,6 +29,7 @@ from aerowhip.fitting.progress import Progress
 from aerowhip.fitting.calibration_set import manifest
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
 from aerowhip.physics.state import quaternion_xyzw_to_rotation_matrix
+from aerowhip.takes.calibration_flights import DT, camera_frames
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from fit_cable_flights import nelder_mead
 
@@ -43,6 +44,9 @@ def samples(folder, model, span_s, lag_s=0.):
     stamp = stamp[keep]; received = np.array([poses[i]['received'] for i in order])[keep]
     position = np.array([poses[i]['position'] for i in order])[keep]
     quaternion = np.array([poses[i]['quaternion_xyzw'] for i in order])[keep]
+    # camera frame times (the receipt stamps jitter by a few ms; see calibration_flights.camera_frames)
+    period = DT/2 if np.median(np.diff(stamp)) < .75*DT else DT
+    camera = stamp[0]+camera_frames(stamp, period)*period
     motors = [json.loads(l) for l in (folder/'motors.jsonl').read_text().splitlines()]
     rows = [json.loads(l) for l in (folder/'flight.jsonl').read_text().splitlines()]
     # flying: between the first and last log row whose phase is neither takeoff/settle nor landing
@@ -61,10 +65,11 @@ def samples(folder, model, span_s, lag_s=0.):
         t = float(np.interp(m['received'], received, stamp))+lag_s   # motor sample on the OptiTrack clock, plus the motor lag
         if not t_flying[0] <= t <= t_flying[1]:
             continue
-        k = (stamp >= t-span_s) & (stamp <= t+span_s)
+        c = float(np.interp(t, stamp, camera))
+        k = (camera >= c-span_s) & (camera <= c+span_s)
         if k.sum() < 7:
             continue
-        u = stamp[k]-t
+        u = camera[k]-c
         design = np.column_stack((np.ones_like(u), u, u*u))
         coefficients = np.linalg.lstsq(design, position[k], rcond=None)[0]
         velocity, acceleration = coefficients[1], 2*coefficients[2]

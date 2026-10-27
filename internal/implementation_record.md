@@ -1687,3 +1687,53 @@ User's request: one systematic, automated data collection with a single calibrat
   measured markers; one failed window makes an evaluation 1.0. Method changes are proposed to the
   user, none made.
 - Manifest: `plate_coverage_of_prop_discs` removed (the user: negligible).
+
+## Dated change note — 2026-10-28 least squares on short segments; camera frame clock; more cable flights
+
+- **Approved by the user:** robust scoring, short-horizon loss with a per-flight bias, least squares
+  with confidence intervals (audit steps 1–3); then the frame-timing fix and the refit on all data.
+- [fitting/least_squares.py](../aerowhip/fitting/least_squares.py): `run_all` (only numerical
+  exceptions caught, each failure counted with its message), `bias_profile` (one constant
+  acceleration bias per flight and axis), `uncertainty` (clustered sandwich covariance by flight;
+  checked on synthetic data: 0.106 vs the true 0.109, the independent formula 5–9× too small),
+  `Fit` (scipy `least_squares` trf, bounds, 2-point Jacobian, progress events, failure counts).
+  scipy added to the dependencies.
+- New stage scripts: [fit_drone_segments.py](../scripts/fit_drone_segments.py) (inertia scale, motor
+  response, drag xy/z on 1 s segments; delay profiled on 0–60 ms) and
+  [fit_cable_segments.py](../scripts/fit_cable_segments.py); `stages.py` points stages 2 and 3 at them
+  and summarises their results with 95 % intervals; the window shows the interval column.
+- `DroneReplay.run(pipeline=True)` applies the delay in Python so commands in the delay line at a
+  segment start arrive during it; `centred=True` (centred start velocities) was tested and changed
+  the error by 1.2 mm only (57.7 → 56.5), so the causal start state is kept.
+- **Diagnosis of the drone-only error (1 s segments, configuration of 2026-10-27):** 74.8 mm raw,
+  57.7 with one bias per flight, 56.7 with a bias drifting linearly per flight, 14.2 with one bias
+  per segment (the old debias). Start state is right (0.24 mm at 10 ms) and there is no timing
+  offset (0.1 ms per m/s). The early (first 100 ms) acceleration error is 0.10 / 0.39 / 0.57 m/s²
+  (x/y/z) when the command is steady at the segment start and 1.31 / 0.98 / 1.90 m/s² for the 10 %
+  fastest-changing commands; no gain error (slope +0.004 / −0.001). Real hover acceleration
+  fluctuation is 0.04–0.08 m/s². Per-flight y bias flips sign between the first and the second
+  day's flights (−0.1…−0.2 → +0.13…+0.24 m/s²); host y trim is −0.24…−0.27 m/s² on all.
+  Open hypothesis (not tested): the restart puts the motors at the steady thrust of the current
+  command while the real motors are mid-transient.
+- First segment fit (strict-jitter data, 967 segments): best delay 30 ms, 57.71 → 52.38 mm; inertia
+  ×0.69 ± 0.97, response 9.6 ± 12.5 ms, drag xy 0.70 ± 0.06, z 0.58 ± 0.21 s⁻¹ (95 %); profile
+  0–60 ms: 56.3, 54.0, 52.7, 52.4, 53.0, 54.6, 57.0 mm (`runs/fits/drone/20261027-180529.json`). Not
+  adopted.
+- **Camera frame clock** ([takes/calibration_flights.py](../aerowhip/takes/calibration_flights.py)
+  `camera_frames`, `CalibrationFlight.frame`): receipt-stamp jitter had been read as gaps (10 ± 3 ms
+  rule), and 200 Hz captures were thinned by stamp. Now: suffix-minimum drop assignment with a
+  fitted camera/host drift (−79…+73 ppm); 200 Hz thinned to even camera frames; windows need
+  consecutive camera frames; window and command times are camera frame times; the thrust-map
+  accelerations use camera times. Checks: drop counts equal the recording-length estimate on every
+  flight; acceleration spikes (>20 m/s², second differences) 185–539 → 0–16 per flight. Segments
+  (1 s): cable 710 → 1069, drone-only 967 → 1610. Thrust map on camera times: κ 0.5145, p 2.194,
+  β 0.2487, bins 0.56 %, spread 1.0726 → collective 0.5519 (configuration 0.5533; not adopted)
+  (`runs/fits/thrust_map/20261027-185629.json`).
+- **Flights recorded** (cf_2, cable): decay_y/001–002, line_star_diag/001, figure8_xy/002 (001 aborted at
+  take-off; 002 lost the link in the final hover: role fit, usable until t = 74.4 s), figure8_xz/001
+  (200 Hz), decay_x/002 (200 Hz), line_star_xy/002 (200 Hz). All cable flights labelled with
+  `label_sequence.py` (9.75–9.99 markers/frame). 200 Hz: same tracking (decay_x 37.6 vs 37.1 mm), more
+  complete labels (308 vs 82 uncertain marker-frames), more dropped pose frames (1.7 % vs 0.1 %).
+  The user chose 200 Hz from now on; the command delay is to be fitted per camera rate; the
+  training sensing model and the live estimator still assume 100 Hz.
+- 111 tests pass.

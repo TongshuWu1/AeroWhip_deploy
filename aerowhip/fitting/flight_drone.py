@@ -55,6 +55,23 @@ def body_rate(time, rotations):
     return endpoint_velocity(time, np.array(logs))
 
 
+def centred_state(window, half=5):
+    """Tracking velocity and body angular velocity at the window start from a quadratic fit over
+    the `half` frames before and after it (offline only: it uses measurements after the start)."""
+    t = np.r_[window.history_time[-half-1:], window.time[1:half+1]]
+    p = np.vstack([window.history_position[-half-1:], window.position[1:half+1]])
+    R = np.concatenate([window.history_rotation[-half-1:], window.rotation[1:half+1]])
+    R0 = window.history_rotation[-1]
+    logs = []
+    for Ri in R:
+        D = R0.T@Ri
+        angle = math.acos(np.clip((np.trace(D)-1)/2, -1, 1))
+        v = np.array([D[2, 1]-D[1, 2], D[0, 2]-D[2, 0], D[1, 0]-D[0, 1]])/2
+        logs.append(v if angle < 1e-9 else v*angle/math.sin(angle))
+    A = np.column_stack([np.ones_like(t), t, t*t])
+    return np.linalg.lstsq(A, p, rcond=None)[0][1], np.linalg.lstsq(A, np.array(logs), rcond=None)[0][1]
+
+
 class DroneReplay:
     def __init__(self, config, firmware, *, delay_s=None):
         self.config, self.firmware = config, firmware
@@ -82,12 +99,18 @@ class DroneReplay:
             qv.append(qv[-1]+relative-t*(t@relative))
         return np.array(q), np.array(qv)
 
-    def run(self, window, flight, *, markers=False, scale=1.):
+    def run(self, window, flight, *, markers=False, scale=1., pipeline=False, centred=False):
         """Simulated tracking positions (N, 3); with markers, also the marker positions and
         velocities (N, 10, 3) each. scale multiplies the policy part of the sent commands (the
-        vertical trim is kept), for stress tests beyond the recorded motion."""
+        vertical trim is kept), for stress tests beyond the recorded motion.
+
+        pipeline: apply the command delay here instead of in the runtime, so the commands sent in
+        the last `delay` seconds before the window still arrive during it (the runtime starts with
+        an empty delay line and would hold the newest pre-window command from t = 0). Same
+        controller-tick timing otherwise; the default keeps the earlier behaviour of retained results.
+        centred: start velocities from `centred_state` instead of the causal history."""
         hp, hR, ht = window.history_position, window.history_rotation, window.history_time
-        v, w = endpoint_velocity(ht, hp), body_rate(ht, hR)
+        v, w = centred_state(window) if centred else (endpoint_velocity(ht, hp), body_rate(ht, hR))
         q = qv = None
         if markers:
             q, qv = self.initial_cable(window, v, w)
@@ -105,7 +128,11 @@ class DroneReplay:
         last = np.r_[frame[1:] != frame[:-1], True]       # one command per frame: the newest
         stamps, sent, frame = stamps[last], sent[last], frame[last]
         first = int(np.searchsorted(flight.stamp, window.start_stamp-1e-6))
-        command_time = (frame-first)*.01
+        if flight.frame is not None:      # camera frame numbers: a dropped frame still takes its 10 ms
+            index = np.clip(frame, 0, len(flight.frame)-1)
+            command_time = (flight.frame[index]-flight.frame[first])*.01
+        else:
+            command_time = (frame-first)*.01
         battery = None if flight.battery is None else flight.battery[ok][last]
         inside = (command_time > -.5) & (command_time < window.time[-1])
         voltage = float(np.nanmedian(battery[inside])) if battery is not None and np.isfinite(battery[inside]).any() else self.firmware['reference_voltage_v']
@@ -113,12 +140,15 @@ class DroneReplay:
         yaw = math.atan2(hR[-1][1, 0], hR[-1][0, 0])
         def command(a):
             c = np.zeros(13); c[6:9] = a; c[9] = yaw; return c
+        delay = self.delay
+        if pipeline:
+            command_time, delay = command_time+self.delay, 0.
         before = np.where(command_time <= 0)[0]
         hold = command(sent[before[-1]] if len(before) else sent[0])
         actuator = deepcopy(self.config['actuator'])
         thrust = controller(state, hold)[0]
         actuator['initial_thrust_n'] = [float(np.clip(thrust/4, actuator['minimum_thrust_n'][i], actuator['maximum_thrust_n'][i])) for i in range(4)]
-        runtime = self.native.Runtime(self.model.native, state, hold, self.period, self.delay, self.native.Actuator(actuator))
+        runtime = self.native.Runtime(self.model.native, state, hold, self.period, delay, self.native.Actuator(actuator))
         events = [(float(t), command(a)) for t, a in zip(command_time, sent) if 0 < t < window.time[-1]]
         positions, cable, rates = [], [], []
         n = len(self.model.rest)+1
@@ -139,9 +169,9 @@ class DroneReplay:
                 rates.append(observation[18+3*n:18+6*n].reshape(n, 3)[index])
         return (np.array(positions), np.array(cable), np.array(rates)) if markers else np.array(positions)
 
-    def errors(self, window, flight):
+    def errors(self, window, flight, *, pipeline=False, centred=False):
         """(N, 3) simulated minus measured tracking position."""
-        return self.run(window, flight)-window.position[1:]
+        return self.run(window, flight, pipeline=pipeline, centred=centred)-window.position[1:]
 
 
 def debias(error, dt=.01):

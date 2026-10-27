@@ -131,7 +131,7 @@ def in_use(stage, summary):
     current = stage.current()
     return bool(summary['parameters']) and all(
         after is not None and math.isclose(after, current[name], rel_tol=IN_USE, abs_tol=1e-9)
-        for name, _, after in summary['parameters'])
+        for name, _, after, *_ in summary['parameters'])
 
 
 def when(path):
@@ -530,7 +530,7 @@ class ResultView(QtWidgets.QScrollArea):
         row = QtWidgets.QHBoxLayout()
         row.setSpacing(32)
         for title, attribute, columns in (('Errors', 'headline', ['', 'before', 'after', 'change']),
-                                          ('Parameters', 'parameters', ['', 'configuration now', 'this result', 'change'])):
+                                          ('Parameters', 'parameters', ['', 'configuration now', 'this result', '95 % interval', 'change'])):
             column = QtWidgets.QVBoxLayout()
             heading = label(title, 'section')
             column.addWidget(heading)
@@ -576,14 +576,14 @@ class ResultView(QtWidgets.QScrollArea):
         fill(self.headline, rows, colours)
         current = self.stage.current()
         rows, colours, matches = [], {}, bool(summary['parameters'])
-        for i, (name, _, after) in enumerate(summary['parameters']):
+        for i, (name, _, after, *interval) in enumerate(summary['parameters']):
             now = current.get(name)
             same = after is not None and now is not None and math.isclose(after, now, rel_tol=IN_USE, abs_tol=1e-9)
             matches &= same
             text = '' if same else ('new' if not now else f'{(after-now)/abs(now)*100:+.1f} %' if after is not None else '')
-            rows.append([name, now, after, text])
+            rows.append([name, now, after, interval[0] if interval else '', text])
             if not same:
-                colours[(i, 3)] = PALETTE['orange']
+                colours[(i, 4)] = PALETTE['orange']
         fill(self.parameters, rows, colours)
         self.parameters.setVisible(bool(rows))
         self.parameter_title.setVisible(bool(rows))
@@ -634,7 +634,7 @@ class ResultView(QtWidgets.QScrollArea):
 
     def _adopt(self):
         try:
-            preview = [f'{name}: {fmt(now)} → {fmt(after)}' for (name, _, after), now
+            preview = [f'{name}: {fmt(now)} → {fmt(after)}' for (name, _, after, *_), now
                        in zip(self.stage.summary(self.result)['parameters'], self.stage.current().values())]
         except Exception as exc:
             QtWidgets.QMessageBox.warning(self, 'Cannot adopt', str(exc))
