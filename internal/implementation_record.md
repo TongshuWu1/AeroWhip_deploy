@@ -1809,3 +1809,15 @@ User's request: one systematic, automated data collection with a single calibrat
   22.7 s): a scripted stroke gave whip events (tip 4.4–4.7 m/s, amplification 2.3–2.6, extension 0.99)
   and no strike; ledgers telescoped. **Not done:** no training run; the training window's fold-specific
   panels were not exercised on a strike run; the flight node does not yet pass a target.
+- **Engine speed, findings** (same day): a drone-only segment is 500 physics steps of 2 ms; each step
+  runs the projected Lie-BDF2 fixed-point iteration 4.00 times on average (counted in an instrumented
+  scratch build over 101,000 steps), each with 4 constraint projections and a full reassembly. Building
+  for this CPU (`-march=native`, FMA contraction still off) is 4 % faster with bit-identical results:
+  not adopted (portability). Larger gains need an allocation-free solver or a better start guess for
+  the iteration; not started.
+- **Intermittent crash** (`free(): invalid pointer`, once in three runs of the installed engine, once
+  with a scratch build): 1,209 segment replays (about 600,000 physics steps) under AddressSanitizer
+  (all allocations intercepted) were clean. Consistent with the machine instability recorded on
+  2026-10-28, not proven. `ProcessRunner` now uses a ProcessPoolExecutor: a worker that dies raises
+  BrokenProcessPool, so the fit fails visibly instead of waiting forever (checked with a killed
+  worker; residuals still bit-identical).

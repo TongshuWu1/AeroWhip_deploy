@@ -17,7 +17,7 @@ Uncertainty: the covariance of the fitted parameters is the sandwich estimate cl
 correlated (neighbouring frames and segments); the classical s²(JᵀJ)⁻¹, which assumes independent
 residuals, is reported beside it and is much too small. Both are local (linearised at the optimum).
 """
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, wait
 import math
 import multiprocessing
 import os
@@ -45,6 +45,10 @@ def run_all(function, items, *, threads=None):
 _ITEMS, _PREPARE = None, None
 
 
+def _ready():
+    return True
+
+
 def _chunk(task):
     parameters, lo, hi = task
     function = _PREPARE(parameters)
@@ -67,17 +71,20 @@ class ProcessRunner:
         global _ITEMS, _PREPARE
         _ITEMS, _PREPARE = list(items), prepare
         self.workers = workers or os.cpu_count()
-        self.pool = multiprocessing.get_context('fork').Pool(self.workers)      # forks now, with the items
+        # an executor, not multiprocessing.Pool: a worker that dies raises BrokenProcessPool in the fit
+        # (which then fails visibly) instead of leaving it waiting forever
+        self.pool = ProcessPoolExecutor(self.workers, mp_context=multiprocessing.get_context('fork'))
+        wait([self.pool.submit(_ready) for _ in range(self.workers)])          # fork every worker now, with the items
         count = max(1, min(len(_ITEMS), self.workers*chunks_per_worker))
         edges = np.linspace(0, len(_ITEMS), count+1).round().astype(int)
         self.ranges = [(int(a), int(b)) for a, b in zip(edges[:-1], edges[1:]) if b > a]
 
     def __call__(self, parameters):
-        parts = self.pool.map(_chunk, [(parameters, a, b) for a, b in self.ranges], chunksize=1)
+        parts = self.pool.map(_chunk, [(parameters, a, b) for a, b in self.ranges])
         return [r for part in parts for r in part]
 
     def close(self):
-        self.pool.terminate()
+        self.pool.shutdown(cancel_futures=True)
 
 
 def bias_profile(errors):
