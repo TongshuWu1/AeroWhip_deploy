@@ -3,9 +3,9 @@
 A calibration flight folder holds `cloud.jsonl` (every OptiTrack marker cloud during the
 recorded part) and `poses.jsonl` (the drone pose of the same frames, same stamps). This
 module removes the drone's own markers, merges duplicate points, and associates the
-remaining points with the cable's material markers c1..c10 using the geometric/temporal
-CableTracker. Manual labels (from the review GUI) are hard constraints: the tracker is
-re-seeded from them and re-run forward. Labels are written to `cable_labels.npz`.
+remaining points with the cable's material markers c1..c10 using the live CableFilter.
+Manual labels (from the review GUI) are hard constraints: the filter is corrected in their
+frame and re-run forward. Labels are written to `cable_labels.npz`.
 
 Label sources: 0 none, 1 automatic, 2 manual. A manual label with point -1 means
 "this marker is not visible in this frame". Reconstruction of markers OptiTrack did not
@@ -17,19 +17,17 @@ from pathlib import Path
 
 import numpy as np
 
-from aerowhip.deployment.cable_tracking import CableTracker, TrackingSettings
+from aerowhip.deployment.cable_filter import CableFilter
 from aerowhip.paths import ROOT
 from aerowhip.physics.state import quaternion_xyzw_to_rotation_matrix
 
 MODEL = ROOT/'configs/physics/drone_cable.json'
-TRACKING = ROOT/'configs/ros/cable_tracking.json'
 DRONE_RADIUS_M = .07        # points this close to the tracking origin are the drone's markers
 DUPLICATE_RADIUS_M = .01    # points this close together are one marker
 LOW_CONFIDENCE = .3
 LENGTH_TOLERANCE_M = .02
 JUMP_M = .08                # a label moving further than this between two frames is flagged
 GAP_POINT_M = .04           # an unlabelled point this close to a hidden marker's expected position is flagged
-START_TOLERANCE_M = .02     # start: marker k at arc[k] (+-this) from the attachment
 NONE, AUTO, MANUAL = 0, 1, 2
 LABELS_FILE = 'cable_labels.npz'
 
@@ -114,127 +112,55 @@ def load_flight(folder):
                   np.array(times), arc)
 
 
-def _tracker(arc):
-    values = json.loads(TRACKING.read_text())
-    values['marker_distances_m'] = arc.tolist()
-    return CableTracker(TrackingSettings(**values))
-
-
-def _state(tracker):
-    return (tracker.positions.copy(), tracker.velocities.copy(), tracker.observed_at.copy(),
-            tracker.initialized, tracker.previous_time)
-
-
-def _restore(tracker, state):
-    tracker.positions, tracker.velocities, tracker.observed_at = (x.copy() for x in state[:3])
-    tracker.initialized, tracker.previous_time = state[3], state[4]
-
-
-START_MINIMUM_MARKERS = 6   # OptiTrack does not see every marker in every frame
-
-
-def hanging_start(flight, frame):
-    """Labels for a cable at rest: marker k is the one point at distance arc[k] from the
-    attachment (within START_TOLERANCE_M) and below it. Markers OptiTrack does not see stay
-    unlabelled (-1); at least START_MINIMUM_MARKERS must be found, none may be ambiguous,
-    and consecutive found markers must be no further apart than the cable between them.
-    Works for a cable that sways; None if not usable."""
-    rel = flight.points[frame]-flight.root[frame]
-    if not len(rel):
-        return None
-    distance = np.linalg.norm(rel, axis=1)
-    index = np.full(len(flight.arc), -1)
-    for k, arc in enumerate(flight.arc):
-        candidates = np.flatnonzero((np.abs(distance-arc) < START_TOLERANCE_M) & (rel[:, 2] < 0))
-        if len(candidates) > 1:
-            return None
-        if len(candidates):
-            index[k] = candidates[0]
-    found = np.flatnonzero(index >= 0)
-    if len(found) < START_MINIMUM_MARKERS or len(set(index[found])) != len(found):
-        return None
-    arc = np.r_[0., flight.arc]
-    chain = np.vstack([np.zeros(3), rel[index[found]]])
-    gaps = np.diff(np.r_[0., arc[found+1]])
-    if np.any(np.linalg.norm(np.diff(chain, axis=0), axis=1) > gaps+LENGTH_TOLERANCE_M):
-        return None
-    return index
-
-
 class AutoLabeller:
-    """Forward tracker run with manual constraints; keeps per-frame tracker state so a
-    correction re-runs only from the corrected frame."""
+    """Runs the live CableFilter forward over the recorded cloud. Manual labels are hard
+    constraints: in their frame the filter's assignment is overridden and its state
+    corrected, and it continues from there. Filter states are kept per frame so a correction
+    re-runs only from the corrected frame until the labels rejoin the previous run."""
 
     def __init__(self, flight, labels=None):
         self.flight = flight
         n, m = flight.frames, len(flight.arc)
         self.labels = labels or Labels(np.full((n, m), -1), np.zeros((n, m), np.uint8), np.zeros((n, m)))
-        self.tracker = _tracker(flight.arc)
-        self.states = [None]*n          # tracker state before each frame
+        self.filter = CableFilter(flight.arc)
+        self.states = [None]*n          # filter state before each frame
 
     def run(self, start=0, converge=False):
-        """Label frames from `start` on. With converge=True, stop once the labels and tracker
-        state match the previous run again (corrections usually rejoin within a few frames)."""
-        f, tr, lab = self.flight, self.tracker, self.labels
+        f, filt, lab = self.flight, self.filter, self.labels
         if start == 0 or self.states[start] is None:
             start = 0
-            tr.reset()
+            filt.reset()
         else:
-            _restore(tr, self.states[start])
+            filt.set_state(self.states[start])
         manual_by_frame = {}
         for (frame, marker), point in lab.manual.items():
             manual_by_frame.setdefault(frame, {})[marker] = point
         for i in range(start, f.frames):
             old = self.states[i]
-            if converge and i > start+5 and old is not None and _same(old, _state(tr)):
-                return self.labels  # later frames, including later manual labels, are unchanged
-            self.states[i] = _state(tr)
-            before = _state(tr)
-            seed = None if tr.initialized else hanging_start(f, i)
-            if seed is not None:
-                tr.previous_time = float(f.stamps[i])
-                index, confidence = seed.copy(), (seed >= 0).astype(float)
-            else:
-                result = tr.observe(float(f.stamps[i]), f.root[i], f.points[i])
-                index = np.array(result['point_indices'], int)
-                confidence = np.array(result['confidence'], float)
+            state = filt.get_state()
+            if converge and i > start+5 and old is not None and _same(old, state):
+                return self.labels
+            self.states[i] = state
+            result = filt.observe(float(f.stamps[i]), f.root[i], f.points[i])
+            index = result['index'].copy()
+            confidence = result['confidence'].copy()
             source = np.where(index >= 0, AUTO, NONE).astype(np.uint8)
             manual = manual_by_frame.get(i, {})
             for marker, point in manual.items():
                 if point >= 0:
                     index[(index == point) & (np.arange(len(index)) != marker)] = -1
                 index[marker], source[marker], confidence[marker] = point, MANUAL, 1.
-            source[index < 0] = np.where(np.isin(np.flatnonzero(index < 0), list(manual)), MANUAL, NONE)
-            if manual or seed is not None:
-                self._apply(before, i, index, manual)
+            if manual:
+                filt.override(f.root[i], f.points[i], index)
             lab.index[i], lab.source[i], lab.confidence[i] = index, source, confidence
         return self.labels
 
-    def _apply(self, before, frame, index, manual):
-        """Re-seed the tracker from the corrected labels of this frame."""
-        tr, f = self.tracker, self.flight
-        positions, velocities, observed = (x.copy() for x in before[:3])
-        for marker, point in enumerate(index):
-            if point < 0:
-                continue
-            p = f.points[frame][point]
-            if np.isfinite(observed[marker]) and f.stamps[frame] > observed[marker]:
-                velocities[marker] = (p-positions[marker])/(f.stamps[frame]-observed[marker])
-            positions[marker], observed[marker] = p, f.stamps[frame]
-        for marker, point in manual.items():
-            if point < 0:  # explicitly not visible: keep the prediction from before this frame
-                positions[marker], velocities[marker], observed[marker] = before[0][marker], before[1][marker], before[2][marker]
-        tr.positions, tr.velocities, tr.observed_at = positions, velocities, observed
-        tr.initialized = True
-        tr.previous_time = float(f.stamps[frame])
-
     def _ready(self, frame):
-        """Tracker states are rebuilt on the first edit after loading saved labels."""
         if self.states[frame] is None:
             self.run()
 
     def set_manual(self, frame, marker, point):
-        """Label `point` (index in frame's points, or -1 = not visible) as `marker`; re-run."""
+        """Label `point` (index in the frame's points, or -1 = not visible) as `marker`; re-run."""
         self._ready(frame)
         lab = self.labels
         if point >= 0:
@@ -250,9 +176,10 @@ class AutoLabeller:
 
 
 def _same(a, b):
-    """Tracker states equal to rounding (velocity history decays by ~10x per frame)."""
-    return (a[3] == b[3] and a[4] == b[4] and np.array_equal(a[2], b[2]) and
-            np.allclose(a[0], b[0], rtol=0, atol=1e-9) and np.allclose(a[1], b[1], rtol=0, atol=1e-6))
+    """Filter states equal to rounding."""
+    return (a['initialized'] == b['initialized'] and np.array_equal(a['hidden_s'], b['hidden_s']) and
+            np.allclose(a['positions'], b['positions'], rtol=0, atol=1e-9, equal_nan=True) and
+            np.allclose(a['velocities'], b['velocities'], rtol=0, atol=1e-6))
 
 
 def estimate(flight, labels, frame):

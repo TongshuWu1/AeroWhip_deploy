@@ -1090,23 +1090,24 @@ hanging-cable rest check on both engines; equivalence reference re-recorded.
 
 ## Dated change note — 2026-10-27 cable labels from the marker cloud
 
-The companion flight script now records every OptiTrack marker cloud during a cable
-flight (`cloud.jsonl`). New `aerowhip/takes/cable_labels.py` labels the cable markers from
-it (candidate filtering, an arc-distance start from at least six unambiguous markers, the
-existing `CableTracker`, flags) and reconstructs hidden markers into a separate file with a
-method per position; `aerowhip/ui/takes/cable_review.py` is a 3D review and correction
-window; `scripts/label_cable.py` runs either. See docs/data_and_fitting.md. Design
-decisions with the user: OptiTrack does not see every marker in every frame, so partial
-frames are valid data, ten markers are never forced, and reconstruction is never saved as
-a measurement; an assisted auto-fill pass was tried and dropped (slow, little gain).
+The companion flight script records every OptiTrack marker cloud during a cable flight
+(`cloud.jsonl`). New `aerowhip/deployment/cable_filter.py` is the cable-state filter meant
+to feed the policy live (positions, velocities, per-marker confidence, cable quality): a
+predicted chain state, gated association, cable-length chain check, re-acquisition, and a
+guard against OptiTrack's bunched stamps (steps of 0.1 ms followed by 10 ms would otherwise
+produce 50 m/s velocities). `aerowhip/takes/cable_labels.py` runs it over a recorded cloud
+and reconstructs hidden markers into a separate file with a method per position;
+`aerowhip/ui/takes/cable_review.py` is a 3D review window; `scripts/label_cable.py` runs
+either. Decisions with the user: partial frames are valid data and ten markers are never
+forced; reconstruction is never saved as a measurement; the earlier beam-search tracker
+(`deployment/cable_tracking.py`) stays for the live display but no longer labels data.
 
-Checked: all ten 2026-10-27 cable flights labelled (markers seen per frame 9.7–10.0; all
-ten in 77–100 % of usable frames); reconstruction accuracy on hidden known markers (time
-gaps 1–2 mm, interior 5–10 mm, free end 10–20 mm median); the 3D review window offscreen
-only (opens, draws ~1 ms per frame). The per-flight report is in the companion
-repository's `calibration_data/LABELLING_REPORT.md`. Found: in hover every marker is
-8–12 mm closer to the modelled attachment than its arc distance; c1 is 0.137 m below the
-tracking origin in the body frame against 0.146 m modelled (attachment −0.051 m plus
-0.095 m), so the attachment offset or the first marker distance is off by about 9 mm; not
-yet changed in the model. Not checked: the window on screen; manual review of the flagged
-runs; the fitting tools do not read these files yet.
+Checked on all ten 2026-10-27 cable flights, judged by the raw cable geometry (consecutive
+labelled markers at the wrong distance by > 2 cm): filter 0.0–0.9 % of frames per flight,
+the earlier tracker 0.0–4.5 %; 0.13 ms per frame against 2.2 ms. Reconstruction accuracy on
+hidden known markers: time gaps 1–2 mm, interior 5–10 mm, free end 10–20 mm median. Report:
+companion `calibration_data/LABELLING_REPORT.md`. Found: every marker sits 8–12 mm closer to
+the modelled attachment than its arc distance (attachment offset or first-marker distance
+off by ~9 mm; model unchanged). Not done: live ROS node (cloud/pose matching by content
+with the Crazyflie's own position as fallback, as the user asked), the window on screen,
+fitting tools reading these files.

@@ -18,11 +18,14 @@ OptiTrack marker cloud, unlabelled, on the same stamps as `poses.jsonl`).
 
 - **Candidates:** points further than 7 cm from the drone's tracking origin; points
   closer than 1 cm to each other are merged.
-- **Start:** the first frame where at least six markers each have exactly one candidate
-  at their distance along the cable from the attachment (±2 cm), and no marker has two.
-  Markers OptiTrack does not see stay unlabelled. This works for a swaying cable.
-- **Tracking:** the geometric/temporal `CableTracker` (beam search over predicted
-  positions with exact cable-length constraints) labels every later frame.
+- **Filter:** `aerowhip.deployment.cable_filter.CableFilter`, the same code meant for live
+  flight. It keeps one cable state (marker positions and velocities), predicts it each
+  frame with a constant-velocity model projected onto the cable's length constraints,
+  associates points by nearest-to-prediction within a gate (one point per marker), drops
+  assignments that violate the cable lengths, re-acquires long-hidden markers by their
+  distances to labelled neighbours, and corrects seen markers to their measurement. It
+  starts from the first frame with at least six unambiguous markers at their arc distances.
+  Markers OptiTrack does not see stay unlabelled. About 0.13 ms per frame.
 - **Flags:** a marker that is unlabelled while an unassigned point lies where it is
   expected, low tracker confidence, a neighbour further than the cable allows, and labels
   moving more than 8 cm between frames. OptiTrack often does not see every marker; a
