@@ -98,6 +98,7 @@ class RealFlightFeed(DisplayFeed):
         self.tracking_status = 'awaiting point cloud'
         self.reconstruction = None
         self.derivatives = {}      # per robot: PoseDerivatives for the displayed velocity/acceleration
+        self.tracked = set()       # robots that have had an OptiTrack pose in this session
         if tracking_settings is not None:
             from aerowhip.deployment.cable_tracking import CableTracker
             if len(self.robots) != 1:
@@ -238,8 +239,15 @@ class RealFlightFeed(DisplayFeed):
                 label += ' (stale)'
         if packet.get('capture_type') is None:
             label += ' · awaiting capture source'
-        if packet.get('missing_robots'):
-            label += ' · missing: '+', '.join(packet['missing_robots'])
+        for name in packet.get('robots', []):
+            self.tracked.add(name['name'])
+        missing = packet.get('missing_robots') or []
+        never = [n for n in missing if n not in self.tracked]
+        lost = [n for n in missing if n in self.tracked]
+        if never:
+            label += ' · waiting for the first OptiTrack pose of '+', '.join(never)+' (the stack starts once the drone answers on the radio)'
+        if lost:
+            label += ' · OptiTrack lost '+', '.join(lost)
         for name, status in packet.get('status', {}).items():
             armed = bool(status.get('supervisor_info', 0) & 2)
             label += (f" · {name} {status['battery_v']:.2f} V{' armed' if armed else ''}"
