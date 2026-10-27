@@ -11,41 +11,15 @@ import pyvista as pv
 from aerowhip.viewer.pyvista_viewer import PyVistaViewer
 from aerowhip.viewer.replay_trajectories import SavedTrajectoryControls
 from aerowhip.viewer.workspace import add_cylinder_boundary
+from aerowhip.ui.motion_plots import MotionPlots
+from aerowhip.ui.style import PALETTE, stylesheet
 
 
-STYLE = """
-QMainWindow, QWidget#page { background: #edf2f6; color: #213547; }
-QLabel { color: #213547; font-family: 'Segoe UI'; font-size: 13px; }
-QLabel#heading { font-size: 24px; font-weight: 650; }
-QLabel#subtle { color: #607486; font-size: 12px; }
-QLabel#metric { color: #087d79; font-size: 36px; font-weight: 650; }
-QLabel#smallMetric { font-size: 18px; font-weight: 600; }
-QFrame#card { background: white; border: 1px solid #dce5ec; border-radius: 10px; }
-QLabel#cardTitle { font-size: 12px; font-weight: 650; color: #607486; }
-QLabel#success { color: #087d79; font-size: 14px; font-weight: 600; }
-QPushButton { background: white; border: 1px solid #ccd8e2; border-radius: 5px;
-              padding: 7px 13px; color: #213547; font-size: 12px; }
-QPushButton:hover { background: #e1f2f0; border-color: #459b95; }
-QPushButton#primary { background: #087d79; color: white; border: 0; font-weight: 600; }
-QComboBox { background: white; color: #213547; border: 1px solid #ccd8e2; border-radius: 4px; padding: 6px; }
-QComboBox QAbstractItemView, QPlainTextEdit { background: white; color: #213547; }
-QGroupBox { border: 0; font-size: 12px; color: #607486; padding-top: 17px; }
-QGroupBox::title { subcontrol-origin: margin; }
-QCheckBox { font-size: 12px; color: #52687a; }
-QSlider::groove:horizontal { background: #cdd9e3; height: 5px; border-radius: 2px; }
-QSlider::handle:horizontal { background: #087d79; width: 12px; margin: -4px 0; border-radius: 6px; }
-"""
+STYLE = stylesheet(False)
 
 
 def label(text='', name=None, wrap=False):
     widget = QtWidgets.QLabel(text)
-    # Give layouts the final font metrics before stylesheet inheritance/polish.
-    # Otherwise Qt can cache the default 13px height for the large speed label.
-    font = QtGui.QFont('Segoe UI')
-    font.setPixelSize({'heading': 24, 'metric': 36, 'smallMetric': 18,
-                       'cardTitle': 12, 'subtle': 12, 'success': 14}.get(name, 13))
-    font.setBold(name in ('heading', 'metric', 'smallMetric', 'cardTitle', 'success'))
-    widget.setFont(font)
     if name:
         widget.setObjectName(name)
     widget.setWordWrap(wrap)
@@ -55,7 +29,7 @@ def label(text='', name=None, wrap=False):
 def vector_text(vector, digits=3):
     if vector is None:
         return 'Undefined at zero speed'
-    return '   '.join(f'{axis} {value:+.{digits}f}' for axis, value in zip('XYZ', vector))
+    return ', '.join(f'{value:+.{digits}f}' for value in vector)
 
 
 class MeasurementSlider(QtWidgets.QSlider):
@@ -106,7 +80,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         layout.setSpacing(10)
         title_row = QtWidgets.QHBoxLayout()
         heading = QtWidgets.QVBoxLayout()
-        heading.addWidget(label('Cable-tip motion', 'heading'))
+        heading.addWidget(label('Saved motion', 'heading'))
         heading.addWidget(label(f"{data.event.get('phase', 'Saved states').replace('_', ' ')} · collection {data.event.get('round', '—')} · {data.filename}", 'subtle'))
         title_row.addLayout(heading, 1)
         for text, callback in (('3D view', self.overview_camera), ('Details', self.show_details)):
@@ -142,7 +116,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
             self.plotter.add_mesh(pv.Sphere(radius=.013, center=positions[candidate['peak_index']]),
                 color='#b67312', name='measurement_candidate_peak', lighting=False, pickable=False)
         self.tip_arrow = self.plotter.add_mesh(pv.Arrow(), name='live_tip_velocity',
-            color='#087d79', lighting=False, pickable=False)
+            color=PALETTE['green'], lighting=False, pickable=False)
         self._points = np.vstack((self.replay.arrays['cable_positions'].reshape(-1, 3),
                                   self.replay.arrays['drone_positions']))
         self._camera_ready = True
@@ -166,29 +140,20 @@ class ReplayWindow(QtWidgets.QMainWindow):
                     review_card.addWidget(label(note, 'subtle', True))
             review_card.addWidget(label('Candidate evidence is uncertain. No whip, strike or training '
                                          'success is inferred from these marks.', 'subtle', True))
-        live_card = self.card(cards, 'LIVE PLAYBACK · CABLE TIP')
-        self.live_speed = label('', 'smallMetric')
-        self.live_position = label()
-        self.live_direction = label()
-        self.drone_position = label('', 'subtle')
-        self.telemetry = self.drone_position
-        self.live_status = label('', 'subtle')
-        for widget in (self.live_speed, self.live_position, self.live_direction,
-                       self.drone_position, self.live_status):
-            live_card.addWidget(widget)
-
-        outcome_card = self.card(cards, 'SAVED FINAL OUTCOME')
+        # Compact readout at the cursor; the time histories below carry the motion.
         self.outcome = label(self.outcome_text(), 'success', True)
         self.result = self.outcome
-        outcome_card.addWidget(self.outcome)
-        cards.addStretch(1)
-        scroll = QtWidgets.QScrollArea()
-        scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
-        scroll.setWidgetResizable(True)
-        scroll.setFixedWidth(360)
-        scroll.setWidget(sidebar)
-        scroll.setStyleSheet('QScrollArea, QScrollArea > QWidget > QWidget { background: #edf2f6; }')
-        body.addWidget(scroll)
+        cards.addWidget(self.outcome)
+        self.live_speed = self.live_position = label('', 'muted', True)
+        self.live_direction = self.drone_position = self.live_status = self.live_position
+        self.telemetry = self.live_position
+        cards.addWidget(self.live_position)
+        self.motion = MotionPlots(minimum=(340, 300))
+        self.motion.set_arrays(self.replay.arrays, self.data.output_direction)
+        self.motion.seek_requested.connect(lambda t: self.seek(int(np.argmin(abs(self.replay.time-t)))))
+        cards.addWidget(self.motion, 1)
+        sidebar.setFixedWidth(500)
+        body.addWidget(sidebar)
         layout.addLayout(body, 1)
 
         controls = QtWidgets.QHBoxLayout()
@@ -235,11 +200,11 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.arrows_toggle.toggled.connect(lambda _: self.refresh())
         lower.addWidget(self.arrows_toggle)
         layout.addLayout(lower)
-        layout.addWidget(label('Teal: current tip direction · arrow shows direction, not speed scale', 'subtle'))
+        layout.addWidget(label('Green arrow: current tip velocity direction (length not to scale). '
+                               'Saved states only; playback does not re-simulate.', 'note'))
         if review is not None:
             layout.addWidget(label('Amber: unreviewed candidate interval and measurement peak · '
                 'marks are separate from the saved outcome', 'subtle'))
-        layout.addWidget(label('Saved states only · not robustness or flight evidence', 'subtle'))
         self.shortcuts = []
         for key, callback in (('Space', self.toggle), ('Right', self.step), ('R', self.reset)):
             shortcut = QtGui.QShortcut(QtGui.QKeySequence(key), self)
@@ -307,19 +272,14 @@ class ReplayWindow(QtWidgets.QMainWindow):
         velocity = a['cable_velocities'][index, -1]
         position = a['cable_positions'][index, -1]
         metrics = velocity_metrics(velocity, self.data.output_direction)
-        self.live_speed.setText(f"{metrics['speed']:.2f} m/s")
-        self.live_position.setText('Position [m]  ' + vector_text(position))
-        self.live_direction.setText('Direction  ' + vector_text(metrics['direction']))
-        self.drone_position.setText('Drone [m]  ' + vector_text(a['drone_positions'][index]))
-        phase = 'Whip motion'
-        if self.data.measurement_event is not None:
-            phase = 'Saved motion'
+        phase = ''
         if self.measurement_candidate is not None:
             candidate = self.measurement_candidate
             location = ('inside' if candidate['start_index'] <= index <= candidate['end_index']
                         else 'before' if index < candidate['start_index'] else 'after')
-            phase += f' · {location} unreviewed candidate'
-        self.live_status.setText(phase)
+            phase = f' · {location} unreviewed candidate'
+        self.live_position.setText(f"Tip {metrics['speed']:.2f} m/s at [{vector_text(position, 2)}] m · "
+                                   f"drone at [{vector_text(a['drone_positions'][index], 2)}] m{phase}")
         direction = metrics['direction']
         self.tip_arrow.SetVisibility(self.arrows_toggle.isChecked() and direction is not None)
         if direction is not None:
@@ -334,6 +294,7 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.slider.setValue(index)
         self.slider.blockSignals(False)
         self.clock.setText(f'{self.replay.state.time_s:.2f} / {self.replay.duration_s:.2f} s')
+        self.motion.set_cursor(float(self.replay.time[index]))
         self.play.setText('Pause' if self.replay.running else 'Play')
         self.plotter.render()
 

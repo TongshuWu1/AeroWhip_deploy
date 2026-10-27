@@ -1,8 +1,9 @@
 """Native-sample diagnostics, not fitting eligibility or automatic cleaning."""
 import numpy as np
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QPainter, QPen
-from PySide6.QtWidgets import QWidget
+from matplotlib.colors import ListedColormap
+
+from aerowhip.ui.plotting import PlotCanvas
+from aerowhip.ui.style import ROLE
 
 
 def masks(take):
@@ -32,52 +33,58 @@ def summarize(take, first, last):
     }
 
 
-class QualityTimeline(QWidget):
-    seek_requested = Signal(float)
+class QualityTimeline(PlotCanvas):
+    """Which samples were seen: drone pose and each cable marker (c1 at the drone), plus
+    timestamp gaps. Hidden markers are normal (partial frames still constrain the cable).
+    Click to seek."""
 
     def __init__(self):
-        super().__init__()
+        super().__init__(minimum=(300, 150))
+        self.setMaximumHeight(230)
         self.take = None
-        self.current = 0.
         self.first = self.last = 0
-        self.setMinimumHeight(72)
-        self.setMaximumHeight(90)
-        self.setToolTip("Pose and cable validity; red marks show missing samples or timestamp gaps. Click to seek.")
+        self.setToolTip(self.__doc__.replace('\n    ', ' '))
+        self.clear()
+
+    def clear(self):
+        self.take = None
+        with self.style():
+            self.reset()
+        self.draw_idle()
 
     def set_take(self, take):
         self.take = take
         self.pose, self.markers, self.gaps = masks(take)
         self.first, self.last = 0, len(take.time)-1
-        self.update()
+        self.render_plot()
 
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.fillRect(self.rect(), self.palette().window())
-        if self.take is None:
-            return
-        left, width = 52, max(1, self.width()-64)
-        time = self.take.time
-        def x(t):
-            return int(left + width*t/time[-1])
-        for row, (label, valid) in enumerate((("Pose", self.pose), ("Cable", self.markers.all(1)))):
-            y = 13+row*23
-            painter.setPen(self.palette().text().color())
-            painter.drawText(0, y+9, label)
-            painter.fillRect(left, y, width, 10, QColor("#5e9f8b"))
-            for i in np.flatnonzero(~valid):
-                end = time[min(i+1, len(time)-1)]
-                painter.fillRect(x(time[i]), y, max(2, x(end)-x(time[i])), 10, QColor("#cf6464"))
+    def set_interval(self, first, last):
+        self.first, self.last = first, last
+        if self.take is not None:
+            self.render_plot()
+
+    def render_plot(self):
+        take = self.take
+        rows = np.column_stack([self.pose, self.markers]).T.astype(float)
+        names = ['pose']+[f'c{i+1}' for i in range(self.markers.shape[1])]
+        percent = 100*rows.mean(1)
+        with self.style():
+            self.reset()
+            ax = self.figure.add_subplot()
+            t = np.asarray(take.time, float)
+            ax.imshow(rows, aspect='auto', interpolation='nearest', origin='upper',
+                      cmap=ListedColormap(['#f2c4b6', '#d5dde5']), vmin=0, vmax=1,
+                      extent=(t[0], t[-1], len(names)-.5, -.5))
             for i in np.flatnonzero(self.gaps):
-                painter.fillRect(x(time[i]), y, max(2, x(time[i+1])-x(time[i])), 10, QColor("#cf6464"))
-        painter.fillRect(left, 8, max(0, x(time[self.first])-left), 43, QColor(100, 100, 100, 110))
-        painter.fillRect(x(time[self.last]), 8, max(0, left+width-x(time[self.last])), 43, QColor(100, 100, 100, 110))
-        painter.setPen(QPen(QColor("#e4b13e"), 2))
-        for t in (time[self.first], time[self.last]):
-            painter.drawLine(x(t), 7, x(t), 53)
-        painter.setPen(QPen(self.palette().text().color(), 2))
-        painter.drawLine(x(self.current), 5, x(self.current), 56)
-
-    def mousePressEvent(self, event):
-        if self.take is not None and event.button() == Qt.MouseButton.LeftButton:
-            fraction = np.clip((event.position().x()-52)/max(1, self.width()-64), 0, 1)
-            self.seek_requested.emit(float(fraction*self.take.time[-1]))
+                ax.axvspan(t[i], t[i+1], color=ROLE['error'], alpha=.8, linewidth=0)
+            ax.set_yticks(range(len(names)), names)
+            ax.tick_params(axis='y', labelsize=7, length=0)
+            ax.grid(False)
+            if (self.first, self.last) != (0, len(t)-1):
+                for edge in (t[self.first], t[self.last]):
+                    ax.axvline(edge, color=ROLE['command'], linewidth=1.2)
+            seen = self.markers.sum(1).mean()
+            ax.set_title(f'Visibility · pose {percent[0]:.0f} % · cable {seen:.2f} of {self.markers.shape[1]} '
+                         f'markers per frame (hidden: red)', fontsize=8.5)
+            self.add_cursor(ax, float(t[0]))
+        self.draw_idle()

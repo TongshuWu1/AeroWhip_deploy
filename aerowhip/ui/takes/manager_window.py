@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, Q
     QGroupBox, QFileDialog, QMessageBox, QScrollArea, QComboBox)
 
 from aerowhip.takes.library import Library
+from aerowhip.ui import style
 from aerowhip.takes.quality import QualityTimeline, summarize
 from aerowhip.ui.takes.replay_window import ReplayWindow
 from aerowhip.takes.position_plots import PositionPlots
@@ -50,7 +51,7 @@ class TakeManager(QMainWindow):
         self.current_key = None
         self.dirty = False
         self.first = self.last = 0
-        self.setStyleSheet("QWidget {font-size: 12px;} QPushButton {padding: 5px 8px;} QGroupBox {font-weight: 600;}")
+        style.apply(self)
         splitter = QSplitter()
         self.setCentralWidget(splitter)
         left = QWidget()
@@ -82,9 +83,10 @@ class TakeManager(QMainWindow):
         views.setStretchFactor(0, 3)
         views.setStretchFactor(1, 2)
         views.setSizes([440, 240])
-        center_layout.addWidget(views, 1)
         self.quality_timeline = QualityTimeline()
-        center_layout.addWidget(self.quality_timeline)
+        views.addWidget(self.quality_timeline)
+        views.setSizes([400, 260, 130])
+        center_layout.addWidget(views, 1)
         splitter.addWidget(center)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -256,8 +258,7 @@ class TakeManager(QMainWindow):
         self.position_plots.clear()
         self.clear_baselines()
         self.alignment_label.setText("Select a take")
-        self.quality_timeline.take = None
-        self.quality_timeline.update()
+        self.quality_timeline.clear()
         self.name_label.setText("Select a take")
         self.source_label.clear()
         self.full_quality.clear()
@@ -310,8 +311,7 @@ class TakeManager(QMainWindow):
         self.selection_quality.clear()
         self.selection_status.clear()
         self.interval_box.setEnabled(False)
-        self.quality_timeline.take = None
-        self.quality_timeline.update()
+        self.quality_timeline.clear()
         snapshot = deepcopy(entry)
         try:
             path = self.library.resolve_path(entry)
@@ -325,7 +325,8 @@ class TakeManager(QMainWindow):
     def quality_text(q):
         return (f"{q['frames']:,} frames · {q['duration']:.2f} s\n"
                 f"Pose valid: {q['pose_percent']:.1f}%\n"
-                f"All markers valid: {q['complete_percent']:.1f}%\n"
+                f"Markers per frame: {q['marker_percent'].sum()/100:.2f} / {len(q['marker_percent'])}\n"
+                f"All markers seen: {q['complete_percent']:.1f}%\n"
                 f"Tracking gaps: {q['gaps']}")
 
     def take_loaded(self, take):
@@ -477,8 +478,7 @@ class TakeManager(QMainWindow):
         self.selection_quality.setText(self.quality_text(summarize(take, self.first, self.last))
                                        if valid else "Start must be before End")
         self.selection_status.setText("Unsaved" if self.dirty else ("Saved" if saved else "Not saved"))
-        self.quality_timeline.first, self.quality_timeline.last = self.first, self.last
-        self.quality_timeline.update()
+        self.quality_timeline.set_interval(self.first, self.last)
         self.position_plots.set_interval(self.first, self.last)
 
     def set_start(self):
@@ -518,8 +518,7 @@ class TakeManager(QMainWindow):
 
     def playback_changed(self, time):
         self.position_plots.set_cursor(time)
-        self.quality_timeline.current = time
-        self.quality_timeline.update()
+        self.quality_timeline.set_cursor(time)
 
     def seek_time(self, time):
         if self.replay.data is not None:

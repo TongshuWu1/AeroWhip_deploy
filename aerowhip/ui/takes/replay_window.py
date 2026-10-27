@@ -16,7 +16,10 @@ from aerowhip.paths import project_path
 from aerowhip.takes.paths import DEFAULT_RECORDINGS
 
 from aerowhip.paths import ROOT
-COLORS = {"Desired": "#2563eb", "Command": "#e88724", "Measured": "#15803d", "Predicted": "#ad70dc"}
+from aerowhip.ui import style
+from aerowhip.ui.style import ROLE
+COLORS = {"Desired": ROLE["reference"], "Command": ROLE["command"], "Measured": ROLE["measured"],
+          "Predicted": ROLE["model"]}
 
 
 def segments(points, times=None, dashed=False):
@@ -73,7 +76,7 @@ class ReplayWindow(QMainWindow):
         self.elapsed = 0.0
         self.layers = {}
         self.prediction = None
-        self.setStyleSheet("QWidget {font-size: 13px;} QPushButton {padding: 5px 12px;}")
+        style.apply(self)
         body = QWidget()
         self.setCentralWidget(body)
         layout = QVBoxLayout(body)
