@@ -42,29 +42,38 @@ def select_real_robots(base, selected=None):
 
 
 class PoseDerivatives:
-    """Velocity, body rate and acceleration of a tracked body from its last few OptiTrack poses:
-    endpoint derivatives of a least-squares quadratic over `history` frames (the flight
-    estimator uses the same fit for velocity). Display only."""
+    """Velocity, body rate and acceleration of a tracked body from its recent OptiTrack poses, for
+    display: endpoint derivatives of least-squares quadratics over fixed time spans (velocity and
+    body rate over `rate_span_s`, acceleration over `acceleration_span_s`), so the smoothing does
+    not depend on the capture rate. Differentiation amplifies pose noise, the second derivative
+    most, hence the longer acceleration span. The policy's estimator (deployment.observer) is
+    separate and unchanged."""
 
-    def __init__(self, history=7):
-        self.history = history
+    def __init__(self, rate_span_s=.08, acceleration_span_s=.15):
+        self.rate_span, self.acceleration_span = rate_span_s, acceleration_span_s
         self.samples = []
+
+    @staticmethod
+    def _fit(t, values):
+        u = t-t[-1]
+        design = np.column_stack((np.ones_like(u), u, u*u))
+        return np.linalg.lstsq(design, values-values[-1], rcond=None)[0]
 
     def update(self, time_s, p, q):
         self.samples.append((float(time_s), np.asarray(p, float), quaternion_xyzw_to_rotation_matrix(np.asarray(q, float))))
-        del self.samples[:-self.history]
-        if len(self.samples) < 3:
+        newest = self.samples[-1][0]
+        while self.samples and newest-self.samples[0][0] > self.acceleration_span:
+            self.samples.pop(0)
+        t = np.array([x[0] for x in self.samples])
+        recent = newest-t <= self.rate_span
+        if recent.sum() < 3 or t[-1]-t[recent][0] < 1e-3:
             return None, None, None
-        t = np.array([x[0] for x in self.samples]); u = t-t[-1]
-        if t[-1]-t[0] < 1e-3:
-            return None, None, None
-        design = np.column_stack((np.ones_like(u), u, u*u))
         positions = np.array([x[1] for x in self.samples])
-        coefficients = np.linalg.lstsq(design, positions-positions[-1], rcond=None)[0]
-        velocity, acceleration = coefficients[1], 2*coefficients[2]
+        velocity = self._fit(t[recent], positions[recent])[1]
         R = self.samples[-1][2]
-        logs = np.array([rotation_log(R.T@x[2]) for x in self.samples])
-        omega = np.linalg.lstsq(design, logs, rcond=None)[0][1]
+        logs = np.array([rotation_log(R.T@x[2]) for x, keep in zip(self.samples, recent) if keep])
+        omega = self._fit(t[recent], logs)[1]
+        acceleration = 2*self._fit(t, positions)[2] if len(t) >= 5 else None
         return velocity, omega, acceleration
 
 
