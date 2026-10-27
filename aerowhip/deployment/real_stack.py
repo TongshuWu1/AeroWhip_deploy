@@ -77,12 +77,39 @@ def wait_for_radios(crazyflies_yaml, timeout_s=90.):
         raise SystemExit(result.returncode)
 
 
+def watch_heartbeat(path, stale_s=3., grace_s=15.):
+    """Stop this process (SIGINT: the launch group is stopped in order) when the host viewer stops
+    touching `path`. docker exec does not forward the viewer's exit or signals into the container,
+    so without this a viewer closed by Ctrl+C, a crash or a kill left the flight stack running and
+    holding the radio."""
+    import threading
+    import time
+    started = time.monotonic()
+
+    def watch():
+        while True:
+            time.sleep(.5)
+            try:
+                age = time.time()-path.stat().st_mtime
+            except FileNotFoundError:
+                age = float('inf')
+            if age > stale_s and time.monotonic()-started > (0. if path.exists() or age != float('inf') else grace_s):
+                print(f'Viewer heartbeat {"gone" if age == float("inf") else f"stale ({age:.1f} s)"}; stopping the stack.', flush=True)
+                os.kill(os.getpid(), signal.SIGINT)
+                return
+    threading.Thread(target=watch, daemon=True).start()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--session', required=True)
     parser.add_argument('--configuration', required=True)
     parser.add_argument('--capture-only', action='store_true')
+    parser.add_argument('--heartbeat', help='File the host viewer touches every 0.5 s (bind-mounted); when it is '
+                        'older than 3 s or gone, the viewer is gone and this stack stops itself')
     args = parser.parse_args()
+    if args.heartbeat:
+        watch_heartbeat(Path(args.heartbeat))
     configuration = json.loads(args.configuration)
     if not args.capture_only:
         wait_for_radios(configuration['crazyflies'])

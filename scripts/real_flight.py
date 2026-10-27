@@ -80,6 +80,29 @@ def supervise_viewer(args, argv):
             signal.signal(sig, handler)
 
 
+HEARTBEATS = CRAZYSWARM/'logs'/'aerowhip_heartbeat'     # bind-mounted as /workspace/logs/aerowhip_heartbeat
+
+
+def start_heartbeat(session):
+    """Touch a per-session file every 0.5 s for as long as this viewer process lives; the stack it
+    launches in the container stops itself when the file goes stale (see real_stack.watch_heartbeat).
+    Returns the file's path inside the container."""
+    import atexit
+    import threading
+    import time
+    HEARTBEATS.mkdir(parents=True, exist_ok=True)
+    path = HEARTBEATS/session
+    path.touch()
+
+    def beat():
+        while True:
+            path.touch()
+            time.sleep(.5)
+    threading.Thread(target=beat, daemon=True).start()
+    atexit.register(lambda: path.unlink(missing_ok=True))
+    return f'/workspace/logs/aerowhip_heartbeat/{session}'
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--container', default='crazyswarm2_jazzy_whipping_dev')
@@ -180,6 +203,12 @@ def main():
             except BlockingIOError:
                 raise RuntimeError('A custom real stack is already launched; use --attach') from None
             nodes = existing_real_nodes(args.container, args.domain)
+            for _ in range(20):      # a stack left by a closed viewer stops itself within ~3 s of its heartbeat ending
+                if not nodes:
+                    break
+                print(f'Waiting for a previous stack to stop: {nodes}', flush=True)
+                time.sleep(.5)
+                nodes = existing_real_nodes(args.container, args.domain)
             if nodes:
                 raise RuntimeError(f'Real ROS nodes already exist: {nodes}. Use --attach; no existing process was stopped.')
         model_path = project_path(args.model)
@@ -227,8 +256,10 @@ def main():
             print(f'Recording: {feed.start_recording()}', flush=True)
         if not args.attach:
             stack_log = (output/'real-stack.log').open('x')
+            heartbeat = start_heartbeat(session)
             stack = launch_container_script(args.container, ROOT/'aerowhip/deployment/real_stack.py',
-                ['--session', session, '--configuration', json.dumps(dict(zip(('crazyflies', 'motion_capture'), original_yaml)))]
+                ['--session', session, '--configuration', json.dumps(dict(zip(('crazyflies', 'motion_capture'), original_yaml))),
+                 '--heartbeat', heartbeat]
                 + (['--capture-only'] if args.capture_only else []),
                 domain=args.domain, log=stack_log, start_new_session=True)
         capture_log = (output/'ros-capture.log').open('x')
