@@ -648,7 +648,7 @@ class ProgressView(QtWidgets.QWidget):
                 ax.set_xlabel('minutes since the start' if timed else 'evaluation')
                 span = max(best.max()-best.min(), 1e-9)
                 ax.set_ylim(best.min()-.15*span, best.max()+.15*span)
-            ax.set_ylabel(f'error ({unit})' if unit else 'error')
+            ax.set_ylabel(f'error ({unit})' if unit else 'error (1 at the start)')
             ax.set_title('Model error on the flights, best so far (lower is better)')
             ax.grid(alpha=.3)
             if side is not None:
@@ -684,7 +684,7 @@ class ProgressView(QtWidgets.QWidget):
         ax.set_xticks(ms)
         ax.set_xlim(min(ms)-5, max(ms)+5)
         ax.set_xlabel('command delay tried (ms)')
-        ax.set_ylabel(f'error ({unit})')
+        ax.set_ylabel(f'error ({unit})' if unit else 'error (1 at the start)')
         ax.set_title('Which command delay fits best?')
         ax.grid(alpha=.3)
 
