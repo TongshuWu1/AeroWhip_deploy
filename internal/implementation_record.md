@@ -2209,3 +2209,13 @@ Real flights, cf_2 without cable, all in `crazyswarm2_jazzy_whipping/calibration
 Tools added in crazyswarm2 today: --tune (in-air gain sets), tuning_report.py (incl. ringing),
 flash_firmware.py, motor_spin_test.py, firmware commit recorded with every flight. Nothing in the
 model changed; the stage 1–4 fits remain those of cf_2 and will be redone on the tuned drone.
+
+## Dated change note — 2026-10-28 decision: new airframe; all drone-dependent stages to be redone
+
+The user will build a new, lighter airframe (design changes possible) instead of repairing cf_2.
+Consequences: the stage 0–4 results above stay as the record of the method on cf_2 and are not
+parameters of the new drone; every drone-dependent stage is redone on it (measurements, tuning with
+`--tune`, thrust map, drone fit, cable fit with its residual — the rotor wake and clamp geometry
+change — and the coupled validation). The cable's own properties may carry over if the same cable is
+used, but are refitted with the new drone. Work moves to the AMD 9950X computer
+(`internal/handoff_2026-10-28.md`). Nothing in the code or model changed.
