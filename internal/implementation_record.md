@@ -2348,3 +2348,16 @@ do not use; ~11.5 min of flying per setup instead of ~20 min in 15 flights. Phas
 ('decay 0 3', 'whip 45 4', ...). To check on the AeroWhip side before the cf_6 fits: the stroke
 windows (`scripts/stroke_diagnostics.py`) and anything selecting flights by take name (decay,
 strokes, whip) must select the corresponding parts of the mixed flights by phase.
+
+## Dated change note — 2026-10-28 cable flipped over the drone in mix_a; cable levels lowered
+
+`cf_6/mix_a/001` and `/002` (both excluded in the manifest): in the 6 m/s² sharp stop on x
+(`decay 0 6`), after the stroke back, the cable came over the drone: in /001 it blocked OptiTrack for
+0.4 s and the drone landed itself (link-loss landing); in /002 the drone flipped (tilt 152°, motors
+cut). The 3 m/s² part before it was flown cleanly both times. The same 6 m/s² sharp stops flew
+with the cable on cf_2 under the old tune; with the new tune the drone reaches 94 % of the commanded
+tilt in 65 ms (78 % in 120 ms before), so the same command puts more energy into the cable, and a
+return stroke 5 s after the first pumps the remaining swing. With the cable the mixed flights now use
+sharp stops at 4.5 m/s² with 8 s holds, strokes 5, whips 4–5, lines 6 and random 5 (crazyswarm2
+4e8912b); drone-only levels unchanged. A simulated screening of each planned part for cable
+flip-over (the model's cable rising above the clamp) before flying is proposed.
