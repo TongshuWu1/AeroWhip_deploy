@@ -48,11 +48,12 @@ def simulate_part(config, firmware, spec, voltage=7.6, stack=FLIGHT_STACK):
     return simulate_motion(config, firmware, part_args(spec, stack=stack).motion, voltage, stack)
 
 
-def simulate_motion(config, firmware, motion, voltage=7.6, stack=FLIGHT_STACK, markers_every=10):
+def simulate_motion(config, firmware, motion, voltage=7.6, stack=FLIGHT_STACK, markers_every=10, nodes=False):
     """Fly a motion closed loop. Returns dict of arrays over the steps from the motion's start to
     HOVER_AFTER_S after it ends: t, phase (list), error (m), tilt (deg), rise (m), tip (3), tip_speed,
     motor (min force / hover share), command (3), position (3); every `markers_every` steps also
-    markers (M, 10, 3) and rotation (M, 3, 3) for the sensitivities; and `failed` (None or a reason)."""
+    markers (M, 10, 3) and rotation (M, 3, 3) for the sensitivities, with `nodes=True` also every cable
+    node (M, n, 3) and the reference (M, 3) at the same steps, for display; and `failed` (None or a reason)."""
     flight, _ = flight_script(stack)
     args = motion_args(motion)
     native = native_module()
@@ -85,7 +86,7 @@ def simulate_motion(config, firmware, motion, voltage=7.6, stack=FLIGHT_STACK, m
     origin = np.zeros(3)
     n = len(model.rest)+1
     out = dict(t=[], phase=[], error=[], tilt=[], rise=[], tip=[], tip_speed=[], motor=[], command=[], position=[])
-    markers, rotations = [], []
+    markers, rotations, cable_nodes, references = [], [], [], []
     index = np.asarray(model.marker_indices)[1:]
     sent = command(trim)
     hover_share = weight/4
@@ -118,10 +119,15 @@ def simulate_motion(config, firmware, motion, voltage=7.6, stack=FLIGHT_STACK, m
         out['command'].append(sent[6:9].copy()); out['position'].append(p.copy())
         if len(out['t']) % markers_every == 1:
             markers.append(q[index].copy()); rotations.append(R.copy())
+            if nodes:
+                cable_nodes.append(q.copy()); references.append(np.asarray(ref, float).copy())
         if tilt > TILT_FAIL_DEG:
             failed = f'drone tilt {tilt:.0f} deg'
             break
     result = {k: (np.array(v) if k != 'phase' else v) for k, v in out.items()}
     result['markers'] = np.array(markers); result['rotation'] = np.array(rotations)
+    if nodes:
+        result['nodes'] = np.array(cable_nodes); result['reference'] = np.array(references)
+        result['marker_t'] = result['t'][::markers_every][:len(markers)]
     result['failed'] = failed
     return result

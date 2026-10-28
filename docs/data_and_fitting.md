@@ -222,5 +222,7 @@ least: the Fisher information of the simulated marker and attitude measurements,
 parameter after the others are allowed to vary (so coupled parameters count as poorly
 determined), with the correlations of the estimates reported. The Identification Loop window
 (`python -m aerowhip.ui.planning`) runs the loop: optimise, fly, measure the envelope, label and
-fit, check. Only the recorded span from the settling hover to the final hover is used; takeoff,
+fit, check. It plays each planned flight back in 3D from one simulation of the adopted model
+(`scripts/preview_trajectory.py`), with the predicted cable height above the clamp along the
+timeline. Only the recorded span from the settling hover to the final hover is used; takeoff,
 landing and safety landings are excluded, since the cable may then touch the ground.

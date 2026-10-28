@@ -2501,3 +2501,25 @@ warm start and the fallback.
   earlier experiment scripts moved to `scripts/legacy/` (the 9 failures of
   test_acceleration_circle_cf2.py predate the move). The command given earlier with a host path to
   the trajectory would not have worked in the container (only the flight stack is mounted).
+
+## Dated change note — 2026-10-28 Identification Loop window redesigned (3D preview)
+
+User asked for a product-like window with a 3D view. `aerowhip/ui/planning/` is now four modules:
+`loop_data.py` (files, envelope, flown flights, flight-running check, detached jobs), `scene.py`
+(the 3D view: floor, flight area from the flight stack's `config/arena.yaml` drawn around the hover
+point with its 0.3 m margin and the 2.6 m planned ceiling, the CAD drone frame, the cable with its
+markers, the tip's last 1.5 s, the whole plan faint and its next 3 s highlighted), `views.py`
+(timeline strip, Information, Safety, Envelope) and `loop_window.py` (dark layout: top bar with the
+job and flight status, the loop's steps and the planned flights on the left, 3D preview with
+camera presets, playback and a click-to-seek strip in the centre, key numbers, values at the cursor
+and the selected step's actions on the right). The 3D playback comes from a new
+`scripts/preview_trajectory.py`: one closed-loop simulation of the adopted model (the planner's
+fits) at the flown gains, every cable node and the drone pose at 50 Hz, written as
+`<trajectory>_preview.npz` (excitation_001: 3100 frames, 5 s on one core); the window runs it by
+itself for a flight without one, unless a flight script is running. `simulate_motion(...,
+nodes=True)` returns the cable nodes and the reference for it; the default path is unchanged.
+The flight-running check now matches a python process running acceleration_circle_cf2.py (an
+editor or a shell naming the file no longer counts). Checked offscreen: layout, every page,
+playback at 1× (50 frames/s), seeking, and the automatic preview job; the 3D view on the real
+display was not inspected by me. The preview is a simulation of the adopted model, labelled as
+such in the view; the real flight is what the envelope measures.

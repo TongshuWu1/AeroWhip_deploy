@@ -1,0 +1,179 @@
+"""The 3D view of the Identification Loop: the lab floor, the flight area (config/arena.yaml of the
+flight stack) and ceiling, the planned path coloured by speed, and the drone (CAD frame) with the
+simulated cable played back from a preview (scripts/preview_trajectory.py). Display only.
+
+World frame as the simulator's: the hover point at (0, 0, 1.3 m + lift) above the floor; the
+flight area is drawn centred on the hover point (where the drone is put down decides the real one).
+"""
+import tomllib
+
+import numpy as np
+import pyvista as pv
+from pyvistaqt import QtInteractor
+from PySide6 import QtWidgets
+
+from aerowhip.paths import ROOT
+from aerowhip.planning.simulate import FLIGHT_STACK
+from aerowhip.viewer.drone_model import load_frame_meshes
+
+SCENE = ROOT/'configs'/'scenes'/'default.toml'
+BACKGROUND = ('#11161c', '#1f2933')
+FLOOR, GRID, GRID_MAJOR = '#1a2129', '#26313c', '#34424f'
+AREA, CEILING = '#3d93d1', '#D55E00'
+CABLE, TIP, MARKER = '#f2f2f2', '#E69F00', '#56B4E9'
+DRONE_BODY, DRONE_GUARD = '#2b2f36', '#c8d0d8'
+PATH, AHEAD = '#93a0ad', '#3dd6c6'        # the whole plan (faint) and the next seconds of it
+
+
+def arena():
+    import yaml
+    try:
+        return yaml.safe_load((FLIGHT_STACK/'config'/'arena.yaml').read_text())
+    except OSError:
+        return dict(x_m=[-2., 2.], y_m=[-1.5, 1.5], margin_m=.3)
+
+
+def viewer_settings():
+    raw = tomllib.loads(SCENE.read_text())['viewer']
+    return type('Viewer', (), raw)
+
+
+class Scene3D(QtWidgets.QWidget):
+    CEILING_M = 2.6               # highest planned height of the tracking origin (flight script)
+
+    def __init__(self, parent=None, plotter=None):
+        """plotter: an off-screen pyvista Plotter instead of the Qt one (for rendering images)."""
+        super().__init__(parent)
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        if plotter is None:
+            plotter = QtInteractor(self, auto_update=False, multi_samples=8)
+            layout.addWidget(plotter.interactor)
+        self.plotter = plotter
+        p = self.plotter
+        p.set_background(BACKGROUND[0], top=BACKGROUND[1])
+        p.enable_anti_aliasing('ssaa')
+        p.add_light(pv.Light(position=(-3, -4, 7), focal_point=(0, 0, 1), intensity=.9, light_type='scene light'))
+        p.add_light(pv.Light(position=(4, 2, 5), focal_point=(0, 0, 1), intensity=.5, light_type='scene light'))
+        self.hover = np.array([0., 0., 1.3])
+        self.preview = None
+        self.trail = None
+        self._drone = []
+        self._frame_index = 0
+        self._room()
+        self._add_drone()
+        self.cable_line = pv.lines_from_points(np.tile(self.hover, (11, 1))-np.linspace(0, 1, 11)[:, None]*[0, 0, 1])
+        self.cable_actor = p.add_mesh(self.cable_line.tube(radius=.004), color=CABLE, smooth_shading=True, name='cable')
+        self.markers = pv.PolyData(np.zeros((10, 3)))
+        p.add_mesh(self.markers, color=MARKER, point_size=9, render_points_as_spheres=True, name='markers')
+        self.tip = pv.PolyData(np.zeros((1, 3)))
+        p.add_mesh(self.tip, color=TIP, point_size=14, render_points_as_spheres=True, name='tip')
+        p.add_axes(color='#93a0ad', line_width=2, labels_off=False)
+        self.view('iso')
+
+    # static scene
+    def _room(self):
+        p = self.plotter
+        p.add_mesh(pv.Plane(center=(0, 0, -.001), direction=(0, 0, 1), i_size=12, j_size=12), color=FLOOR, name='floor',
+                   ambient=.4, diffuse=.6)
+        for spacing, colour, name in ((.5, GRID, 'grid'), (1., GRID_MAJOR, 'grid_major')):
+            lines = []
+            for v in np.arange(-5, 5+1e-9, spacing):
+                lines += [[(v, -5, 0), (v, 5, 0)], [(-5, v, 0), (5, v, 0)]]
+            pts = np.array(lines).reshape(-1, 3)
+            cells = np.hstack([[2, 2*i, 2*i+1] for i in range(len(lines))])
+            p.add_mesh(pv.PolyData(pts, lines=cells), color=colour, line_width=1, name=name, lighting=False)
+        a = arena()
+        cx, cy = self.hover[0]-np.mean(a['x_m']), self.hover[1]-np.mean(a['y_m'])
+        x0, x1 = a['x_m'][0]+cx, a['x_m'][1]+cx
+        y0, y1 = a['y_m'][0]+cy, a['y_m'][1]+cy
+        box = pv.Box(bounds=(x0, x1, y0, y1, 0, self.CEILING_M))
+        p.add_mesh(box.extract_feature_edges(), color=AREA, line_width=1.5, opacity=.55, name='area_edges', lighting=False)
+        m = a['margin_m']
+        inner = pv.Box(bounds=(x0+m, x1-m, y0+m, y1-m, 0, self.CEILING_M))
+        p.add_mesh(inner.extract_feature_edges(), color=AREA, line_width=1, opacity=.22, name='area_margin', lighting=False)
+        p.add_mesh(pv.Plane(center=((x0+x1)/2, (y0+y1)/2, .002), direction=(0, 0, 1), i_size=x1-x0, j_size=y1-y0),
+                   color=AREA, opacity=.07, name='area_floor', lighting=False)
+        p.add_mesh(pv.Plane(center=((x0+x1)/2, (y0+y1)/2, self.CEILING_M), direction=(0, 0, 1), i_size=x1-x0, j_size=y1-y0),
+                   color=CEILING, opacity=.05, name='ceiling', lighting=False)
+
+    def _add_drone(self):
+        settings = viewer_settings()
+        body, guard = load_frame_meshes(pv, np.array([0., 0., -.055]), settings)
+        self._drone = [self.plotter.add_mesh(body, color=DRONE_BODY, smooth_shading=True, specular=.3, name='drone_body'),
+                       self.plotter.add_mesh(guard, color=DRONE_GUARD, smooth_shading=True, specular=.4, name='drone_guard')]
+
+    # content
+    def set_trajectory(self, data, preview):
+        """data: the trajectory file (relative positions, speeds); preview: the npz arrays or None."""
+        p = self.plotter
+        for name in ('path', 'trail', 'ahead', 'hover_point', 'hover_drop'):
+            p.remove_actor(name, render=False)
+        self.preview = preview
+        self.plan = None
+        if preview is not None:
+            self.hover = np.asarray(preview['reference'][0], float)
+        p.add_mesh(pv.Sphere(radius=.02, center=self.hover), color='#93a0ad', name='hover_point', lighting=False)
+        p.add_mesh(pv.Line(self.hover, (self.hover[0], self.hover[1], 0)), color='#93a0ad', line_width=1, opacity=.35,
+                   name='hover_drop', lighting=False)
+        if data is not None:
+            self.plan = (np.asarray(data['t']), np.asarray(data['position'])+self.hover)
+            p.add_mesh(pv.lines_from_points(self.plan[1][::2]), color=PATH, opacity=.18, line_width=1, name='path', lighting=False)
+            self.ahead = pv.lines_from_points(self.plan[1][:3])
+            p.add_mesh(self.ahead, color=AHEAD, line_width=4, name='ahead', lighting=False, render_lines_as_tubes=True)
+        if preview is not None:
+            self.trail = pv.lines_from_points(preview['nodes'][:2, -1])
+            p.add_mesh(self.trail, color=TIP, opacity=.7, line_width=2, name='trail', lighting=False)
+            self.set_frame(0)
+        else:
+            self._place_drone(self.hover, np.eye(3), np.vstack([self.hover+[0, 0, -.055-.1*k] for k in range(11)]), None)
+            self.plotter.render()
+
+    def frames(self):
+        return 0 if self.preview is None else len(self.preview['t'])
+
+    def set_frame(self, i, trail_s=1.5, ahead_s=3.):
+        if self.preview is None:
+            return
+        pr = self.preview
+        i = int(np.clip(i, 0, len(pr['t'])-1))
+        self._frame_index = i
+        nodes = pr['nodes'][i]
+        self._place_drone(pr['position'][i], pr['rotation'][i], nodes, pr['marker_indices'])
+        k = int(trail_s/max(pr['t'][1]-pr['t'][0], 1e-3))
+        tip = pr['nodes'][max(0, i-k):i+1, -1]
+        if len(tip) > 1:
+            self.trail.copy_from(pv.lines_from_points(tip))
+        if self.plan is not None:
+            t, pos = self.plan
+            j0, j1 = np.searchsorted(t, [pr['t'][i], pr['t'][i]+ahead_s])
+            segment = pos[min(j0, len(t)-2):max(j1, j0+2)]
+            self.ahead.copy_from(pv.lines_from_points(segment))
+        self.plotter.render()
+
+    def _place_drone(self, position, R, nodes, marker_indices):
+        M = np.eye(4); M[:3, :3] = R; M[:3, 3] = position
+        for actor in self._drone:
+            actor.user_matrix = M
+        line = pv.lines_from_points(nodes)
+        self.cable_actor.mapper.SetInputData(line.tube(radius=.004, n_sides=14))
+        if marker_indices is not None:
+            self.markers.points = nodes[np.asarray(marker_indices)[1:]] if len(marker_indices) > 1 else nodes[-1:]
+        self.tip.points = nodes[-1:]
+
+    def view(self, which):
+        p = self.plotter
+        focus = self.hover-[0, 0, .45]
+        if which == 'iso':
+            p.camera_position = [tuple(focus+[2.5, -2.9, 1.5]), tuple(focus), (0, 0, 1)]
+        elif which == 'top':
+            p.camera_position = [tuple(focus+[0, 0, 4.2]), tuple(focus), (0, 1, 0)]
+        elif which == 'side':
+            p.camera_position = [tuple(focus+[0, -3.4, .2]), tuple(focus), (0, 0, 1)]
+        elif which == 'front':
+            p.camera_position = [tuple(focus+[3.4, 0, .2]), tuple(focus), (0, 0, 1)]
+        elif which == 'close' and self.preview is not None:
+            d = self.preview['position'][self._frame_index]
+            p.camera_position = [tuple(d+[1.2, -1.4, .5]), tuple(d-[0, 0, .4]), (0, 0, 1)]
+        p.camera.view_angle = 32
+        p.render()
