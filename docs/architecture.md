@@ -71,4 +71,6 @@ normalized world accelerations (excluding gravity) scaled by
 `environment.acceleration_limit_mps2`, with yaw fixed at its initial value. In the training
 environment a zero action means hover: a vertical feed-forward acceleration, solved per lane from the
 thrust map at that lane's battery voltage, is added so that the delivered thrust equals the weight of
-drone and cable (in flight the host position controller supplies this trim).
+drone and cable plus the cable residual's steady downward pull, and a horizontal one cancels the
+residual's sideways pull (in flight the host position controller supplies these trims). The hover
+start puts the cable at its rest shape under the residual.

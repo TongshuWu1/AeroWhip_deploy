@@ -2000,3 +2000,42 @@ Approved by the user (1e-5 for training, 1e-7 for fitting).
   into place while the cable fit ran (it keeps its loaded library). Fit results adopted earlier were
   computed at 2e-11; refits from now on run at 1e-7 (differences ≤ 0.005 mm in the replays above).
 
+
+## Dated change note — 2026-10-28 stage 3 with the cable residual; adoption; stage 4
+
+Passes of `scripts/fit_cable_segments.py` (820 fit, 249 held-out 1 s segments, measured clamp):
+
+| Result | Terms | Held out | Notes |
+|---|---|---|---|
+| `runs/fits/cable/20261027-234304.json` | physics (A) | 33.53 mm | marker intervals from the labels; the physics barely moved |
+| `…/20261027-235901.json` | + steady force, body frame (B) | 22.90 mm | EI at its 1e−9 bound; vertical shape terms cancel |
+| `…/20261028-002621.json` | + steady force, world frame | 23.05 mm | horizontal force the same as in B; vertical flips sign |
+| `…/20261028-010109.json` | + drag, EI held, vertical constant (C) | 24.83 mm | drag not identified (Cd ±18, log multiplier ±33) |
+| `…/20261028-011354.json` | steady force, EI held, vertical constant (B′) | 24.83 mm | |
+| **`…/20261028-012011.json`** | **steady force, EI free, vertical constant (B″)** | **23.25 mm** | **adopted**: EI 1.40e−4 ×/÷1.65, vertical −9.5 ± 2.3 mN/m |
+| `…/20261028-013419.json` | clamp angle instead of the sideways force | 24.63 mm | tilt 10°, 15° (bound) |
+| `…/20261028-014002.json` | clamp angle + steady force | 23.14 mm | angles unidentified (±9°, ±24°) |
+
+Solver tolerance: results up to `20261028-002621` and the model comparison
+(`runs/diagnostics/model_comparison_*.json`) ran at 2e−11; `010109` onward at the fit tolerance 1e−7
+(e872b0f); the measured difference is at most 0.005 mm.
+
+Adoption (45900ad, `runs/fits/adoptions.jsonl`; an adoption at 01:31 was reverted at 01:33 while the
+hover drift was examined, then re-adopted at 01:53 with the environment changes). The residual's net
+force (6 / 6 mN horizontal, 9 mN down, body frame) made zero action drift 0.48 m in 5 s: the
+environment's hover trim now cancels it horizontally and adds it to the thrust target, and the hover
+seed starts the cable at its rest shape (`physics.model.settled_cable`). Remaining: a slow wobble of
+about 5 mm that returns by the end of the episode (the leaning cable's moment on the clamp); bounded
+by a new test, the plain-physics PWM bound kept on the model without residual. Under randomisation
+(8 lanes, 4 variants) the drifts with and without the residual agree to a few mm (the deliberate
+per-lane acceleration bias dominates). Randomisation rerun (`scripts/randomisation_from_fits.py`):
+only Cb changes, ×0.83–1.21 (was ×0.81–1.23).
+
+Model comparison on the coupled test (held out, bias cancelled): the 25 Oct PVA model, rebuilt in the
+current engine (nominal ideal-thrust controller, 30 ms delay, original cable values), drone 140 mm,
+tilt 2.6°, shape 64 mm, tip 102 mm, stroke tip error 56 mm; this week's model before the residual
+48.5 mm, 1.07°, 38.2 mm, 60.9 mm, 36.7 mm; adopted (stage 4, `runs/fits/coupled/20261028-015741.json`)
+48.7 mm, 0.99°, 28.8 mm, 46.1 mm, 31.7 mm. Tip peak speed in strokes 0.99 / 0.94 / 0.90 of the
+measured: the residual improves the cable's path but its tip peaks slower; the drag correction that
+might address this was not identified on 1 s segments, so a stroke-window drag fit is the next
+candidate. 112 tests pass.

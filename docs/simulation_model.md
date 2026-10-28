@@ -26,9 +26,10 @@ Defined in [configs/physics/drone_cable.json](../configs/physics/drone_cable.jso
 | Cable and marker mass (total) | 0.016 kg (weighed 2026-10-27; assembly 0.162 kg) |
 | Cable length / mesh | 0.977 m / 10 edges between 11 nodes (the marker intervals from the labelled flights: 83.2, 100.1, 99.3, 101.7, 100.3, 98.9, 101.2, 98.9, 100.1, 96.9 mm, the means over all frames of the 21 cable flights, std about 1 mm) |
 | Tracking origin → centre of mass / → attachment | (0, 0, −0.018) / (0, 0, −0.055) m (attachment measured 2026-10-27; the hanging-cable fit had placed the first marker within 3 mm of this) |
-| Bending stiffness EI / bending damping Cb | 5.71e−4 N m² / 4.13e−5 N m² s |
-| Cable diameter / normal drag coefficient Cd / air density | 3.5 mm / 0.64 / 1.2 kg m⁻³ |
-| Linear drag | 0.223 s⁻¹ (on node velocity, mass proportional) |
+| Bending stiffness EI / bending damping Cb | 1.40e−4 N m² (×/÷ 1.65) / 4.15e−5 N m² s (×/÷ 1.21), 95 % |
+| Cable diameter / normal drag coefficient Cd / air density | 3.5 mm / 0.75 ± 0.10 / 1.2 kg m⁻³ |
+| Linear drag | 0.178 s⁻¹ (×/÷ 1.21; on node velocity, mass proportional) |
+| Cable residual | steady force per unit length, body frame: sideways 20 / 28 mN/m (body x / y) at the clamp, fading to about 2 mN/m by mid-cable; −9.5 mN/m vertical, constant (see below) |
 | Drone air drag (body x, y / z) | 0.59 / 0.48 s⁻¹ (linear, mass proportional, on the COM velocity in body axes) |
 | Maximum physics step | 2 ms (one step per firmware controller period) |
 | Solver stopping tolerance | 1e−5 relative (`simulation.solver_tolerance`: training, simulator, tools); 1e−7 in the model fits (`simulation.fit_solver_tolerance`) |
@@ -62,10 +63,11 @@ edge may bend away from that tangent, and the clamp's bending moment acts on the
 tip is free. There is no self-contact, ground or wall contact, or wind. Collapsed edges and
 antiparallel adjacent edges are rejected as invalid states.
 
-On the identified values the cable is gravity dominated (EI/(m g L²) ≈ 4·10⁻³) and its bending
-relaxes in Cb/EI ≈ 0.07 s. The segment fit of the cable flights identifies all four cable
-parameters (standard deviations 0.04–0.08 in log₁₀ EI, log₁₀ Cb, Cd and log₁₀ linear drag;
-`runs/fits/cable/20261027-202726.json`).
+On the identified values the cable is gravity dominated (EI/(m g L²) ≈ 10⁻³) and its bending
+relaxes in Cb/EI ≈ 0.3 s. The segment fit of the cable flights, jointly with the residual below,
+identifies the four cable parameters (`runs/fits/cable/20261028-012011.json`). Without the residual
+the same fit gives EI four times larger (5.7e−4): a stiffer cable was compensating for the lean the
+residual now carries.
 
 ### Cable residual
 
@@ -74,10 +76,20 @@ all zero is the plain physics above): per node, a steady force per unit length t
 in arc length per axis, in the drone's body frame or the world frame (`frame`); a multiplier
 exp(b₀ + b₁ s̃) on the quadratic normal drag; and a quadratic drag along the tangent with
 coefficient c₀ + c₁ s̃ (s̃ the arc fraction). It exists because the calibration flights show the
-model's hanging equilibrium 2.3° off the measured hanging shape (40 mm at the tip) and a 5–8 %
-tip-speed deficit in strokes, which are forces the model lacks rather than values of its parameters;
-it is fitted together with EI, Cb, Cd and the linear drag on the cable flights (data and fitting
-page). Terms are kept only where the held-out flights improve.
+model's hanging equilibrium 2.3° off the measured hanging shape (40 mm at the tip), which is a force
+the model lacks rather than a value of its parameters; it is fitted together with EI, Cb, Cd and the
+linear drag on the cable flights (data and fitting page), and terms are kept only where the held-out
+flights improve.
+
+The adopted residual has only the steady force, in the drone's body frame: sideways near the clamp
+(20 and 28 mN/m along body x and y), fading to about 2 mN/m by mid-cable, and a constant −9.5 ±
+2.3 mN/m vertically, about 6 % of the cable's weight. A force concentrated just below the drone that
+follows its attitude is what the rotor wake would produce; a clamp that holds the cable a few
+degrees off vertical bends the hanging shape the same way, and the flights cannot separate the two
+(fitting the clamp's angle instead needs 15° or more and does worse). The drag terms were not
+identified on these flights and are zero. The net force of the residual on the cable (6 mN per
+horizontal axis, 9 mN down) is cancelled by the training environment's hover trim, as the host's
+trims cancel steady pulls in flight.
 
 ## Drone air drag
 

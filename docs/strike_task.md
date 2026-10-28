@@ -118,8 +118,8 @@ adoption): motor response ± 1.96 sd and drag rates ± 1.96 sd (95 % intervals c
 Cb ×/÷ 10^(1.96 sd of log10 Cb), the command delays whose fit loss lies within 1 % of the profile's
 minimum, the battery range of the calibration flights, and per axis the RMS of the per-flight
 acceleration biases. Current values (drone fit `runs/fits/drone/20261027-201939.json`, cable fit
-`runs/fits/cable/20261027-202726.json`): response 5.1–34.1 ms, delay 0–10 ms, drag ×0.91–1.09
-horizontal and ×0.61–1.39 vertical, Cb ×0.81–1.23, battery 6.88–7.78 V, bias 0.023 / 0.161 / 0.153
+`runs/fits/cable/20261028-012011.json`): response 5.1–34.1 ms, delay 0–10 ms, drag ×0.91–1.09
+horizontal and ×0.61–1.39 vertical, Cb ×0.83–1.21, battery 6.88–7.78 V, bias 0.023 / 0.161 / 0.153
 m/s² (x / y / z). The critic's command-queue slots use the nominal delay rounded up to 10 ms.
 
 ## Training and evaluation

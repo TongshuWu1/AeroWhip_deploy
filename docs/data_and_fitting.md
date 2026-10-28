@@ -177,8 +177,17 @@ estimates (0.106 against 0.109), whereas the independent-residual formula is 5�
    and the roll/pitch error after removing one constant offset per flight. `--estimator` adds the
    onboard attitude-estimate model of the firmware configuration.
 3. **Cable** (`scripts/fit_cable_segments.py`, cable flights): log₁₀ EI, log₁₀ Cb, Cd and log₁₀
-   linear drag; the measured drone pose drives the clamp and each segment starts from the
-   measured markers; residuals are the marker position errors of every seen marker.
+   linear drag, jointly with the cable residual (`--terms`: the steady force, searched in a
+   Legendre basis along the cable, `--vertical constant` for its vertical part; the drag
+   correction; `--frame body|world`; `--fix`/`--set` hold parameters); the measured drone pose
+   drives the clamp and each segment starts from the measured markers; residuals are the marker
+   position errors of every seen marker. On 820 fit and 249 held-out segments (held-out RMS):
+   physics only 33.5 mm; the steady force with everything free 22.9 mm, but EI then falls to its
+   bound and the vertical shape terms cancel one another; the adopted fit (steady force, vertical
+   part constant, EI free) 23.3 mm with every parameter identified; body and world frame are
+   indistinguishable on these flights (22.9 / 23.0 mm, the drone stays nearly level); the drag
+   correction was not identified (intervals of ±18 in Cd, ±33 in the log multiplier); a clamp angle
+   in place of the sideways force needs 15° or more and gives 24.6 mm.
 4. **Coupled sensitivity** (`scripts/coupled_sensitivity.py`) and **refinement**
    (`scripts/fit_coupled_segments.py`): the full model (drone driven by the sent commands,
    carrying the cable) from the measured drone state and markers, with three residuals each
@@ -193,4 +202,11 @@ estimates (0.106 against 0.109), whereas the independent-residual formula is 5�
    identifiable from these flights, so it is measured, not fitted.
 5. **Coupled validation** (`scripts/validate_coupled.py`): the same coupled residuals with
    nothing fitted, reported per flight and pooled, separately for the fit and the held-out
-   flights: drone position, tilt, cable shape and tip (last marker) errors.
+   flights: drone position, tilt, cable shape and tip (last marker) errors; then again with each
+   flight's drone bias cancelled in the flight controller (the bias drags the clamp); then the
+   **stroke test**: 0.6 s from each stroke onset of the decay, strokes and whip flights, the tip's
+   peak speed against the measured one, the tip error over the stroke, drone position and tilt.
+   Held-out results with the adopted cable (`runs/fits/coupled/20261028-015741.json`), bias
+   cancelled: shape 28.8 mm and tip 46.1 mm per 1 s segment (38.2 and 60.9 mm before the
+   residual), drone position 48.7 mm and tilt 1.0° (unchanged); strokes: tip error 31.7 mm (36.7
+   before), tip peak speed 0.90 of the measured (0.94 before), one frame late.
