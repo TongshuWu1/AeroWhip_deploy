@@ -1,12 +1,12 @@
 # The lab scan shown behind the Identification Loop's 3D view (display only, never physics).
 # scripts/clean_lab_scan.py reads `source` (a Polycam GLB, local only: data/ is not in git), and
 # writes `cleaned` in OptiTrack coordinates (x, y on the floor, z up, metres, floor at z = 0).
-source: data/lab_scan/source/10_28_2026.glb
+source: data/lab_scan/source_2/10_28_2026.glb      # second scan, with the take-off centre marked
 cleaned: data/lab_scan/lab_clean.glb
 
 # In the scan's own floor coordinates (glTF Y-up turned Z-up, levelled), metres:
 # keep only the room: this polygon on the floor, with the walls' thickness as margin
-room_polygon: [[-5.35, -5.25], [7.30, -5.25], [7.30, 5.10], [-1.30, 5.10], [-1.30, 3.25], [-5.35, 3.25]]
+room_polygon: [[-5.05, -6.30], [5.15, -6.30], [5.15, 7.10], [-5.05, 7.10]]
 margin_m: 0.15
 cut_above_m: 2.9          # walls cut at this height so the camera sees in from above
 floor_snap_m: 0.05        # floor vertices within this of the floor plane are made exactly flat
@@ -15,5 +15,5 @@ min_piece_area_m2: 0.02
 
 # Where the OptiTrack origin (the take-off spot, yaw 0) is in the scan, and the direction of
 # OptiTrack +x in the scan (degrees from the scan's +x, counter-clockwise seen from above).
-origin_xy: [0.40, 0.25]
-x_axis_deg: 0.0
+origin_xy: [0.01, 1.48]       # the red centre mark (user, 2026-10-28)
+x_axis_deg: 90.0              # assumed: along the room's long axis towards the far net; to confirm

@@ -2567,3 +2567,13 @@ includes the same loop), no saturation. Two faults found and fixed on the way:
 Not exercised by the rehearsal: the manifest entry (written for real flights only) and the
 viewer: on this computer the system's libLLVM.so.20.1 fails its package checksum and crashes any
 GL window started by the simulator (`dpkg --verify libllvm20`; fix: reinstall the package).
+
+## Dated change note — 2026-10-28 lab scan: paused (user)
+
+Second scan (`data/lab_scan/source_2/`, 680k faces) has the take-off centre marked (red mark at
+scan (0.01, 1.48), confirmed by the user); `configs/lab_scan.yaml` points at it. OptiTrack +x is
+**assumed** along the room's long axis (`x_axis_deg: 90`), not confirmed. Cleaning it with
+trimesh's `split()` ran out of memory (54 GB, killed by the kernel: every piece copied the 4K
+texture); `clean_lab_scan.py` now labels pieces on the face graph instead (`noise()`), **not yet
+run**. `data/lab_scan/lab_clean.glb` is still the first scan's, placed by a guess. Paused by the
+user to revisit later.

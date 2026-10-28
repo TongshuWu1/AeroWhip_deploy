@@ -60,6 +60,25 @@ def inside(points, polygon, margin):
         Poly(np.asarray(polygon)).contains_points(points[:, :2], radius=-margin)
 
 
+def noise(g, settings):
+    """Faces of scan noise: small loose pieces that float. The scan splits real objects into patches
+    too, so only pieces both small and clear of the floor go. Pieces are labelled on the face graph
+    (no per-piece copies: trimesh's split() copies the texture into every piece and ran out of memory
+    on a 680k-face scan)."""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+    n = len(g.faces)
+    a = g.face_adjacency
+    graph = coo_matrix((np.ones(len(a)), (a[:, 0], a[:, 1])), shape=(n, n))
+    count, label = connected_components(graph, directed=False)
+    faces = np.bincount(label, minlength=count)
+    area = np.bincount(label, weights=g.area_faces, minlength=count)
+    lowest = np.full(count, np.inf)
+    np.minimum.at(lowest, label, g.triangles[:, :, 2].min(1))
+    small = (faces < settings['min_piece_faces']) & (area < settings['min_piece_area_m2']) & (lowest >= .05)
+    return small[label]
+
+
 def clean(settings):
     scene = trimesh.load(settings['source'])
     up = trimesh.transformations.rotation_matrix(np.pi/2, [1, 0, 0])      # glTF Y-up -> Z-up
@@ -77,14 +96,10 @@ def clean(settings):
         keep = inside(c, settings['room_polygon'], settings['margin_m']) & (c[:, 2] < settings['cut_above_m'])
         g.update_faces(keep)
         g.remove_unreferenced_vertices()
-        pieces = g.split(only_watertight=False)
-        # scan noise: small loose pieces that float (the scan splits real objects into patches too,
-        # so only pieces both small and clear of the floor go)
-        pieces = [p for p in pieces if len(p.faces) >= settings['min_piece_faces'] or p.area >= settings['min_piece_area_m2']
-                  or p.bounds[0, 2] < .05]
-        if not pieces:
+        if not len(g.faces):
             continue
-        g = trimesh.util.concatenate(pieces)
+        g.update_faces(~noise(g, settings))
+        g.remove_unreferenced_vertices()
         v = g.vertices.copy()
         flat = np.abs(v[:, 2]) < settings['floor_snap_m']
         v[flat, 2] = 0.
