@@ -1902,3 +1902,29 @@ settles to 0.33 m within 2 s, and a 0.3 m stroke run through `controller_headles
 windows start and run for 15–20 s on the lab display without errors. Not checked: the Crazyswarm
 simulation server with the ROS container (needs the stack), and whether position references
 through the simulated host law match real flights.
+
+## Dated change note — 2026-10-28 IMU alignment and the onboard estimate (lab)
+
+- The attitude log block now carries the gyro (`gyro.x/y/z`, deg/s, `attitude.jsonl` `gyro_deg_s`;
+  crazyswarm2_jazzy_whipping 6370723), and every flight's `parameters.json` records `locSrv.*` and
+  `imu_sensors.imu*` (ba3d8b9). Firmware parameters of cf_2 dumped to
+  `calibration_data/cf_2_parameters.yaml` (not in Git): Mellinger gains as in
+  `crazyflie_firmware.toml`, `extPosStdDev 1e-3`, `extQuatStdDev 0.05` (set in our crazyflies.yaml),
+  Kalman process noise at firmware defaults, IMU alignment 0, no decks, firmware revision e527895e.
+- Gyro against OptiTrack body rates (both low-passed at 10 Hz, gyro = diag(1+s) Rot w + b):
+  the IMU sits at roll −1.49°, pitch +0.60°, yaw −2.31° to the rigid body (line_star_xy/003,
+  random_high/004, each within 0.1°; random_high/009 −1.4/+0.7/−2.6°); gyro scale 0.0 / +0.6 %.
+  The estimator model's "+5.5 % gyro scale" is therefore not in the gyro.
+- Correcting it in the firmware (`imu_sensors.imuPhi/Theta/Psi` = −1.49/0.60/−2.31, which the firmware
+  applies as given) aligned the gyro to 0.1° (random_high/010) but left the estimate error
+  (0.856° RMS both), its +3.4 % over-tilt and the tracking (78 vs 79 mm RMS) unchanged against
+  random_high/009. Turned off again (526a24d); 010 is excluded from the fits so all fit flights share
+  the default alignment. The estimate error therefore comes from inside the Kalman filter (not
+  verified; the tight position fusion acting through the accelerometer is the leading guess).
+- The gyro-integration estimator model (δ, s, τ) explains little on single flights (0.856 → 0.81°);
+  the earlier pooled 0.72° overstated it. It stays out of the configuration; the estimate error
+  (about 0.15 m/s² of thrust direction) is better treated as a randomised disturbance until its
+  source is identified.
+- random_high/005–008 lost the radio link 10–17 s after arming while hovering (the drone stopped
+  answering; dongle on USB and server process fine), with and without the alignment; a 30 s hover
+  (link_test/001) and random_high/009 and /010 were clean after a battery change. Not diagnosed.
