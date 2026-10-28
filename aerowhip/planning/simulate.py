@@ -38,12 +38,23 @@ def part_args(spec, height=1.3, stroke_length=1., stack=FLIGHT_STACK):
     return SimpleNamespace(height=height, hover=None, motion=motion, lift=lift, tune_sets=None, battery_run=None)
 
 
+def motion_args(motion, height=1.3):
+    lift = max(0., -min(motion.state(t)[0][2] for t in np.arange(0, motion.duration+.005, .005)))
+    return SimpleNamespace(height=height, hover=None, motion=motion, lift=lift, tune_sets=None, battery_run=None)
+
+
 def simulate_part(config, firmware, spec, voltage=7.6, stack=FLIGHT_STACK):
-    """Fly one part closed loop. Returns dict of arrays over the steps from the motion's start to
+    """Fly one part (a spec as in calibration_mixes.yaml) closed loop; see simulate_motion."""
+    return simulate_motion(config, firmware, part_args(spec, stack=stack).motion, voltage, stack)
+
+
+def simulate_motion(config, firmware, motion, voltage=7.6, stack=FLIGHT_STACK, markers_every=10):
+    """Fly a motion closed loop. Returns dict of arrays over the steps from the motion's start to
     HOVER_AFTER_S after it ends: t, phase (list), error (m), tilt (deg), rise (m), tip (3), tip_speed,
-    motor (min force / hover share), and `failed` (None or a reason)."""
+    motor (min force / hover share), command (3), position (3); every `markers_every` steps also
+    markers (M, 10, 3) and rotation (M, 3, 3) for the sensitivities; and `failed` (None or a reason)."""
     flight, _ = flight_script(stack)
-    args = part_args(spec, stack=stack)
+    args = motion_args(motion)
     native = native_module()
     model = Model(config)
     weight = (model.mass+float(np.sum(model.node_mass)))*flight.GRAVITY
@@ -74,6 +85,8 @@ def simulate_part(config, firmware, spec, voltage=7.6, stack=FLIGHT_STACK):
     origin = np.zeros(3)
     n = len(model.rest)+1
     out = dict(t=[], phase=[], error=[], tilt=[], rise=[], tip=[], tip_speed=[], motor=[], command=[], position=[])
+    markers, rotations = [], []
+    index = np.asarray(model.marker_indices)[1:]
     sent = command(trim)
     hover_share = weight/4
     failed = None
@@ -103,9 +116,12 @@ def simulate_part(config, firmware, spec, voltage=7.6, stack=FLIGHT_STACK):
         out['tip'].append(q[-1].copy()); out['tip_speed'].append(float(np.linalg.norm(qv[-1])))
         out['motor'].append(float(min(controller.motors(s, sent))/hover_share))
         out['command'].append(sent[6:9].copy()); out['position'].append(p.copy())
+        if len(out['t']) % markers_every == 1:
+            markers.append(q[index].copy()); rotations.append(R.copy())
         if tilt > TILT_FAIL_DEG:
             failed = f'drone tilt {tilt:.0f} deg'
             break
     result = {k: (np.array(v) if k != 'phase' else v) for k, v in out.items()}
+    result['markers'] = np.array(markers); result['rotation'] = np.array(rotations)
     result['failed'] = failed
     return result
