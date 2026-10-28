@@ -48,9 +48,9 @@ class Experiment:
 
 
 def check_model(experiment, model):
-    """Model-dependent limits: the fold reward's mesh, positive thrust and a 100 Hz command delay."""
+    """Model-dependent limits: the tasks' ten-link mesh, positive thrust and a 100 Hz command delay."""
     if model['simulation']['segments_per_marker_interval'] != [1]*10:
-        raise ValueError('The fold reward requires the ten-link mesh (one segment per marker interval)')
+        raise ValueError('The tasks require the ten-link mesh (one segment per marker interval)')
     if model['residual']['status'] != 'unfitted':
         raise ValueError('Learning currently requires the unfitted correction; model promotion requires separate approval')
     mass = model['drone']['mass_kg']

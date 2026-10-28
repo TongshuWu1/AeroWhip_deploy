@@ -33,7 +33,7 @@ An experiment is one JSON file in `configs/experiments/`, parsed by
 | `model`, `scene` | paths | Physical model (`configs/simulation.json`) and initial scene (`configs/scenes/*.toml`), shared with simulation, fitting and deployment. |
 | `run` | `learning.configuration.RunConfig` | Device, seed, parallel episodes, episode budget, evaluation interval. |
 | `environment` | `envs.configuration.EnvironmentConfig` | Horizon, policy rate, acceleration limits, workspace, tilt and cable-height validity limits, and the OptiTrack sensing model (`sensing`: latency range, position noise, marker dropout hazard by speed, reappearance probability, the drone's own markers and static room points in the cloud). |
-| `task` | registered by `task.name` | Reward settings (fold transport: `tasks.whip.configuration.FoldTransportConfig`). |
+| `task` | registered by `task.name` | Reward settings (strike: `tasks.strike.configuration.StrikeConfig`). |
 | `ppo` | `learning.configuration.PPOConfig` | Learner, exploration noise and entropy schedule. |
 
 Validation checks required keys, types and ranges, and rejects choices that are

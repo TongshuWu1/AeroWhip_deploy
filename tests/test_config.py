@@ -27,8 +27,7 @@ def test_default_experiment_loads_and_round_trips():
     assert Experiment.from_dict(snapshot['experiment']) == experiment
     assert experiment.environment.observations == 500 and experiment.environment.terminate_on_violation
     assert experiment.run.collections == 400 and len(experiment.task.curriculum.stages) == 3
-    fold = Experiment.from_dict(RAW)                       # the retired fold-transport experiment
-    assert fold.environment.observations == 400 and fold.run.collections == 200
+    assert Experiment.from_dict(RAW) == experiment
 
 
 @pytest.mark.parametrize('path, value', [
@@ -39,9 +38,9 @@ def test_default_experiment_loads_and_round_trips():
     (('environment', 'maximum_tilt_deg'), 90),
     (('environment', 'workspace'), dict(radius_m=.55)),
     (('task', 'name'), 'unknown_v1'),
-    (('task', 'output_direction_world'), [0, 1, 0]), # only +X is implemented
-    (('task', 'rate_weight'), 0),
-    (('task', 'fold'), KeyError),
+    (('task', 'target_direction_world'), [0, 1, 0]), # only +X is implemented
+    (('task', 'hit_radius_m'), 0),
+    (('task', 'curriculum'), KeyError),
     (('task', 'extra'), 1),
     (('run', 'device'), 'tpu'),
     (('run', 'seed'), 1.5),
@@ -55,12 +54,12 @@ def test_invalid_values_are_rejected(path, value):
         load(edited(path, value))
 
 
-def test_turn_limits_must_be_ordered():
+def test_curriculum_rate_must_be_a_fraction():
     with pytest.raises(ValueError):
-        load(edited(('task', 'fold', 'turn_upper_deg'), 80))
+        load(edited(('task', 'curriculum', 'advance_strike_rate'), 1.5))
 
 
 def test_identity_ignores_only_the_episode_budget():
     longer = deepcopy(SNAPSHOT); longer['experiment']['run']['training_episodes'] *= 2
-    changed = deepcopy(SNAPSHOT); changed['experiment']['task']['rate_weight'] = 11.
+    changed = deepcopy(SNAPSHOT); changed['experiment']['task']['strike_bonus'] = 11.
     assert identity(longer) == identity(SNAPSHOT) != identity(changed)

@@ -10,7 +10,6 @@ from aerowhip.learning.artifacts import RUNS, create_run, read_json, save_json, 
 from aerowhip.ui import style
 from aerowhip.ui.training.plots import LearningCurves
 from aerowhip.ui.training.preview import EvaluationPreview
-from aerowhip.ui.training.whip_diagnostics import WhippingDiagnostics
 
 
 def unchanged(control, value):
@@ -208,10 +207,8 @@ class TrainingWindow(QtWidgets.QMainWindow):
         overview_layout.addWidget(result_box)
         self.preview=EvaluationPreview(); overview_layout.addWidget(self.preview,1)
         self.tabs.addTab(overview,'Latest evaluation')
-        self.whip_diagnostics=WhippingDiagnostics()
-        self.tabs.addTab(self.whip_diagnostics,'Whipping diagnostics')
         results=QtWidgets.QWidget(); result_layout=QtWidgets.QVBoxLayout(results)
-        self.evaluations=QtWidgets.QTableWidget(0,7); self.evaluations.setHorizontalHeaderLabels(['Iteration','Return','Mechanics','Strike','Valid','Outside workspace (s)','Workspace cost'])
+        self.evaluations=QtWidgets.QTableWidget(0,7); self.evaluations.setHorizontalHeaderLabels(['Collection','Return','Whip events','Strikes','Valid','Outside workspace (s)','Workspace cost'])
         self.evaluations.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
         self.evaluations.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
         self.evaluations.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.Stretch)
@@ -245,20 +242,29 @@ class TrainingWindow(QtWidgets.QMainWindow):
 
     def update_description(self):
         r,v,t,ppo=(self.experiment[k] for k in ('run','environment','task','ppo'))
-        w,f,e=v['workspace'],t['fold'],ppo['entropy']
+        w,e=v['workspace'],ppo['entropy']
         self.setup_toggle.setText(f"Training setup · PPO · {r['device'].upper()} · {r['parallel_environments']} lanes")
         self.setWindowTitle(f"Training — PPO — {self.config_path.stem}")
-        self.config_label.setText(
-            f"Task {t['name']}: continuous fold transport and outward opening toward world +X. No target-hit reward.\n"
-            f"{r['parallel_environments']} training lanes · {r['training_episodes']} episodes · {v['duration_s']:g} s horizon · 10 links · {v['policy_rate_hz']} Hz acceleration actions.\n"
-            f"Return Q − C. Q = integral of {t['rate_weight']:g} × fold support × forward reach^{t['reach_power']:g} × alignment^{t['alignment_power']:g} × outward speed / cable length.\n"
-            f"C = {t['workspace_cost_weight']:g} × fixed-horizon mean of squared workspace excess in metres. Radius {w['radius_m']:g} m; world height {w['height_lower_world_m']:g}–{w['height_upper_world_m']:g} m.\n"
-            f"Fold support: turn {f['turn_lower_deg']:g}–{f['turn_upper_deg']:g}°, coherence {f['coherence_reference']:g}, {1000*f['history_window_s']:g} ms window.\n"
-            f"Tilt >{v['maximum_tilt_deg']:g}° or cable height <{v['minimum_cable_height_m']:g} m is recorded as invalid but continues. Numerical corruption aborts and costs {t['failure_cost_per_remaining_s']:g} per remaining second.\n"
-            f"Entropy coefficient = {e['final_weight']:g} + {e['initial_weight']-e['final_weight']:g} exp(−{e['decay_exponent']:g} n/N), original episode budget retained on resume. AR(1) correlation {1000*ppo['action_noise_correlation_s']:g} ms.\n"
-            f"Acceleration limits {v['acceleration_limit_mps2']} m/s² excluding gravity; zero action does not brake or hold position.\n"
-            "Deterministic evaluation is one fixed physical case; the saved actor batch layout is not independent trials.\n"
-            "Continuous score is an experimental guide, not a validated binary whipping-success definition.")
+        stages=t['curriculum']['stages']; final=stages[-1]; rnd=v.get('randomisation',{})
+        if True:
+            self.config_label.setText(
+                f"Task {t['name']}: strike a target with the cable tip, then recover. Target {final['target_distance_m']:g} m along +X, "
+                f"{t['target_below_origin_m']:g} m below the origin; hit within {t['hit_radius_m']:g} m at ≥ {final['speed_threshold_mps']:g} m/s.\n"
+                f"{r['parallel_environments']} training lanes · {r['training_episodes']} episodes · {v['duration_s']:g} s horizon, a hit ends the episode "
+                f"{t['recovery_s']:g} s later · {v['policy_rate_hz']} Hz acceleration actions, limits {v['acceleration_limit_mps2']} m/s².\n"
+                f"Reward: strike {t['strike_bonus']:g} + {t['speed_bonus_per_mps']:g}/(m/s) above the threshold; progress {t['progress_weight']:g} per cable length closed "
+                f"(potential-based); approach ≤ {t['approach_weight']:g}/s; recovery {t['recovery_bonus']:g}. Costs: workspace {t['workspace_cost_weight']:g} × mean squared excess, "
+                f"action {t['action_cost_weight']:g}, termination {t['failure_cost_per_remaining_s']:g}/s remaining.\n"
+                f"Curriculum {len(stages)} stages (" + ', '.join(f"{s['target_distance_m']:g} m / {s['speed_threshold_mps']:g} m/s / r {s['workspace_radius_m']:g} m" for s in stages) +
+                f"), advance at {t['curriculum']['advance_strike_rate']:.0%} strikes over {t['curriculum']['window_episodes']} episodes; "
+                f"{t['curriculum']['reference_state_fraction']:.0%} of lanes start from recorded whip states.\n"
+                f"Randomisation: {rnd.get('groups',0)} model groups per cohort, voltage {rnd.get('battery_voltage_v')} V, drag ×{rnd.get('body_drag_scale')}, "
+                f"Cb ×{rnd.get('bending_damping_scale')}, response {rnd.get('motor_response_s')} s, delay {rnd.get('command_delay_s')} s, bias sd {rnd.get('acceleration_bias_sd_mps2')} m/s².\n"
+                f"Tilt >{v['maximum_tilt_deg']:g}° or cable below {v['minimum_cable_height_m']:g} m {'ends the episode' if v.get('terminate_on_violation') else 'is recorded as invalid'}. "
+                f"Heights {w['height_lower_world_m']:g}–{w['height_upper_world_m']:g} m.\n"
+                f"Evaluation: {r.get('evaluation_episodes',1)} independent deterministic episodes at the final stage every {r['evaluation_interval_episodes']} training episodes. "
+                f"Entropy {e['final_weight']:g} + {e['initial_weight']-e['final_weight']:g} exp(−{e['decay_exponent']:g} n/N); AR(1) action noise {1000*ppo['action_noise_correlation_s']:g} ms.\n"
+                "Whip event (reported, not rewarded): peak tip speed ≥ threshold, ≥ 2× the attachment's speed, tip at ≥ 90 % of the cable length.")
 
     def edit_settings(self):
         if self.process is not None or self.mode.currentIndex()==1:
@@ -417,7 +423,6 @@ class TrainingWindow(QtWidgets.QMainWindow):
         selected_snapshot=read_json(directory/'configuration.json')
         selected=selected_snapshot['experiment']
         self.update_overview(directory,history,selected)
-        self.whip_diagnostics.set_run(directory,history)
         scale=selected['ppo']['reward_scale']
         rounds=[e for e in history if e['phase']=='round']; evaluations=[e for e in history if e['phase']=='evaluation']
         rows=evaluations
@@ -429,15 +434,16 @@ class TrainingWindow(QtWidgets.QMainWindow):
                 self.cards[key].setText(f'{item:,}' if isinstance(item,int) else str(item) if item is not None else '—')
             seconds=int(latest.get('elapsed_s',0)); self.cards['elapsed'].setText(f'{seconds//3600:02}:{seconds//60%60:02}:{seconds%60:02}')
         self.curves.set_history(directory,history,selected)
-        self.evaluations.setHorizontalHeaderLabels(['Collection',f'Return ×{scale:g}','Accrued output',
-            'Full horizon','Valid','Outside workspace (s)','Workspace cost'])
+        self.evaluations.setHorizontalHeaderLabels(['Collection',f'Return ×{scale:g}','Whip events',
+            'Strikes','Valid','Outside workspace (s)','Workspace cost'])
         self.evaluations.setRowCount(len(rows))
         for i,e in enumerate(rows):
             outside=e.get('workspace',{}).get('outside_duration_s')
             iteration=f"{e['round']} · Lane {e['lane']}" if 'lane' in e else e['round']
             charge=e['components'].get('workspace_cost')
-            values=(iteration,scale*e['evaluation_return'],e['components'].get('continuous_whip_credit'),
-                    e['components'].get('completed_horizon'),e['valid'],outside,charge)
+            c=e['components']
+            values=(iteration,scale*e['evaluation_return'],c.get('whip_event'),c.get('strike'),
+                    e.get('valid_fraction',e['valid']),outside,charge)
             for j,value in enumerate(values):
                 text='—' if value is None else (f'{value:.4g}' if isinstance(value,float) else str(value))
                 self.evaluations.setItem(i,j,QtWidgets.QTableWidgetItem(text))
@@ -470,16 +476,6 @@ class TrainingWindow(QtWidgets.QMainWindow):
                 f"Workspace cost: {number(c.get('workspace_cost'))} · termination cost: {number(c.get('failure_cost'))} · valid {number(latest.get('valid_fraction'))}")
             self.latest_summary.setText(f"Collection {latest['round']} · strike rate {number(c.get('strike'))} · whip events {number(c.get('whip_event'))} · mean return {number(raw)}")
             return
-        if 'continuous_whip_credit' in c:
-            outcome=('Full horizon completed' if latest.get('valid') else 'INVALID physical envelope · full horizon completed') if c.get('completed_horizon')==1 else 'INVALID numerical abort / saved prefix'
-            self.latest_result.setText(
-                f"Collection {latest['round']} · {outcome}\nReturn: {number(raw)}\n"
-                f"Accrued output: {number(c['continuous_whip_credit'])}\nWorkspace cost: {number(c.get('workspace_cost'))}\nFailure correction: {number(c.get('failure_adjustment'))}\n"
-                f"Peak reward rate: {number(c.get('peak_reward_rate'))}\nFold support: {number(c.get('fold_support_integral_s'))} s\n"
-                f"Positive output duration: {number(c.get('positive_output_duration_s'))} s\n"
-                "No target or binary whip success gate. See Whipping diagnostics for recorded rate and fold support.")
-            self.latest_summary.setText(f"Collection {latest['round']} · {outcome} · return {number(raw)} · continuous score is not success")
-            return
         self.latest_result.setText('No current continuous-reward measurements in this evaluation. Historical task support is retired.')
         self.latest_summary.setText('Unsupported historical evaluation')
 
@@ -506,7 +502,7 @@ class TrainingWindow(QtWidgets.QMainWindow):
                 QtWidgets.QMessageBox.StandardButton.Yes|QtWidgets.QMessageBox.StandardButton.No)
             if answer==QtWidgets.QMessageBox.StandardButton.Yes: self.close_pending=True; self.stop()
             event.ignore(); return
-        self.timer.stop(); self.whip_diagnostics.pause(); self.preview.dispose(); super().closeEvent(event)
+        self.timer.stop(); self.preview.dispose(); super().closeEvent(event)
 
 
 def configure_resume(window, checkpoint, saved, requested=None):

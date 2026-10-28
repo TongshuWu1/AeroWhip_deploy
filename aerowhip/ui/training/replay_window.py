@@ -228,10 +228,12 @@ class ReplayWindow(QtWidgets.QMainWindow):
 
     def outcome_text(self):
         c = self.data.event.get('components', {})
-        if 'continuous_whip_credit' in c:
-            outcome=(('Full horizon completed' if self.data.event.get('valid') else 'Full horizon completed · physical violation')
-                     if c.get('completed_horizon')==1 else 'Aborted · finite saved prefix')
-            return outcome+'\nContinuous reward, not a binary whip-success test.'
+        if 'strike' in c:
+            parts=['STRIKE' if c.get('strike') else 'no strike', 'whip event' if c.get('whip_event') else 'no whip event',
+                   'recovered' if c.get('recovered') else 'not recovered']
+            if self.data.event.get('valid') is False: parts.append('physical violation')
+            speed=c.get('peak_tip_speed_mps')
+            return ' · '.join(parts)+(f'\nPeak tip speed {speed:.2f} m/s' if isinstance(speed,(int,float)) else '')
         if self.data.event.get('valid') is False:
             return 'INVALID rollout · finite saved prefix only'
         return 'No outcome recorded'

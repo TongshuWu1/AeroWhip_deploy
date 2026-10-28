@@ -1828,3 +1828,16 @@ User's request: one systematic, automated data collection with a single calibrat
   of the tensor environment; the batch environment holds numpy) — fixed. Random-policy returns are
   −150 on average, dominated by the workspace cost (the drone drifts metres under random 8 m/s²
   actions); strike bonus 10 is small against that early on. Watch, not changed.
+
+## Dated change note — 2026-10-28 fold-transport code removed
+
+- User's direction: remove what is no longer used. Deleted `aerowhip/tasks/whip/` (fold reward and
+  geometry), the training window's Whipping-diagnostics tab (`ui/training/whip_diagnostics*.py`),
+  `tests/test_fold_transport.py`, `docs/fold_transport_task.md` and the v6 experiment file. The task
+  registry holds `strike_x_v1` only; the window's description, evaluation table and replay outcome
+  text are strike-only. `check_model` wording updated. Test fixtures use the default (strike)
+  experiment; the envelope tests cover termination on and off. 107 tests pass. The fold-based
+  measurement of a learned motion, if wanted later, is in git history (commit e9109ce and before).
+- An accidental full training run (64 lanes, CUDA) started from the Training window while it was
+  on screen for screenshots (no automatic start exists in the code; the Start button was pressed);
+  it was stopped after under a minute and its folder removed.

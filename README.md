@@ -65,7 +65,6 @@ MSVC and a Windows SDK installed. The viewer needs a desktop OpenGL session.
 - [Architecture](docs/architecture.md): packages, experiment files, data flow, units.
 - [Simulation model](docs/simulation_model.md): physics, parameters, solver, controller.
 - [Strike task](docs/strike_task.md): reward, hit and whip-event definitions, curriculum, randomisation, evaluation.
-- [Fold-transport task](docs/fold_transport_task.md): the retired objective, kept as a diagnostic.
 - [Flight data and fitting](docs/data_and_fitting.md): takes, checks, clock alignment, fitting stages.
 - [Simulation and flight](docs/simulation_and_flight.md): Crazyswarm simulation server, real-flight viewer, cable tracking and recording.
 
