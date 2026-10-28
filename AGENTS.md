@@ -1,5 +1,7 @@
 # Repository collaboration
 
+Start here: `internal/handoff_2026-10-28.md` (current state, open items, working rules; notes in `internal/agent_notes/`).
+
 - Inspect the relevant implementation and evidence before explaining behavior or proposing changes. Distinguish confirmed facts, hypotheses, and unverified claims.
 - Explain the scope of a proposed implementation and obtain the user's approval before coding. An approved step does not authorize unrelated features, physics changes, reward definitions, or model promotion.
 - Keep the reusable simulation separate from controllers, fitting, task definitions, and learning. Do not add unrelated frameworks, tests, documentation, or UI.
