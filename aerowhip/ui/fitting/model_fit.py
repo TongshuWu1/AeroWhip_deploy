@@ -44,7 +44,7 @@ IN_USE = 1e-4            # relative difference below which a fitted value counts
 
 def display_unit(unit):
     """(factor, label) to show a loss of this unit."""
-    return {'m': (1e3, 'mm'), 'log ratio': (100., '%')}.get(unit, (1., unit or ''))
+    return {'m': (1e3, 'mm'), 'log ratio': (100., '%'), 'relative': (1., '')}.get(unit, (1., unit or ''))
 
 
 def fmt(v, digits=4):

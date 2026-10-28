@@ -196,14 +196,18 @@ class Drone(Stage):
               'profiled', f"± {1.96*sd['body_drag_xy_s_inv']:.2g}", f"± {1.96*sd['body_drag_z_s_inv']:.2g}"]
         rows = [[name, _mm(start['per_flight_rms_m'].get(name)), _mm(value)] for name, value in best['per_flight_rms_m'].items()]
         headline = [('position error, 1 s segments (mm)', _mm(start['rms_m']), _mm(best['rms_m']))]
+        if 'tilt_deg' in start:
+            headline += [('tilt error (deg)', start['tilt_deg'], best['tilt_deg']),
+                         ('combined loss (1 at the start)', start['loss'], best['loss'])]
         if best.get('held_out'):
             headline.append(('held out (mm)', None, _mm(best['held_out']['rms_m'])))
-        profile = ', '.join(f"{p['command_delay_s']*1e3:.0f} ms {p['rms_m']*1e3:.2f}" for p in r['delay_profile'])
+        profile = ', '.join(f"{p['command_delay_s']*1e3:.0f} ms {p['rms_m']*1e3:.2f}"+(f" / {p['tilt_deg']:.2f}°" if 'tilt_deg' in p else '')
+                            for p in r['delay_profile'])
         strong = [f'{a} / {b} {c:+.2f}' for a, b, c in _strong(u)]
         return dict(
             headline=headline, parameters=[(n, b, a, c) for n, b, a, c in zip(self.current(), before, after, ci)],
             flights=dict(columns=['flight', 'error before', 'error after'], rows=rows),
-            notes=[f'Loss: {r["loss"]}.', f'Delay profile (mm): {profile}.',
+            notes=[f'Loss: {r["loss"]}.', f'Delay profile (position mm / tilt deg): {profile}.',
                    'Intervals: 95 %, clustered by flight, linearised.' + (f' Strongly correlated: {"; ".join(strong)}.' if strong else ''),
                    f"Failed segment replays during the search: {sum(p['failed_segment_replays'] for p in r['delay_profile'])}; "
                    f"reproduced twice: {best['reproduced_twice']}"])

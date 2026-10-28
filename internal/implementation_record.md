@@ -1864,3 +1864,10 @@ User's request: one systematic, automated data collection with a single calibrat
   of 3.5°, y 2.6 of 3.5°). `FlightController.step` (advancing the firmware state) is now bound to
   Python. The repository was repaired after a power cut by the other session; the scratch outputs of
   these analyses were lost with /tmp.
+- **Drone fit loss: position and tilt** (same day, approved by the user): `fit_drone_segments.py` now
+  fits on two residuals per frame, each normalised by its RMS at the configuration now (the loss is 1
+  there): position (per-flight acceleration bias removed, as before) and tilt (roll/pitch of
+  log(R_measured^T R_simulated), one constant offset per flight removed). `DroneReplay.errors_with_attitude`.
+  On a third of the segments at the configuration now, tilt rises with the delay (0/10/20/30/40 ms:
+  1.27/1.33/1.48/1.71/1.98 deg) while position changes little (59.3/57.7/57.7/59.3/62.1 mm). Delay grid
+  0, 5, 10, 15, 20, 30, 40 ms. Results report position (mm), tilt (deg) and the combined loss.
