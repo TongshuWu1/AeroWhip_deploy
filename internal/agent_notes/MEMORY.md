@@ -13,4 +13,4 @@
 - [cf_6 replaces cf_2, redo fits](new-airframe-redo-fits.md) — 2026-10-28: cf_2 retired; cf_6 (156 g, props 1.5 cm, clamp 5.5 cm below markers) is the drone now; all fits to redo
 - [Safe planned identification](online-identification-rethink.md) — 2026-10-28: series stopped; bench-measure what can be measured, plan flights over a horizon with cable-angle chance constraints; design in internal/safe_planned_identification.md
 - [Planning tools built](planning-tools-built.md) — 2026-10-28: the loop's tools exist (plan/optimise, fly, envelope, fit, check); run it, don't redesign
-- [Online estimator built](online-estimator-built.md) — 2026-10-28: scripts/online_fit.py + Online page; robust filter per user; logging only, adoption needs approval
+- [Online estimator built](online-estimator-built.md) — 2026-10-28: scripts/online_fit.py + Online page; robust filter per user; running model feeds the planner (approved), delay held
