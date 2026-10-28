@@ -2389,3 +2389,15 @@ measure, the highest cable node above the clamp is the right one). So with the r
 the model reproduces the flip qualitatively and underestimates its size by ~2×; the earlier 33°
 came from the simulated closed-loop drone stroke being much gentler than the real one. Centre of
 mass set to 0.025 m below the marker plane (user's assumption; cbcf6d0). Nothing fitted.
+
+Full coupled replay of the same stroke from the **sent** commands (cf_6 geometry, cf_2's drone and
+cable fits, the flown gains): drone tilt 37° simulated against 37° measured throughout the stroke,
+position error 20–74 mm during it (open-loop drift after), and the simulated cable rises +0.23 m
+above the clamp at 1.4 s against +0.29 m in the raw cloud. So the configured model reproduces the
+flip when driven by what was actually sent. The simulator screen's 33° came from its closed-loop
+host PID on the planned 6 m/s² reference commanding a gentler stroke than the real host loop did
+(the real sent command peaked at 8.8 m/s² while chasing the reference): any planner must simulate
+the real closed loop, and the sim's closed-loop command against the real one is the next fidelity
+check. For the cable itself the remaining gap is ~25 % in the rise, a parameter-level gap, to be
+fitted with stroke windows weighed in; a differentiable engine is not needed for that (finite-
+difference Jacobians in the batch runtime on ~6–12 parameters).
