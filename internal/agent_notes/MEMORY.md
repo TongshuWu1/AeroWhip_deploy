@@ -8,3 +8,4 @@
 - [AeroWhip task decisions](aerowhip-task-decisions.md) — 2026-10-28 approved: target strike objective, whip event by outcome, fold diagnostic only, curriculum + reference-state init, one strike + recovery
 - [Run long jobs in the UI](run-long-jobs-in-the-ui.md) — refits and training go through their windows so the user can monitor; only small checks run silently
 - [Mesh decision after fitting](mesh-decision-after-fitting.md) — 10 vs 20 link chosen only after simulator + fitting are done, by full fits at both; 20 links 5× slower
+- [Tune drone before new data](tune-drone-before-new-data.md) — 2026-10-28: trim, extQuat, attitude gains first; then re-fly both series and refit; i7 stays flight computer until then
