@@ -23,7 +23,8 @@ Not pushed: AeroWhip `engine-v2` is 40 commits ahead of origin, crazyswarm2 `mai
 
 ## Switching to the other computer (the user is doing this now)
 
-1. Code: push both repos and clone them there (or copy `~/Documents/PHD` whole). Keep the **same
+1. Code: push both repos and clone them there (or copy `~/Documents/PHD` whole; a clone lacks
+   `CLAUDE.md`, which `.git/info/exclude` keeps out of git — `AGENTS.md` has the same rules and pointer). Keep the **same
    user name and paths** (`/home/tony-lab/Documents/PHD/...`): `aerowhip/fitting/calibration_set.py`
    has `DEFAULT_ROOT` as an absolute path, and the manifest and run JSONs store absolute folders.
 2. Data not in git, copy by hand: `Crazyflie/crazyswarm2_jazzy_whipping/calibration_data/` (all

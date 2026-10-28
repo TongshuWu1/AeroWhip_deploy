@@ -1,6 +1,6 @@
 # Repository collaboration
 
-Start here: `internal/handoff_2026-10-28.md` (current state, open items, working rules; notes in `internal/agent_notes/`).
+Start here: `internal/handoff_2026-10-28_night.md` (current state, how to run the loop, open findings, next steps, working rules; notes in `internal/agent_notes/`). `internal/handoff_2026-10-28.md` keeps the cf_2 results and the fitting design. (CLAUDE.md holds the same rules but is excluded from git locally: a fresh clone has only this file.)
 
 - Inspect the relevant implementation and evidence before explaining behavior or proposing changes. Distinguish confirmed facts, hypotheses, and unverified claims.
 - Explain the scope of a proposed implementation and obtain the user's approval before coding. An approved step does not authorize unrelated features, physics changes, reward definitions, or model promotion.
