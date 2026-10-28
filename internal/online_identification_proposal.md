@@ -136,3 +136,95 @@ the stroke regime weighed properly.
    ~1.5 min), then the cable refit with the stroke windows weighed in, scored on the first-link
    angle and the tip path. This is the cheapest test of whether the loop can fix the model where it
    is most wrong.
+
+## During the flight: analysis (2026-10-28, evening; the user's choice)
+
+The user means learning during the flight, from the live state, and points out that the pieces
+exist: a robust live cable labeller, the native observer, the fast simulator. What follows is
+what can be learned on which time scale, what the pieces give, what is missing, and the risks.
+
+### What exists and what it gives
+
+| Piece | State | What it gives online |
+|---|---|---|
+| Live cable filter (`deployment/cable_filter.py`, native) | runs in flight at 100 Hz, chain-search recovery, identical offline/online, no learned parts | ten marker positions and velocities with per-marker confidence every frame: the measurement for the cable |
+| Native observer | in flight and in training | drone velocity and body rate from the poses |
+| Native batch runtime (`BatchRuntime`, OpenMP) with `checkpoint`/`restore` | in training | many parameter candidates replayed in parallel from one measured state; ~8× real time per core at 10 links (mesh note), so ~100× on 16 cores |
+| `FlightController` (firmware law at the flown gains, thrust map, battery) | in replays and training | the drone part of every candidate |
+| Fitting residuals and scores (`aerowhip/fitting`) | offline | cable shape/tip and drone position/tilt errors of a replayed window: the same score online |
+| Flight script | logs poses, cloud, motors, attitude, the sent command (also echoed on `/<robot>/sent_acceleration`) | all the inputs a learner needs are already on ROS topics |
+| Measured parameter uncertainty (clustered confidence intervals) | offline | the starting ensemble |
+
+### What can be learned during a flight, by time scale
+
+- **Seconds** (hover): trims, effective mass, battery law. Already learned online by the host
+  PID's integral; an explicit estimate would just name it.
+- **Tens of seconds** (a few strokes): command delay, motor response, drone drag; the cable's
+  stiffness, damping and drag at the speeds flown so far; the residual's steady part.
+- **The whole flight** (a range of speeds and headings): the drag correction with speed, the
+  heading dependence of the residual.
+- **Never from flight** (shown on cf_2): roll/pitch inertia, arm, CoM. Stay nominal.
+- **Not online at all**: the model's structure. If the sharp-stroke misfit (33° simulated vs
+  170° real) is the clamp model or the damping law, no parameter value fixes it; the online
+  estimator will show a parameter that keeps moving with the motion type, which is the
+  diagnostic. Structure changes stay offline, informed by that diagnostic.
+
+### The method: a moving-horizon estimator on the batch runtime
+
+Every T (~1 s) during the flight:
+1. Take the last W seconds (~2 s) of measured drone state, cable markers (confident ones only) and
+   sent commands from the topics.
+2. Replay that window from its measured start state with N parameter candidates in the batch
+   runtime (N lanes), each lane one candidate drawn around the current estimate.
+3. Score each lane as the offline fit does (cable shape and tip, drone position and tilt).
+4. Update the estimate and its spread from the scores (a weighted mean and covariance of the
+   candidates: a particle/ensemble update, or one Gauss–Newton step on the best candidates; the
+   existing fit's least squares applies). Warm-start the next window.
+
+Cost: N candidates × W s / (100× real time) ≈ N × 20 ms; N = 32 → ~0.6 s per update on 16
+cores, ~1.2 s on this i7. So the estimate updates every one to two seconds and converges over the
+flight. Ruled out: an EKF over the 60-dimensional constrained cable state (heavy, fragile), and a
+learned residual trained on per-frame targets (shown unusable: label noise through the bending
+stiffness).
+
+The estimator is the offline fit's residual function on a sliding window with warm starts; it
+reuses `aerowhip/fitting` and the batch runtime, with a ROS subscriber in front. Its output is the
+parameter trajectory over the flight plus the spread, logged with the flight.
+
+### Planning during the flight
+
+While part k flies, the planner chooses part k+1: candidate primitives are the neighbours of what
+has been flown (one level step up per kind and heading, new headings), each simulated with the
+ensemble (batch, ~3 s of motion × 16 candidates × 10 neighbours ≈ 5 s wall); the next part is the
+one with the largest ensemble disagreement on tip path and drone tilt, subject to the measured
+envelope (the live filter's first-link angle per level flown: it reports the angle it saw) and the
+battery. The flight script gains a streaming mode: the next part arrives on a topic and is
+appended (rest-to-rest move, hold, part) under the same aborts, link-loss landing and the
+battery-run voltage limit; the battery-run mode is already most of this.
+
+### Validation before any flight
+
+Replay recorded flights through the estimator as if live (poses, cloud and commands fed at their
+stamps), on cf_2's archived flights and on cf_6's tuning flights: the parameter trajectory must
+settle near the offline stage-2/3 values on cf_2's data, and its spread must cover the clustered
+intervals. This costs no flight and is the test of the whole chain (labels → window → batch replay
+→ update).
+
+### Risks
+
+- **Host load during flight.** A simulator run on this computer stalled the host and dropped the
+  drone today. The estimator must run with a bounded budget on cores the stack does not use
+  (`taskset` + `nice`), or on the AMD machine over the lab network; the link-loss landing now makes
+  a stall survivable, but it still ends the flight. Test on the ground with the replay-as-live harness.
+- **Labels during a flip.** The live filter is validated on normal flights; what it reports with
+  the cable over the drone is not. Score only confident markers; the estimator ignores low-quality
+  frames.
+- **Parameter drift versus structure.** A parameter that follows the motion type is a structure
+  error, not a value: the estimator must show that (per-part estimates) rather than average it away.
+
+### Effort, roughly
+
+Estimator on the batch runtime with the ROS front end: a few days. Replay-as-live harness: a day.
+Planner (level creep + ensemble disagreement): one to two days. Flight-script streaming mode and the
+cable-over-drone descent: a day. The sharp-stroke structure question stays an offline study that
+the online diagnostics will point at.
