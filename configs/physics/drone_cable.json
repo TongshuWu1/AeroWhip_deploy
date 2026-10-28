@@ -80,12 +80,32 @@
       0.0009604520191835018,
       0.0009604520191835018
     ],
-    "EI_n_m2": 0.000571244973864383,
-    "Cb_n_m2_s": 4.132612100653426e-05,
+    "EI_n_m2": 0.00014026047478221668,
+    "Cb_n_m2_s": 4.1466527641485895e-05,
     "Cb_saturation_rate_rad_s": null,
-    "external_drag_s_inv": 0.22301808152361446,
-    "normal_drag_coefficient": 0.6424020563318297,
-    "constitutive_model": "der_twist_free_kelvin_voigt_v2"
+    "external_drag_s_inv": 0.1775548971730099,
+    "normal_drag_coefficient": 0.7459902144309993,
+    "constitutive_model": "der_twist_free_kelvin_voigt_v2",
+    "residual": {
+      "frame": "body",
+      "static_n_per_m": [
+        [
+          0.020122638547862948,
+          -0.05259876837766761,
+          0.037355333342245
+        ],
+        [
+          0.02838961005780969,
+          -0.08408012152871774,
+          0.06034249497876344
+        ],
+        [
+          -0.009521575248962516,
+          0.0,
+          0.0
+        ]
+      ]
+    }
   },
   "simulation": {
     "timestep_s": 0.01,

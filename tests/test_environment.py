@@ -12,8 +12,14 @@ from aerowhip.envs.configuration import OBSERVATION_PERIOD_S
 from helpers import ENVIRONMENT, EXPERIMENT, SCENE, SNAPSHOT, TASK
 
 
-def make(lanes=1):
-    return make_batch_environment(EXPERIMENT, SNAPSHOT, SCENE, lanes=lanes, device='cpu', workers=0)   # in-process internals
+def make(lanes=1, snapshot=SNAPSHOT):
+    return make_batch_environment(EXPERIMENT, snapshot, SCENE, lanes=lanes, device='cpu', workers=0)   # in-process internals
+
+
+def without_residual(snapshot):
+    """The snapshot with the cable residual removed: the plain physics."""
+    model = dict(snapshot['model'], cable={k: v for k, v in snapshot['model']['cable'].items() if k != 'residual'})
+    return dict(snapshot, model=model)
 
 
 def run(env, actions=None):
@@ -64,15 +70,29 @@ def test_schedule_and_real_plant_step(env):
     assert bool(env.numerical_valid[0, :3].all())
 
 
-def test_zero_action_holds_hover():
-    env = make(2)
+def drift(env):
     returns, valid, _ = run(env)
     positions = env.history['drone_positions']
-    drift = (positions-positions[:, :1]).norm(dim=-1).max()
-    # The firmware commands integer PWM: one count is ~4e-5 of the hover thrust, up to 3e-4 m/s^2
-    # of residual acceleration, i.e. at most a t^2/2 over the episode (no credit for air drag).
-    duration = (positions.shape[1]-1)*OBSERVATION_PERIOD_S
-    assert float(drift) < .5*3e-4*duration**2 and bool(valid.all())
+    offset = (positions-positions[:, :1]).norm(dim=-1)
+    return offset, (positions.shape[1]-1)*OBSERVATION_PERIOD_S, bool(valid.all())
+
+
+def test_zero_action_holds_hover():
+    # Plain physics, the cable hanging straight: the firmware commands integer PWM, one count is
+    # ~4e-5 of the hover thrust, up to 3e-4 m/s^2 of residual acceleration, i.e. at most a t^2/2 over
+    # the episode (no credit for air drag).
+    offset, duration, valid = drift(make(2, without_residual(SNAPSHOT)))
+    assert float(offset.max()) < .5*3e-4*duration**2 and valid
+
+
+def test_zero_action_holds_hover_with_the_cable_residual():
+    # With the fitted cable residual the cable leans at rest and pulls on the clamp, 37 mm below the
+    # centre of mass: the hover trims cancel its net force, and what remains is a slow wobble while the
+    # attitude loop settles against that moment (about 5 mm, back by the end of the episode), not a drift.
+    if not SNAPSHOT['model']['cable'].get('residual'):
+        pytest.skip('the configured model has no cable residual')
+    offset, duration, valid = drift(make(2))
+    assert float(offset.max()) < .01 and float(offset[:, -1].max()) < .005 and valid
 
 
 def test_runs_are_reproducible_and_lanes_independent():

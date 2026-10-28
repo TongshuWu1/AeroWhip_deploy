@@ -35,7 +35,7 @@ import torch
 
 from aerowhip.deployment.cable_filter import MARKERS
 from aerowhip.fitting.flight_drone import firmware_config
-from aerowhip.physics.model import Model, native_module
+from aerowhip.physics.model import Model, native_module, residual_net_force, settled_cable, unpack_state
 from aerowhip.physics.state import quaternion_xyzw_to_rotation_matrix
 from aerowhip.tasks import make_task
 from .configuration import OBSERVATION_PERIOD_S
@@ -137,10 +137,14 @@ class BatchEnvironment:
         rotation = quaternion_xyzw_to_rotation_matrix(initial.quaternion_body_to_world_xyzw)
         self.origin_np = np.asarray(initial.position_world_m, float)
         self.origin = torch.as_tensor(self.origin_np, dtype=torch.float64, device=device)
+        cable = None if initial.cable_node_positions_world_m is None else np.asarray(initial.cable_node_positions_world_m, float)
+        cable_v = None if initial.cable_node_velocities_world_mps is None else np.asarray(initial.cable_node_velocities_world_mps, float)
+        if cable is None and m.config['cable'].get('residual'):
+            # at rest under the residual's steady force, so a hover start does not swing into it
+            cable = settled_cable(m, self.origin_np+rotation@np.asarray(m.attachment_tracking), rotation)
+            cable_v = np.zeros_like(cable)
         seed = m.native.initial_state(self.origin_np, rotation, np.asarray(initial.linear_velocity_world_mps, float),
-            np.asarray(initial.angular_velocity_body_radps, float),
-            None if initial.cable_node_positions_world_m is None else np.asarray(initial.cable_node_positions_world_m, float),
-            None if initial.cable_node_velocities_world_mps is None else np.asarray(initial.cable_node_velocities_world_mps, float))
+            np.asarray(initial.angular_velocity_body_radps, float), cable, cable_v)
         self.seed = np.asarray(seed, float)
         self.stride = round(1/(OBSERVATION_PERIOD_S*config.policy_rate_hz))
         self.samples = config.observations+1
@@ -206,15 +210,17 @@ class BatchEnvironment:
             raise ValueError('Initial state is outside the task envelope')
 
     # ------------------------------------------------------------------ construction
-    def _hover_trim(self, model, voltage):
+    def _hover_trim(self, model, voltage, pull=0.):
         """Vertical feed-forward (m/s²) making the delivered thrust equal the weight of drone and
-        cable at this voltage, so zero action means hover (the host PID supplies it in flight)."""
+        cable at this voltage, plus any steady downward pull on the cable (`pull`, N, negative up),
+        so zero action means hover (the host PID supplies it in flight)."""
         probe = self.native.FlightController(self.firmware, model, float(voltage))
+        target = self.weight+pull
         low, high = -5., 12.
         for _ in range(60):
             mid = .5*(low+high)
             command = np.zeros(COMMAND_WIDTH); command[8] = mid; command[9] = self.yaw
-            if probe(self.seed, command)[0] < self.weight:
+            if probe(self.seed, command)[0] < target:
                 low = mid
             else:
                 high = mid
@@ -225,8 +231,14 @@ class BatchEnvironment:
         self.variant_models = list(models)
         self.variants = np.repeat(np.arange(len(models)), sizes)
         self.hover_trim = np.zeros((self.batch, 3))
+        rotation = unpack_state(self.seed).rotation
         for lane in range(self.batch):
-            self.hover_trim[lane, 2] = self._hover_trim(models[self.variants[lane]], self.voltage[lane])
+            model = models[self.variants[lane]]
+            # the steady force of the cable residual pulls drone and cable along: cancelled, as the
+            # host's hover trims cancel steady pulls in flight (vertically through the thrust)
+            pull = residual_net_force(model, rotation)
+            self.hover_trim[lane, 2] = self._hover_trim(model, self.voltage[lane], -pull[2])
+            self.hover_trim[lane, :2] = -pull[:2]/(model['drone']['mass_kg']+model['cable']['total_mass_kg'])
         runtimes, controllers, start = [], [], 0
         for model, size in zip(models, sizes):
             native_model = self.model.native if model is self.model_config else Model(model).native
