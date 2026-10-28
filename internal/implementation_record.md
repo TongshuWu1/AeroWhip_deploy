@@ -2323,3 +2323,16 @@ this range. New values in crazyswarm2's physical.yaml (c8a4ec2): 0.0915 per volt
 (`battery_run/001`, 7.54 → 7.35 V) read a weaker slope because the strokes pull the voltage down and
 the hovers read it while recovering; hover-only runs are the ones to fit. Earlier estimates: 0.1095
 (47 mixed hover windows), 0.096 (one 60 s hover over 7.71–7.45 V).
+
+## Dated change note — 2026-10-28 cf_6 tune frozen
+
+Final drone configuration for cf_6's calibration flights (crazyswarm2 f59bad5 and the manifest):
+firmware 2026.08 (54f31e24); Mellinger with translation gains zeroed; locSrv.extQuatStdDev 0.01,
+ctrlMel.kR_xy 157500, ctrlMel.kd_omega_rp 300, other gains firmware defaults, attitude integral off;
+host PID KP 4 / KD 3 / KI 0.6 at 50 Hz; battery compensation 0.0915 per volt about 7.8 V; trims
+(7.8 V reference) cf_6_nocable effective mass 0.1557 kg, offset [0.193, 0.310] m/s²; cf_6 (cable)
+0.1448 kg (cable lifted), [0.265, 0.198] m/s² from `cf_6/hover_trim/001` (height 5.6 mm, xy 5.6 mm
+RMS in its last 10 s). Not yet in AeroWhip: the simulator's firmware config still has the default
+attitude gains and no host battery compensation; both are set before the cf_6 drone fit, and the
+fitting code's setup default ('cf_2') becomes a setting. Next: the calibration series on cf_6 with
+OptiTrack at 100 Hz.
