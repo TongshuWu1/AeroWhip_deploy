@@ -2143,3 +2143,18 @@ the drone follows with a lag of 120–140 ms and 0.71–0.83 of the commanded ti
 radio and OptiTrack latency). The simulator reproduces this response (tilt error ~1° in stage 2);
 the slow response is a property of the default attitude gains on this airframe, not a model error.
 Nothing changed.
+
+## Dated change note — 2026-10-28 Bolt platform and firmware version checked (diagnostic)
+
+From the parameter dump `calibration_data/cf_2_parameters.yaml` (crazyswarm2, 2026-10-27): firmware
+revision e527895e (bitcraze/crazyflie-firmware, 2023-11-29, `firmware.modified` 0), built for the
+Bolt (pm.lowVoltage 6.4 / criticalLowVoltage 6.0 are the Bolt platform defaults). Bitcraze's Bolt
+platform defaults tune only the PID controller (rate and attitude PIDs); the Mellinger controller the
+flights use (stabilizer.controller 2) runs its generic defaults (kR_xy 70000, kw_xy 20000, ki_m_xy 0,
+kd_omega_rp 200). `quadSysId` holds the Crazyflie 2.1 values (arm 0.046 m), unused by Mellinger.
+`powerDist.idleThrust` 0: in sharp manoeuvres single motors fall to 0–300 PWM (0.1–0.6 % of in-air
+samples below 5000). The simulator's firmware port (`native/firmware.hpp`, checked against firmware
+master b48aba18) against the flown revision: the Mellinger position-mode path (thrust vector,
+desired axes, eR, ew, the D term, the integrals, M, output clamps) and powerDistributionLegacy /
+powerDistributionCap are the same computation (the master refactor moved the yaw conversion to
+radians and the idle thrust behind a getter). Nothing changed.
