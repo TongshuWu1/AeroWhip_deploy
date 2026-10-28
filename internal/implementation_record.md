@@ -2113,3 +2113,16 @@ a ≈ 0.09 m/s², the size of the measured attitude-estimate wander); the cable 
 stays below 0.1 m. Shape error by measured tip speed: 40 mm below 0.5 m/s, 76–85 mm above. Held-out
 segment scores at 5 s (constant bias removed per flight): position 479 mm, tilt 1.12°, shape 69 mm,
 tip relative to the drone 118 mm. Open-loop replay only; the policy flies closed loop on OptiTrack.
+
+## Dated change note — 2026-10-28 does the attitude-estimate error explain the drone's drift? (diagnostic)
+
+`runs/diagnostics/estimate_drift_20261028.py`: 20 windows of 5 s from six drone-only flights with
+the onboard attitude logged (random_high 003/004/009/010, line_star_xy 002/003), adopted drone model,
+open-loop replay of the sent commands. The extra acceleration the real drone gets from flying on its
+estimate, T (z_true − z_est) with the per-flight constant removed (estimate tilt error 1.25° RMS),
+double-integrated and added to the replay: horizontal error at 1 / 2 / 3 / 4 / 5 s 84 / 294 / 570 /
+867 / 1180 mm without, 75 / 284 / 583 / 937 / 1342 mm with; with one constant acceleration per window
+removed from both, 57 / 120 / 129 / 37 / 197 → 43 / 89 / 87 / 23 / 146 mm. Correlation of the replay
+error with the estimate-induced drift 0.54 (x), 0.42 (y). Conclusion: the estimate error is a real
+part of the drone's unpredictability (about a quarter to a third of the window-debiased error) but
+does not explain most of the slow drift; the rest is not identified. Nothing changed.
