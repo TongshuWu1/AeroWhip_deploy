@@ -11,3 +11,4 @@
 - [Tune drone before new data](tune-drone-before-new-data.md) — tune first, then re-fly and refit; status end of 2026-10-28: est 0.01 set, kR 157500 chosen, cf_2 grounded (ESC)
 - [No heavy compute during flight](no-heavy-compute-during-flight.md) — CPU-heavy jobs on the flight computer stalled OptiTrack and dropped the drone (2026-10-28); only light reads between flights
 - [cf_6 replaces cf_2, redo fits](new-airframe-redo-fits.md) — 2026-10-28: cf_2 retired; cf_6 (156 g, props 1.5 cm, clamp 5.5 cm below markers) is the drone now; all fits to redo
+- [Online identification rethink](online-identification-rethink.md) — 2026-10-28: calibration series paused; user wants a per-flight learning loop; sim badly underpredicts sharp-stroke cable swing
