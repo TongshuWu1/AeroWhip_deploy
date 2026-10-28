@@ -13,7 +13,7 @@ angular_velocity_body_radps = [0.0, 0.0, 0.0]
 # Centered under the drone; height from the hanging cable in ten 2026-10-27 flights
 # (measured 2026-10-27: attachment 55 mm below the tracking origin, first marker 85 mm along the cable).
 attachment_offset_body_m = [0.0, 0.0, -0.055]
-cable_segment_lengths_m = [0.085, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+cable_segment_lengths_m = [0.0832, 0.1001, 0.0993, 0.1017, 0.1003, 0.0989, 0.1012, 0.0989, 0.1001, 0.0969]
 
 [viewer]
 window_size_px = [1440, 900]

@@ -214,17 +214,29 @@ CableForces cable_forces(const Parameters& p,const Vector& s,const Chain& c,cons
         Vec3 bending{}; if(i<m) bending=edge_gradient[i]; if(i) bending=bending-edge_gradient[i-1];
         f[i]=bending+p.gravity*p.node_mass[i];
     }
+    double total=0.; for(double x:p.rest) total+=x;
+    const auto& rs=p.residual_static; const auto& rn=p.residual_normal_log; const auto& rt=p.residual_tangential;
+    bool residual=false; for(double x:rs) residual=residual||x!=0.; for(double x:rn) residual=residual||x!=0.; for(double x:rt) residual=residual||x!=0.;
+    double arc=0.;
     for(size_t i=0;i<=m;++i) {
         f[i]=f[i]+v[i]*(-p.drag*p.node_mass[i]);
         // Quadratic normal drag on the cylinder (independence principle): only the velocity
         // normal to the local tangent loads the cable; tributary length is half of each edge.
         double coefficient=.5*p.air_density*p.normal_drag_coefficient*p.diameter;
-        if(coefficient>0.) {
+        double length=((i?p.rest[i-1]:0.)+(i<m?p.rest[i]:0.))/2.;
+        double st=arc/total; if(i<m) arc+=p.rest[i];
+        if(residual) {
+            // The residual (see Parameters): steady force, normal-drag multiplier, tangential drag.
+            Vec3 steady{}; for(int a=0;a<3;++a) steady[a]=rs[3*a]+st*(rs[3*a+1]+st*rs[3*a+2]);
+            f[i]=f[i]+(p.residual_body_frame?mv(R,steady):steady)*length;
+            coefficient*=std::exp(rn[0]+rn[1]*st);
+        }
+        double tangential=residual?.5*p.air_density*p.diameter*(rt[0]+rt[1]*st):0.;
+        if(coefficient>0.||tangential!=0.) {
             Vec3 tangent= i==0?ta:c.tangent[i-1];
             if(i>0 && i<m){tangent=tangent+c.tangent[i];tangent=tangent/norm(tangent);}
-            Vec3 normal=v[i]-tangent*dot(tangent,v[i]);
-            double length=((i?p.rest[i-1]:0.)+(i<m?p.rest[i]:0.))/2.;
-            f[i]=f[i]-normal*(coefficient*length*norm(normal));
+            Vec3 along=tangent*dot(tangent,v[i]), normal=v[i]-along;
+            f[i]=f[i]-normal*(coefficient*length*norm(normal))-along*(tangential*length*norm(along));
         }
     }
     return {std::move(f),root_moment};
@@ -316,6 +328,7 @@ Engine::Engine(Parameters parameters) : p_(std::move(parameters)) {
     require(p_.bending_damping_saturation>0.,"Bending damping saturation rate must be positive (infinite: linear)");
     require(std::isfinite(p_.air_density) && p_.air_density>=0. && std::isfinite(p_.normal_drag_coefficient)
             && p_.normal_drag_coefficient>=0. && std::isfinite(p_.diameter) && p_.diameter>=0.,"Invalid quadratic air drag");
+    require(finite(p_.residual_static) && finite(p_.residual_normal_log) && finite(p_.residual_tangential),"Invalid cable residual");
     require(6+3*p_.rest.size()<=material::capacity,"Material derivative capacity exceeded");
     Mat3 K=skew(p_.arm), K2=mm(transpose(K),K), inertia=p_.inertia;
     root_mass_=p_.mass+p_.node_mass[0]; double reduced=p_.mass*p_.node_mass[0]/root_mass_;

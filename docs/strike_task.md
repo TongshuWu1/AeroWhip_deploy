@@ -24,7 +24,7 @@ policy find the stroke, and gives a success you can count in real flights.
 
 | Item | Current value |
 |---|---|
-| Cable | 10 links, 11 nodes; rest length 0.985 m |
+| Cable | 10 links, 11 nodes; rest length 0.977 m |
 | Start | hover at the scene origin, cable hanging (70 %); a recorded whip state (30 %, see below) |
 | Maximum duration | 5 s; a hit ends the episode `recovery_s` = 1 s later |
 | Controller / observation / policy | 500 / 100 / 50 Hz |

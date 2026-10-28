@@ -24,7 +24,7 @@ Defined in [configs/physics/drone_cable.json](../configs/physics/drone_cable.jso
 |---|---|
 | Drone mass (with battery and clamp, without cable) | 0.145 kg (weighed 2026-10-27) |
 | Cable and marker mass (total) | 0.016 kg (weighed 2026-10-27; assembly 0.162 kg) |
-| Cable length / mesh | 0.985 m / 10 edges between 11 nodes (the marker intervals: 0.085 m, then 9 × 0.1 m, measured) |
+| Cable length / mesh | 0.977 m / 10 edges between 11 nodes (the marker intervals from the labelled flights: 83.2, 100.1, 99.3, 101.7, 100.3, 98.9, 101.2, 98.9, 100.1, 96.9 mm, the means over all frames of the 21 cable flights, std about 1 mm) |
 | Tracking origin → centre of mass / → attachment | (0, 0, −0.018) / (0, 0, −0.055) m (attachment measured 2026-10-27; the hanging-cable fit had placed the first marker within 3 mm of this) |
 | Bending stiffness EI / bending damping Cb | 5.71e−4 N m² / 4.13e−5 N m² s |
 | Cable diameter / normal drag coefficient Cd / air density | 3.5 mm / 0.64 / 1.2 kg m⁻³ |
@@ -65,6 +65,18 @@ On the identified values the cable is gravity dominated (EI/(m g L²) ≈ 4·10�
 relaxes in Cb/EI ≈ 0.07 s. The segment fit of the cable flights identifies all four cable
 parameters (standard deviations 0.04–0.08 in log₁₀ EI, log₁₀ Cb, Cd and log₁₀ linear drag;
 `runs/fits/cable/20261027-202726.json`).
+
+### Cable residual
+
+The cable model has a compact, fitted correction (`cable.residual` in the physics file; absent or
+all zero is the plain physics above): per node, a steady force per unit length that is a quadratic
+in arc length per axis, in the drone's body frame or the world frame (`frame`); a multiplier
+exp(b₀ + b₁ s̃) on the quadratic normal drag; and a quadratic drag along the tangent with
+coefficient c₀ + c₁ s̃ (s̃ the arc fraction). It exists because the calibration flights show the
+model's hanging equilibrium 2.3° off the measured hanging shape (40 mm at the tip) and a 5–8 %
+tip-speed deficit in strokes, which are forces the model lacks rather than values of its parameters;
+it is fitted together with EI, Cb, Cd and the linear drag on the cable flights (data and fitting
+page). Terms are kept only where the held-out flights improve.
 
 ## Drone air drag
 

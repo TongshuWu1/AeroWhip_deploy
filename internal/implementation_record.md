@@ -1946,3 +1946,17 @@ through the simulated host law match real flights.
   validation with a stroke test, and the two adaptation loops (big: simulator; small: per-action
   correction) with their switching rules are written in the design note. Nothing of it is
   implemented yet; stages 1–2 are unchanged.
+
+## Dated change note — 2026-10-28 stage 0 intervals; compact cable residual in the engine
+
+- Marker intervals set from the labelled flights (`configs/physics/drone_cable.json`, both scene
+  files): 83.2, 100.1, 99.3, 101.7, 100.3, 98.9, 101.2, 98.9, 100.1, 96.9 mm (total 0.977 m); the
+  ruler values were 85 and 9 × 100 mm.
+- `cable.residual` (design note, stage 3): steady force per unit length (quadratic in arc fraction per
+  axis, body or world frame), normal-drag multiplier exp(b₀ + b₁ s̃), tangential quadratic drag
+  c₀ + c₁ s̃; in `cable_forces` (engine.cpp), so the coupled runtime and the prescribed-clamp replay
+  both carry it; read in bindings `model()` and the raw `parameters()`, reported by `info()`.
+  Tests (`tests/test_cable_residual.py`): absent and all-zero residual bit-identical on the coupled
+  engine; under a 0.006 N/m sideways load the held-clamp cable settles onto the discrete-chain
+  prediction (interior edges within 0.3° after 30 s); info round-trip. 111 tests pass. Not yet in
+  any fit: `fit_cable_segments.py` still fits the four physical parameters only.

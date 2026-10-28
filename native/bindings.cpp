@@ -45,6 +45,10 @@ Parameters parameters(const py::dict& d) {
     p.root_tangent_body=fixed<3>(d["root_tangent_body"]);
     if(d.contains("body_drag")) p.body_drag=fixed<3>(d["body_drag"]);
     p.rest=vector(d["rest"]); p.node_mass=vector(d["node_mass"]);
+    if(d.contains("residual_static")) p.residual_static=fixed<9>(d["residual_static"],Array::ensure(d["residual_static"]).ndim());
+    if(d.contains("residual_body_frame")) p.residual_body_frame=d["residual_body_frame"].cast<bool>();
+    if(d.contains("residual_normal_log")) p.residual_normal_log=fixed<2>(d["residual_normal_log"]);
+    if(d.contains("residual_tangential")) p.residual_tangential=fixed<2>(d["residual_tangential"]);
     return p;
 }
 Model model(const py::dict& c) {
@@ -76,6 +80,16 @@ Model model(const py::dict& c) {
     if(!cable["Cb_saturation_rate_rad_s"].is_none()) p.bending_damping_saturation=cable["Cb_saturation_rate_rad_s"].cast<double>();
     p.normal_drag_coefficient=cable["normal_drag_coefficient"].cast<double>();
     p.air_density=n["air_density_kg_m3"].cast<double>();
+    if(cable.contains("residual")&&!cable["residual"].is_none()) {
+        // Compact cable residual (Parameters): absent or all zero is the plain physics.
+        auto r=cable["residual"].cast<py::dict>();
+        std::string frame=r.contains("frame")?r["frame"].cast<std::string>():"body";
+        if(frame!="body"&&frame!="world") throw py::value_error("cable.residual.frame must be 'body' or 'world'");
+        p.residual_body_frame=frame=="body";
+        if(r.contains("static_n_per_m")) p.residual_static=fixed<9>(r["static_n_per_m"],2);
+        if(r.contains("normal_drag_log")) p.residual_normal_log=fixed<2>(r["normal_drag_log"]);
+        if(r.contains("tangential_drag")) p.residual_tangential=fixed<2>(r["tangential_drag"]);
+    }
     double iterations=n["constraint_iterations"].cast<double>();
     if(!std::isfinite(iterations)||iterations<1||std::floor(iterations)!=iterations||iterations>1000000.)
         throw py::value_error("Invalid projection count");
@@ -102,6 +116,9 @@ py::dict info(const Model& model) {
     d["rest"]=array(p.rest);d["node_mass"]=array(p.node_mass);d["ei"]=p.stiffness;d["drag"]=p.drag;
     d["cb"]=p.bending_damping;d["cb_saturation"]=p.bending_damping_saturation;d["cd"]=p.normal_drag_coefficient;d["diameter"]=p.diameter;d["air_density"]=p.air_density;
     d["dt"]=model.output_step;d["delay_s"]=model.delay;d["physics_dt"]=p.maximum_step;d["iterations"]=p.projections;
+    d["residual_static"]=py::array_t<double>({3,3},p.residual_static.data());d["residual_body_frame"]=p.residual_body_frame;
+    d["residual_normal_log"]=array(Vector(p.residual_normal_log.begin(),p.residual_normal_log.end()));
+    d["residual_tangential"]=array(Vector(p.residual_tangential.begin(),p.residual_tangential.end()));
     d["marker_indices"]=model.marker_indices;d["n"]=p.node_mass.size();return d;
 }
 Controller callback(py::object controller) {

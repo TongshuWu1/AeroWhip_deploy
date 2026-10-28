@@ -29,6 +29,15 @@ struct Parameters {
     Mat3 inertia{};
     Vec3 arm{}, gravity{}, root_tangent_body{};
     Vector rest, node_mass;
+    // Compact cable residual, fitted on the calibration flights (all zero: no residual). Per node, on
+    // top of the forces above, with s~ = arc length / total in [0, 1] and l the tributary length:
+    //   a steady force per unit length f_axis(s~) = sum_k residual_static[3*axis+k] s~^k, in the body
+    //   frame (rotated by R) or the world frame, times l;
+    //   the quadratic normal drag multiplied by exp(residual_normal_log[0] + residual_normal_log[1] s~);
+    //   a quadratic drag along the tangent, 0.5 rho d l (residual_tangential[0] + residual_tangential[1] s~) |v_t| v_t.
+    std::array<double,9> residual_static{};
+    bool residual_body_frame = true;
+    std::array<double,2> residual_normal_log{}, residual_tangential{};
 };
 
 struct ModelInput {
