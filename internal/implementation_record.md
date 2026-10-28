@@ -2744,3 +2744,16 @@ decay/003 held out) and are in the archived cf_2 fits that are today's prior. Im
   page's 10-marker error panel (synthetic flight: 54 % better than the offline model by the end).
 Not done: refitting cf_2 without its failed takes (cf_2 is retired; it is the current prior);
 writing contact.json touched the cf_6 hover_start/001 flight folder (a cache file only).
+
+## Dated change note — 2026-10-28 one live view (user approved)
+
+During flights the live 3D view is custom real only. `scripts/real_flight.py --simulated-cable` keeps
+the model's measured-motion cable (LiveCable) next to the labelled one when tracking (the feed
+already supported both; the script switched the simulation off). `state.write_model_file` writes
+the running model (planning values: delay held, >4 sd held) as runs/online/running_model.json in the
+loader's physics/controller/actuator form, its provenance in running_model.txt. The Loop window's Fly
+step starts custom real in a Terminator window with `--track-cable --simulated-cable --model` that
+file; a pill shows whether it runs; the Loop window's 3D view is hidden (not rendered) while custom
+real or a flight runs. Checked: the model file loads; custom real parses the options (stopped at a
+missing container on purpose: the stack and radio were not started); the feed builds the labeller and
+the running-model cable together; the pause on/off in the window. Not checked: a real launch.

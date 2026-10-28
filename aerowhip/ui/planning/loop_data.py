@@ -90,6 +90,13 @@ def copied(path):
     return target.exists() and target.read_bytes() == path.read_bytes()
 
 
+LIVE_VIEW = r'python[0-9.]* .*scripts/real_flight\.py'      # custom-real (the flight stack and its live view)
+
+
+def live_view_running():
+    return subprocess.run(['pgrep', '-f', LIVE_VIEW], capture_output=True).returncode == 0
+
+
 def flight_running():
     return subprocess.run(['pgrep', '-f', FLIGHT_PROCESS], capture_output=True).returncode == 0
 

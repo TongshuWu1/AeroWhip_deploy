@@ -23,6 +23,7 @@ from aerowhip.paths import ROOT
 from aerowhip.planning.simulate import FLIGHT_STACK
 
 STATE = ROOT/'runs'/'online'/'model_state.json'
+RUNNING_MODEL = ROOT/'runs'/'online'/'running_model.json'      # the running model as a model file (custom-real --model)
 REAL_DATA = FLIGHT_STACK/'calibration_data'
 MAX_PLANNING_SD = 4.
 HELD = ('command_delay_s',)          # not passed to the planner (see the module docstring)
@@ -147,3 +148,23 @@ def planning_fits(cable_fit, drone_fit, state=None):
         u['correlation'] = corr.tolist()
     notes += [f'{n}: {note}' for n, (_, note) in values.items() if note]
     return cable_fit, drone_fit, notes
+
+
+def write_model_file(path=None):
+    """The running model as a model configuration file (the roles physics / controller / actuator, as
+    data), for tools that take a model path (custom-real's --model). Without a running model the
+    offline fits. Returns the path."""
+    from aerowhip.physics.model_configuration import DEFAULT_MODEL, fit_configuration, load_model_configuration
+    from aerowhip.planning.ensemble import Ensemble, load_fit
+    from aerowhip.paths import ROOT as root
+    archive = root/'runs'/'archive_cf_2_2026-10-28'/'fits'
+    cable_fit, drone_fit, notes = planning_fits(load_fit(archive/'cable'/'20261028-012011.json'),
+                                                load_fit(archive/'drone'/'20261027-201939.json'), load())
+    ensemble = Ensemble(fit_configuration(load_model_configuration(DEFAULT_MODEL)), cable_fit, drone_fit)
+    config = ensemble.member_config(ensemble.cable_fit['best']['x'], ensemble.drone_best())
+    physics = {k: config[k] for k in ('drone', 'attachment', 'cable', 'simulation')}
+    path = Path(path or RUNNING_MODEL)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(dict(physics=physics, controller=config['controller'], actuator=config['actuator']), indent=1)+'\n')
+    path.with_suffix('.txt').write_text('; '.join(notes)+'\n')       # where it came from (the loader takes only the model)
+    return path

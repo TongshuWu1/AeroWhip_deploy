@@ -18,6 +18,7 @@ simulation running during a flight once stalled the host loop and dropped the dr
 """
 from datetime import datetime
 from pathlib import Path
+import shlex
 import shutil
 import sys
 import time
@@ -195,6 +196,8 @@ class LoopWindow(QtWidgets.QMainWindow):
         self.stop_button = button('Stop job')
         self.stop_button.clicked.connect(self.stop)
         row.addWidget(self.stop_button)
+        self.live_pill = pill('Live view off', MUTED)
+        row.addWidget(self.live_pill)
         self.flight_pill = pill('No flight running', MUTED)
         row.addWidget(self.flight_pill)
         return bar
@@ -256,6 +259,13 @@ class LoopWindow(QtWidgets.QMainWindow):
             cr.addWidget(b)
         cr.addStretch(1)
         grid.addWidget(cameras, 0, 0, QtCore.Qt.AlignmentFlag.AlignTop | QtCore.Qt.AlignmentFlag.AlignLeft)
+        self.paused_note = label('The live view (custom real) is running, so this 3D view is paused to leave the computer to '
+                                 'the flight stack and its radio. It resumes when the live view closes.', 'heading')
+        self.paused_note.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.paused_note.setStyleSheet('padding: 40px;')
+        self.paused_note.hide()
+        grid.addWidget(self.paused_note, 0, 0)
+        self.view_paused = False
         self.preview_note = label('', 'brandSub', wrap=False)
         self.preview_note.setStyleSheet('background: rgba(17,22,28,200); padding: 6px 10px; border-radius: 5px;')
         grid.addWidget(self.preview_note, 0, 0, QtCore.Qt.AlignmentFlag.AlignBottom | QtCore.Qt.AlignmentFlag.AlignLeft)
@@ -380,6 +390,12 @@ class LoopWindow(QtWidgets.QMainWindow):
         lay.addWidget(label('Fly it', 'heading'))
         lay.addWidget(label('In the flight shell (./docker/shell.sh --real), with the drone at the start point and the cable '
                             'hanging still. The flight lands itself on a lost link or with the cable over the drone.', 'muted'))
+        lay.addWidget(label('1. Start the live view: the flight stack (ROS, radio, OptiTrack) and its 3D view, with the live '
+                            'cable labeller and the running model\'s cable simulated next to it (custom real, in its own '
+                            'window; Ctrl+C there stops the stack).', 'muted'))
+        self.live_button = button('Start live view (custom real)')
+        self.live_button.clicked.connect(self.start_live_view)
+        lay.addWidget(self.live_button)
         self.check_text = label('', 'muted')
         lay.addWidget(self.check_text)
         self.command = QtWidgets.QPlainTextEdit(readOnly=True)
@@ -397,7 +413,7 @@ class LoopWindow(QtWidgets.QMainWindow):
         lay.addWidget(label('Online fit: start it before take-off; it follows the next flight folder and learns the drone '
                             'and cable parameters from every second of it (Online page). Only on a computer with cores '
                             'to spare for it.', 'muted'))
-        self.online_button = button('Start online fit (waits for the next flight)')
+        self.online_button = button('3. Start online fit (waits for the next flight)')
         self.online_button.clicked.connect(self.start_online)
         lay.addWidget(self.online_button)
 
@@ -549,7 +565,7 @@ class LoopWindow(QtWidgets.QMainWindow):
         short = weakest.split(' (')[0]
         self.tiles['weakest'].set(short if len(short) < 17 else short[:16]+'…')
         self.tiles['weakest'].setToolTip(weakest)
-        self.check_text.setText('Preflight check first (read-only: nothing is sent), then the flight.')
+        self.check_text.setText('2. In the flight shell: the preflight check (read-only: nothing is sent), then the flight.')
         self.command.setPlainText(self.flight_command(path, True)+'\n\n'+self.flight_command(path, False))
 
     def poll(self):
@@ -557,6 +573,11 @@ class LoopWindow(QtWidgets.QMainWindow):
         if latest is not None and (self.job is None or latest.log != self.job.log) and latest.running:
             self.job, self.was_running = latest, True
         self.flying = ld.flight_running()
+        live = ld.live_view_running()
+        set_pill(self.live_pill, 'Live view running' if live else 'Live view off', ACCENT if live else MUTED)
+        self.live_button.setEnabled(not live)
+        self.live_button.setText('Live view running (custom real)' if live else 'Start live view (custom real)')
+        self.set_view_paused(live or self.flying)
         set_pill(self.flight_pill, 'FLIGHT RUNNING · computing locked' if self.flying else 'No flight running', BAD if self.flying else MUTED)
         busy = self.job is not None and self.job.running
         for b in (self.optimise_button, self.envelope_button, self.label_button, self.online_button):
@@ -581,6 +602,36 @@ class LoopWindow(QtWidgets.QMainWindow):
         self.was_running = busy
         if self.pages.currentIndex() == self.online_index or busy:
             self.online.poll()
+
+    def set_view_paused(self, paused):
+        """While the live view or a flight runs, this window does not render its 3D view (one 3D view at a
+        time: the host also runs the flight stack and its radio link)."""
+        if paused == self.view_paused:
+            return
+        self.view_paused = paused
+        if paused and self.playing:
+            self.toggle_play()
+        self.scene.setVisible(not paused)
+        self.paused_note.setVisible(paused)
+        self.play_button.setEnabled(not paused)
+        if not paused:
+            self.scene.plotter.render()
+
+    def start_live_view(self):
+        """custom-real in its own terminal window (it owns the flight stack; a viewer crash cannot stop it),
+        with the cable labeller and the running model's cable."""
+        if ld.live_view_running():
+            self.statusBar().showMessage('The live view is already running')
+            return
+        from aerowhip.online import state as running
+        model = running.write_model_file()
+        command = (f'cd {shlex.quote(str(FLIGHT_STACK))} && ./docker/start.sh --custom-real --track-cable --simulated-cable '
+                   f'--model {shlex.quote(str(model))}; echo; echo "Live view ended; you can close this window."; exec bash')
+        ok, _ = QtCore.QProcess.startDetached('terminator', ['--title', 'AeroWhip live view (custom real)', '-x', 'bash', '-lc', command])
+        if not ok:
+            ok, _ = QtCore.QProcess.startDetached('x-terminal-emulator', ['-e', 'bash', '-lc', command])
+        self.statusBar().showMessage(f'Live view starting in its own window (model: {model.with_suffix(".txt").read_text().strip()})'
+                                     if ok else 'Could not open a terminal for the live view')
 
     # ------------------------------------------------------------ playback
     def toggle_play(self):

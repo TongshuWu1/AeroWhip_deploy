@@ -376,3 +376,17 @@ patch and has also been rebuilt in the current development container.
 Multicast sends one stream for multiple receivers; unicast sends a separate
 stream per client and permits asset filtering. OptiTrack recommends unicast for
 Wi-Fi. [OptiTrack streaming documentation](https://docs.optitrack.com/v3.2/motive/data-streaming)
+
+### One live view during identification flights
+
+During a flight the live 3D view is custom real, started from the Identification Loop window's Fly
+step ("Start live view"): it opens in its own terminal window (Ctrl+C there stops the stack) as
+
+```bash
+./docker/start.sh --custom-real --track-cable --simulated-cable --model <AeroWhip>/runs/online/running_model.json
+```
+
+which shows the live-labelled cable and, next to it, the cable simulated from the measured drone
+motion with the running model (the online fit's estimate; the offline fits until a flight has
+updated it): the model checked against the measurement as it flies. While the live view or a flight
+is running, the Identification Loop window does not render its own 3D view.

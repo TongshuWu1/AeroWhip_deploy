@@ -128,6 +128,9 @@ def main():
     parser.add_argument('--model', type=Path, default=DEFAULT_MODEL, help='Existing physical model for the measured-motion cable simulation')
     parser.add_argument('--no-cable', action='store_true', help='Drone without cable: show only the drone, no simulated cable')
     parser.add_argument('--no-simulated-cable', action='store_true', help='Do not simulate or draw the model cable (default with --track-cable)')
+    parser.add_argument('--simulated-cable', action='store_true',
+                        help='With --track-cable, also simulate and draw the model cable (--model) next to the labelled one: '
+                             'the model checked live against the measurement')
     parser.add_argument('--port', type=int, default=0, help='Loopback viewer port; zero chooses an unused port')
     parser.add_argument('--output', type=Path)
     parser.add_argument('--headless', action='store_true')
@@ -155,8 +158,8 @@ def main():
     args.poses_topic = '/'+args.poses_topic.lstrip('/')
     args.capture_node = '/'+args.capture_node.lstrip('/')
     args.point_cloud_topic = '/'+args.point_cloud_topic.lstrip('/')
-    if args.track_cable and not args.no_simulated_cable:
-        args.no_simulated_cable = True      # the labelled cable is the display; the simulation is not drawn
+    if args.track_cable and not args.no_simulated_cable and not args.simulated_cable:
+        args.no_simulated_cable = True      # the labelled cable is the display; the simulation is not drawn (unless --simulated-cable)
     if args.cable_tracking_config and not args.track_cable:
         parser.error('--cable-tracking-config requires --track-cable')
     if not args.attach and (args.poses_topic != '/poses' or args.capture_node != '/motion_capture_tracking'):
