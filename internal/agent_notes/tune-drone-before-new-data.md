@@ -20,6 +20,10 @@ after an emergency drop and the replacement does not spin (ESC channel suspected
 fix it or another Bolt is used (then: own robot name, physical.yaml entry, firmware flash, gain
 re-check, data kept separate from cf_2). Abort-rule change proposed, awaiting the user's decision.
 
+Fresh start on cf_6 (2026-10-28, user): all cf_2 data, logs and runs archived (dated archive
+folders), manifest emptied to cf_6; tuning restarts with plans cf6_baseline, cf6_estimator,
+cf6_stiffness, cf6_damping, cf6_integral (config/tuning.yaml).
+
 **Why:** the drone's open-loop drift and slow attitude response were the main sim-to-real gaps;
 all new data should share one drone setting.
 
