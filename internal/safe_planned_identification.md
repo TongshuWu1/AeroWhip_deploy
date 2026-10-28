@@ -2,7 +2,7 @@
 
 Written 2026-10-28 (evening) at the user's request, after a literature pass. A design for
 discussion; nothing here is implemented. It replaces the "campaign" view of
-`fitting_and_adaptation_design.md` (stages 0–6) with: bench measurements for what can be measured,
+`archive/fitting_and_adaptation_design.md` (stages 0–6) with: bench measurements for what can be measured,
 flights planned over a horizon for what must be learned, and safety that does not depend on the
 model being right. Facts about the drone and the cable are in the implementation record.
 

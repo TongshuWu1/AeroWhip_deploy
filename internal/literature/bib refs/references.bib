@@ -1,0 +1,493 @@
+
+ @misc{Jakobsson_Mahajan_Pullalarevu_Suresh_Yao_Mao_Duisterhof_Syed_Ichnowski_2026,
+  title={Wiggle and Go! System Identification for Zero-Shot Dynamic Rope Manipulation},
+  url={https://arxiv.org/abs/2604.22102v2},
+  abstractNote={Many robotic tasks are unforgiving; a single mistake in a dynamic throw can lead to unacceptable delays or unrecoverable failure. We introduce Wiggle and Go!, a two-stage framework for zero-shot rope manipulation: a brief, safe wiggle action is observed to predict descriptive rope parameters, which then conditions a trajectory optimizer for zero-shot goal-conditioned execution. Unlike prior dynamic rope manipulation methods that require large real-world datasets or iterative real-world refinement, our identification module is task-agnostic, supporting diverse manipulation policies without retraining. We achieve a 3.55,cm average accuracy on 3D target striking in real using rope system parameters in comparison to 15.29,cm for uninformed baselines, and over 50% success on multi-objective lobbing and draping tasks. Predicted parameters transfer to unseen motions with 0.95 Pearson correlation between simulated and real rope dynamics, indicating that the identification module generalizes across the task corpus. Project website: https://wiggleandgo.github.io/},
+  journal={arXiv.org},
+  author={Jakobsson, Arthur and Mahajan, Abhinav and Pullalarevu, Karthik and Suresh, Krishna and Yao, Yunchao and Mao, Yuemin and Duisterhof, Bardienus and Syed, Shahram Najam and Ichnowski, Jeffrey},
+  year={2026},
+  month=apr,
+  language={en}
+ }
+ 
+ @article{Chi_Burchfiel_Cousineau_Feng_Song_2024,
+  title={Iterative residual policy: For goal-conditioned dynamic manipulation of deformable objects},
+  volume={43},
+  ISSN={0278-3649, 1741-3176},
+  url={https://journals.sagepub.com/doi/10.1177/02783649231201201},
+  DOI={10.1177/02783649231201201},
+  abstractNote={This paper tackles the task of goal-conditioned dynamic manipulation of deformable objects. This task is highly challenging due to its complex dynamics (introduced by object deformation and high-speed action) and strict task requirements (defined by a precise goal specification). To address these challenges, we present Iterative Residual Policy (IRP), a general learning framework applicable to repeatable tasks with complex dynamics. IRP learns an implicit policy via delta dynamics—instead of modeling the entire dynamical system and inferring actions from that model, IRP learns delta dynamics that predict the effects of delta action on the previously observed trajectory. When combined with adaptive action sampling, the system can quickly optimize its actions online to reach a specified goal. We demonstrate the effectiveness of IRP on two tasks: whipping a rope to hit a target point and swinging a cloth to reach a target pose. Despite being trained only in simulation on a fixed robot setup, IRP is able to efficiently generalize to noisy real-world dynamics, new objects with unseen physical properties, and even different robot hardware embodiments, demonstrating its excellent generalization capability relative to alternative approaches.},
+  number={4},
+  journal={The International Journal of Robotics Research},
+  author={Chi, Cheng and Burchfiel, Benjamin and Cousineau, Eric and Feng, Siyuan and Song, Shuran},
+  year={2024},
+  month=apr, pages={389–404},
+  language={en} 
+ }
+
+ @article{Shen_Franchi_Gabellieri_2025,
+  title={Aerial Robots Carrying Flexible Cables: Dynamic Shape Optimal Control via Spectral Method Model},
+  volume={41},
+  ISSN={1941-0468},
+  url={https://ieeexplore.ieee.org/abstract/document/10969810},
+  DOI={10.1109/TRO.2025.3562459},
+  abstractNote={In this work, we present a model-based optimal boundary control design for an aerial robotic system composed of a quadrotor carrying a flexible cable. The whole system is modeled by partial differential equations combined with boundary conditions described by ordinary differential equations. The proper orthogonal decomposition (POD) method is adopted to project the original infinite-dimensional system on a finite low-dimensional space spanned by orthogonal basis functions. Based on such a reduced-order model, nonlinear model predictive control is implemented online to realize both position and shape trajectory tracking of the flexible cable in an optimal predictive fashion. The proposed POD-based reduced modeling and optimal control paradigms are verified in simulation using an accurate high-dimensional finite difference method-based model and experimentally using a real quadrotor and a cable. The results show the viability of the POD-based predictive control approach (allowing to close the control loop on the full system state) and its superior performance compared to an optimally tuned proportional–integral–derivative (PID) controller (allowing to close the control loop on the quadrotor state only).},
+  journal={IEEE Transactions on Robotics},
+  author={Shen, Yaolei and Franchi, Antonio and Gabellieri, Chiara},
+  year={2025},
+  pages={3162–3182} 
+}
+
+ @inproceedings{Gabellieri_Teeuwen_Shen_Franchi_2025,
+  title={Manipulation of Elasto-Flexible Cables with Single or Multiple UAVs},
+  ISSN={2153-0866},
+  url={https://ieeexplore.ieee.org/abstract/document/11246978},
+  DOI={10.1109/IROS60139.2025.11246978},
+  abstractNote={This work considers a large class of systems composed of multiple quadrotors manipulating deformable and extensible cables. The cable is described via a discretized representation, which decomposes it into linear springs interconnected through lumped-mass passive spherical joints. Sets of flat outputs are found for the systems. Numerical simulations support the findings by showing cable manipulation relying on flatness-based trajectories. Eventually, we present an experimental validation of the effectiveness of the proposed discretized cable model for a two-robot example. Moreover, a closed-loop controller based on the identified model and using cable-output feedback is experimentally tested.},
+  booktitle={2025 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
+  author={Gabellieri, Chiara and Teeuwen, Lars and Shen, Yaolei and Franchi, Antonio},
+  year={2025},
+  month=oct, pages={9075–9082} 
+ }
+
+ @misc{Suresh_Atkeson_2026,
+  title={Learning Dynamic Rope Manipulation Using Task-Level Iterative Learning Control},
+  url={https://arxiv.org/abs/2602.21302v2},
+  abstractNote={We introduce a Task-Level Iterative Learning Control method for dynamic manipulation of ropes. We demonstrate this method on a non-planar rope manipulation task called the flying knot. Using a single human demonstration and a simplified rope model, the method learns directly on hardware without reliance on large amounts of demonstration data or massive amounts of simulation. At each iteration, the algorithm inverts a model of the robot and rope by solving a quadratic program to propagate task-space errors into action updates. We evaluate performance across 7 different kinds of ropes, including chain, latex surgical tubing, and braided and twisted ropes, ranging in thicknesses of 7--25,mm and densities of 0.013--0.5,kg/m. Learning achieves a 100% success rate within 10 trials on all ropes. Furthermore, the method can successfully transfer between most rope types in 2--5 trials. https://flying-knots.github.io},
+  journal={arXiv.org},
+  author={Suresh, Krishna and Atkeson, Chris},
+  year={2026},
+  month=feb, language={en} 
+ }
+
+ @inproceedings{Lim_Huang_Chen_Wang_Ichnowski_Seita_Laskey_Goldberg_2022,
+  title={Real2Sim2Real: Self-Supervised Learning of Physical Single-Step Dynamic Actions for Planar Robot Casting},
+  url={https://ieeexplore.ieee.org/abstract/document/9811651},
+  DOI={10.1109/ICRA46639.2022.9811651},
+  abstractNote={This paper introduces the task of Planar Robot Casting (PRC): where one planar motion of a robot arm holding one end of a cable causes the other end to slide across the plane toward a desired target. PRC allows the cable to reach points beyond the robot workspace and has applications for cable management in homes, warehouses, and factories. To efficiently learn a PRC policy for a given cable, we propose Real2Sim2Real, a self-supervised framework that automatically collects physical trajectory examples to tune parameters of a dynamics simulator using Differential Evolution, generates many simulated examples, and then learns a policy using a weighted combination of simulated and physical data. We evaluate Real2Sim2Real with three simulators, Isaac Gym-segmented, Isaac Gym-hybrid, and PyBullet, two function approximators, Gaussian Processes and Neural Networks (NNs), and three cables with differing stiffness, torsion, and friction. Results with 240 physical trials suggest that the PRC policies can attain median error distance (as % of cable length) ranging from 8 % to 14 %, outperforming baselines and policies trained on only real or only simulated examples. Code, data, and videos are available at https://tinyurl.com/robotcast.},
+  booktitle={2022 International Conference on Robotics and Automation (ICRA)},
+  author={Lim, Vincent and Huang, Huang and Chen, Lawrence Yunliang and Wang, Jonathan and Ichnowski, Jeffrey and Seita, Daniel and Laskey, Michael and Goldberg, Ken},
+  year={2022},
+  month=may, pages={8282–8289} 
+ }
+
+ @misc{Chen_Zhang_Brei_Zhang_Chen_Wu_Vasudevan_2024,
+  title={Differentiable Discrete Elastic Rods for Real-Time Modeling of Deformable Linear Objects},
+  url={https://arxiv.org/abs/2406.05931v4},
+  abstractNote={This paper addresses the task of modeling Deformable Linear Objects (DLOs), such as ropes and cables, during dynamic motion over long time horizons. This task presents significant challenges due to the complex dynamics of DLOs. To address these challenges, this paper proposes differentiable Discrete Elastic Rods For deformable linear Objects with Real-time Modeling (DEFORM), a novel framework that combines a differentiable physics-based model with a learning framework to model DLOs accurately and in real-time. The performance of DEFORM is evaluated in an experimental setup involving two industrial robots and a variety of sensors. A comprehensive series of experiments demonstrate the efficacy of DEFORM in terms of accuracy, computational speed, and generalizability when compared to state-of-the-art alternatives. To further demonstrate the utility of DEFORM, this paper integrates it into a perception pipeline and illustrates its superior performance when compared to the state-of-the-art methods while tracking a DLO even in the presence of occlusions. Finally, this paper illustrates the superior performance of DEFORM when compared to state-of-the-art methods when it is applied to perform autonomous planning and control of DLOs. Project page: https://roahmlab.github.io/DEFORM/.},
+  journal={arXiv.org},
+  author={Chen, Yizhou and Zhang, Yiting and Brei, Zachary and Zhang, Tiancheng and Chen, Yuzhen and Wu, Julie and Vasudevan, Ram},
+  year={2024},
+  month=june, language={en} 
+ }
+
+ @misc{Zhai_Raimondi_Ren_Geles_Armati_Xing_Scaramuzza_2026, title={Learning to Throw: Agile and Accurate Cable-Suspended Payload Delivery with a Quadrotor},
+  url={https://arxiv.org/abs/2606.27603v1},
+  abstractNote={Quadrotors offer the agility needed to rapidly transport suspended payloads during time-critical applications, including search-and-rescue and medical delivery. While suspended-payload transport and traversal for these missions are well studied, the highly dynamic targeted release of the payload remains comparatively underexplored. State-of-the-art approaches typically rely on model-based trajectory optimization and tracking; however, these methods often yield sub-optimal performance due to conservative feasibility constraints, tracking errors, and the inherent difficulty of analytically modeling flexible rope dynamics. To overcome these limitations, we propose a hybrid simulation framework that couples a high-fidelity analytical quadrotor model with a physics solver for complex rope and payload interactions. By exchanging forces between the two domains at every step, we obtain a physically accurate simulation of the suspended-payload system. Leveraging this environment, we train a deep reinforcement learning (RL) policy that executes agile, accurate payload throws to designated targets. Deployed zero-shot on hardware, our RL policy pushes the boundary of the agility-accuracy trade-off, outperforming the model-based baseline by reducing the landing error by up to 50% and the throw duration by up to 30%. Ablation studies confirm that the coupled simulation is the key enabler of these gains. We further show that the same pipeline trains a policy driven by visual observations rather than an explicit state estimate, achieving accuracy comparable to that of the state-based policy. To accelerate future research in dynamic aerial manipulation, we open-source the simulator to the community upon acceptance.},
+  journal={arXiv.org},
+  author={Zhai, Yifan and Raimondi, Elia and Ren, Yunfan and Geles, Ismail and Armati, Yannick and Xing, Jiaxu and Scaramuzza, Davide},
+  year={2026},
+  month=june,
+  language={en} 
+ }
+
+ @article{Wang_Xiong_Tolu_Gorb_2024,
+  title={A Learning-based Control Framework for Fast and Accurate Manipulation of a Flexible Object},
+  volume={21},
+  ISSN={2543-2141},
+  url={https://doi.org/10.1007/s42235-024-00534-2},
+  DOI={10.1007/s42235-024-00534-2},
+  abstractNote={This paper presents a learning-based control framework for fast (< 1.5 s) and accurate manipulation of a flexible object, i.e., whip targeting. The framework consists of a motion planner learned or optimized by an algorithm, Online Impedance Adaptation Control (OIAC), a sim2real mechanism, and a visual feedback component. The experimental results show that a soft actor-critic algorithm outperforms three Deep Reinforcement Learning (DRL), a nonlinear optimization, and a genetic algorithm in learning generalization of motion planning. It can greatly reduce average learning trials (to < 20$$%$$of others) and maximize average rewards (to > 3 times of others). Besides, motion tracking errors are greatly reduced to 13.29$$%$$and 22.36$$%$$of constant impedance control by the OIAC of the proposed framework. In addition, the trajectory similarity between simulated and physical whips is 89.09$$%$$. The presented framework provides a new method integrating data-driven and physics-based algorithms for controlling fast and accurate arm manipulation of a flexible object.},
+  number={4},
+  journal={Journal of Bionic Engineering},
+  author={Wang, Junyi and Xiong, Xiaofeng and Tolu, Silvia and Gorb, Stanislav N.},
+  year={2024},
+  month=july, pages={1761–1774},
+  language={en} 
+ }
+
+ @inproceedings{Bai_Wang_Xiong_Boukas_2025,
+  title={Deep Reinforcement Learning of Robotic Manipulation for Whip Targeting},
+  url={https://ieeexplore.ieee.org/abstract/document/10979109},
+  DOI={10.1109/SIMPAR62925.2025.10979109},
+  abstractNote={This paper aims at a deep reinforcement learning (DRL) controller for fast (< 1.5s) manipulation of a flexible tool (i.e., whip) to hit a target in 3D space. The controller consists of a DRL algorithm for optimizing joint motions, and a proportional-derivative (PD) mechanism for tracking the optimized motions. Their objective is to minimize the distance between the whip-end-tip and the target. The proposed controller was validated in a 7-DOF robot arm by comparing four DRL algorithms in the physical simulator MuJoCo. It shows that the proximal policy optimization (PPO) outperforms others by obtaining the maximum average reward. Notably, PPO can still effectively interact with the environment under sparse or even unrewarding conditions, making it a robust choice for complex and dynamic tasks. Our work provides preliminary knowledge of DRL applications to fast robotic arm control in flexible object manipulation.},
+  booktitle={2025 IEEE International Conference on Simulation, Modeling, and Programming for Autonomous Robots (SIMPAR)},
+  author={Bai, Xiang and Wang, Junyi and Xiong, Xiaofeng and Boukas, Evangelos},
+  year={2025},
+  month=apr, pages={1–6} 
+ }
+
+ @article{Nah_Krotov_Russo_Sternad_Hogan_2023,
+  title={Learning to manipulate a whip with simple primitive actions – A simulation study},
+  volume={26},
+  ISSN={25890042},
+  url={https://linkinghub.elsevier.com/retrieve/pii/S2589004223014724},
+  DOI={10.1016/j.isci.2023.107395},
+  number={8},
+  journal={iScience},
+  author={Nah, Moses C. and Krotov, Aleksei and Russo, Marta and Sternad, Dagmar and Hogan, Neville},
+  year={2023},
+  month=aug, pages={107395},
+  language={en} 
+ }
+
+ @inproceedings{Edraki_Lokesh_Krotov_Ramezani_Sternad_2024,
+  title={Human-Inspired Control of a Whip: Preparatory Movements Improve Hitting a Target},
+  ISSN={2155-1782},
+  url={https://ieeexplore.ieee.org/abstract/document/10719792},
+  DOI={10.1109/BioRob60516.2024.10719792},
+  abstractNote={Manipulating flexible and underactuated objects, such as a whip, remains a significant challenge in robotics. Remarkably, humans can skillfully manipulate such objects to achieve tasks, ranging from hitting distant targets to snapping a stick in someone’s hand with the tip of a whip. This study explored this problem by constructing and modeling a 25-degree-of-freedom whip. Our goal was to investigate the strategies employed by humans when using a whip to strike a target. To that end, a human-inspired controller was devised that emulated two observed movement strategies: “striking only” and “preparing and striking”. While the latter strategy involved a more intricate and parameter-intensive trajectory definition, our findings revealed that the more complex “preparing and striking” approach enabled the whip to reach targets at greater distances. The outcomes of this study provided first insights into preparatory movements that humans employ when manipulating objects. By directly bridging between human and robot studies, we show how insights into human movements may inform effective robot control strategies for the manipulation of underactuated objects.},
+  booktitle={2024 10th IEEE RAS/EMBS International Conference for Biomedical Robotics and Biomechatronics (BioRob)},
+  author={Edraki, Mahdiar and Lokesh, Rakshith and Krotov, Aleksei and Ramezani, Alireza and Sternad, Dagmar},
+  year={2024},
+  month=sept, pages={270–275} 
+ }
+
+ @article{Krotov_Russo_Nah_Hogan_Sternad,
+  title={Motor control beyond reach—how humans hit a target with a whip},
+  volume={9},
+  ISSN={2054-5703},
+  url={https://pmc.ncbi.nlm.nih.gov/articles/PMC9533004/},
+  DOI={10.1098/rsos.220581},
+  abstractNote={Humans are strikingly adept at manipulating complex objects, from tying shoelaces to cracking a bullwhip. These motor skills have highly nonlinear interactive dynamics that defy reduction into parts. Yet, despite advances in data recording and processing, experiments in motor neuroscience still prioritize experimental reduction over realistic complexity. This study embraced the fully unconstrained behaviour of hitting a target with a 1.6-m bullwhip, both in rhythmic and discrete fashion. Adopting an object-centered approach to test the hypothesis that skilled movement simplifies the whip dynamics, the whip’s evolution was characterized in relation to performance error and hand speed. Despite widely differing individual strategies, both discrete and rhythmic styles featured a cascade-like unfolding of the whip. Whip extension and orientation at peak hand speed predicted performance error, at least in the rhythmic style, suggesting that humans accomplished the task by setting initial conditions. These insights may inform further studies on human and robot control of complex objects.},
+  number={10},
+  journal={Royal Society Open Science},
+  author={Krotov, Aleksei and Russo, Marta and Nah, Moses and Hogan, Neville and Sternad, Dagmar},
+  pages={220581} 
+ }
+
+ @inproceedings{Yamakawa_Odani_Ishikawa_2016,
+  title={Sonic-speed manipulation of a bull whip using a robot manipulator},
+  url={https://ieeexplore.ieee.org/abstract/document/7576923},
+  DOI={10.1109/AIM.2016.7576923},
+  abstractNote={In this paper, we propose an entirely new ultrahigh-speed actuation technique for achieving whip manipulation with a robot manipulator. By using the characteristics of the whip, we can realize high-speed, dexterous manipulation of the whip. In particular, we aim to achieve sonic-speed manipulation (SSM) at the free end of the whip. To achieve this, we explored the feasibility of SSM by trajectory planning for the robot manipulator. The trajectory was obtained by analyzing whip manipulations performed by a human subject. Next, we simulated SSM based on a mass-spring model with a multilink mechanism. Then, we performed an experiment to achieve SSM of the whip using this trajectory. Finally, we confirmed that SSM could be achieved, and we demonstrated the high feasibility of whip manipulation with the proposed method.},
+  booktitle={2016 IEEE International Conference on Advanced Intelligent Mechatronics (AIM)},
+  author={Yamakawa, Yuji and Odani, Kazunori and Ishikawa, Masatoshi},
+  year={2016},
+  month=july, pages={1139–1144} 
+ }
+
+ @inproceedings{Nah_Krotov_Russo_Sternad_Hogan_2020,
+  title={Dynamic Primitives Facilitate Manipulating a Whip},
+  ISSN={2155-1782},
+  url={https://ieeexplore.ieee.org/abstract/document/9224399},
+  DOI={10.1109/BioRob49111.2020.9224399},
+  abstractNote={Human dexterity far exceeds that of modern robots, despite a much slower neuromuscular system. Understanding how this is accomplished may lead to improved robot control. The slow neuromuscular system of humans implies that prediction based on some form of internal model plays a prominent role. However, the nature of the model itself remains unclear. To address this problem, we focused on one of the most complex and exotic tools humans can manipulate-a whip. We tested (in simulation) whether a distant target could be reached with a whip using a (small) number of dynamic primitives whose parameters could be learned through optimization. This approach was able to manage the complexity of an (extremely) high degree-of-freedom system and discovered five optimal parameters of a single movement that achieved the task. An internal model of the whip dynamics was not needed for this approach, thereby significantly relieving the computational burden of task representation and performance optimization. These results support our hypothesis that composing control using dynamic motor primitives may be a strategy which humans use to enable their remarkable dexterity. A similar approach may contribute to improved robot control.},
+  booktitle={2020 8th IEEE RAS/EMBS International Conference for Biomedical Robotics and Biomechatronics (BioRob)},
+  author={Nah, Moses C. and Krotov, Aleksei and Russo, Marta and Sternad, Dagmar and Hogan, Neville},
+  year={2020},
+  month=nov, pages={685–691} 
+ }
+
+ @inproceedings{Nah_Krotov_Russo_Sternad_Hogan_2021,
+  title={Manipulating a Whip in 3D via Dynamic Primitives},
+  ISSN={2153-0866},
+  url={https://ieeexplore.ieee.org/abstract/document/9636257},
+  DOI={10.1109/IROS51168.2021.9636257},
+  abstractNote={A prominent challenge in the field of robotics is manipulation of flexible objects. One major factor that makes this task difficult is the complex dynamics emerging from its high-dimensional structure. This argues against the use of popular optimization-based approaches, which scale poorly with system dimension (the “curse of dimensionality”). Nevertheless, almost indifferent to this complexity, humans handle it on a daily basis, without any apparent difficulty.Inspired by human motor control, we propose that encoding movements based on dynamic primitives can simplify the task of manipulating flexible objects and provides a way around the curse of dimensionality. Using an extreme example — manipulating a whip — we tested in simulation whether targets at various locations could be reached with a whip by using a controller based on dynamic primitives. Regardless of the target location, this approach successfully managed the complexity of a 54 degree-of-freedom system (yielding a 108-dimensional state-space representation) and identified an upper-limb movement that achieved the task. This approach did not require a detailed model of the whip, which thereby significantly simplified the computational complexity of the control task. We believe that this approach may facilitate robotic manipulation of flexible materials, and in general afford a simplified way to control dynamically complex objects.},
+  booktitle={2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
+  author={Nah, Moses C. and Krotov, Aleksei and Russo, Marta and Sternad, Dagmar and Hogan, Neville},
+  year={2021},
+  month=sept, pages={2803–2808} 
+ }
+
+ @inproceedings{Xiong_Nah_Krotov_Sternad_2021,
+  title={Online Impedance Adaptation Facilitates Manipulating a Whip},
+  ISSN={2153-0866},
+  url={https://ieeexplore.ieee.org/abstract/document/9636663},
+  DOI={10.1109/IROS51168.2021.9636663},
+  abstractNote={Manipulation of flexible objects is one of the major challenges in robotics as the nonlinear dynamics of the high-dimensional object structure makes it difficult to apply current control methods. A previous simulation study showed that control with few pre-structured joint trajectories coupled with joint impedance (dynamic primitives) could control a 25-dimensional whip to hit a target. This was possible even though the impedance values were constant. This paper explores whether time-varying impedance throughout the movement may further enhance performance. We present an online impedance adaptation (OIA) controller that modulates the joint impedances of a two-joint actuator in real time for the same task. Results showed that the OIA control method increased the speed of optimization and resulted in smaller deviation from the zero-torque joint trajectories compared to the controller with constant joint impedances. This novel way to modulate both motion and impedance of a manipulator may facilitate the control of flexible objects with significant dynamics.},
+  booktitle={2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
+  author={Xiong, Xiaofeng and Nah, Moses C. and Krotov, Aleksei and Sternad, Dagmar},
+  year={2021},
+  month=sept, pages={9297–9302} 
+ }
+
+ @article{Zimmermann_Poranne_Coros_2021,
+  title={Dynamic Manipulation of Deformable Objects With Implicit Integration},
+  volume={6},
+  ISSN={2377-3766},
+  url={https://ieeexplore.ieee.org/abstract/document/9380919},
+  DOI={10.1109/LRA.2021.3066969},
+  abstractNote={Due to their complex dynamics and high-dimensional configuration spaces, non-rigid objects such as cables, garments, bedding and various food items remain notoriously challenging for robots to manipulate effectively. In this letter, we therefore develop, validate and analyze model-based optimal control techniques for dynamic manipulation of deformable objects. We study, in particular, the application of both the batch Newton method and the stagewise Differential Dynamic Programming (DDP) approach to this challenging problem domain. On a technical level, we derive analytic formulations for all necessary derivatives, noting that numerically stable simulation of deformable objects demands implicit integration schemes, which do not have closed form solutions. While both DDP and Newton’s method converge quadratically, our experiments and analysis show that the relative overall performance of these two approaches depends heavily on the dimensions of the control problems being solved. We demonstrate the efficacy of our trajectory optimization formulations through a variety of simulation and real-world experiments.},
+  number={2},
+  journal={IEEE Robotics and Automation Letters},
+  author={Zimmermann, Simon and Poranne, Roi and Coros, Stelian},
+  year={2021},
+  month=apr, pages={4209–4216} 
+ }
+
+ @article{Cao_Zhou_Wang_Li_2026,
+  title={FLARE: Agile Flights for Quadrotor Cable-Suspended Payload System via Reinforcement Learning},
+  volume={11},
+  ISSN={2377-3766},
+  url={https://ieeexplore.ieee.org/abstract/document/11373839},
+  DOI={10.1109/LRA.2026.3662598},
+  abstractNote={Agile flight for the quadrotor cable-suspended payload system is a formidable challenge due to its underactuated, highly nonlinear, and hybrid dynamics. Traditional optimization-based methods often struggle with high computational costs and the complexities of cable mode transitions, limiting their real-time applicability and maneuverability exploitation. In this letter, we present FLARE, a reinforcement learning (RL) framework that directly learns an agile navigation policy from high-fidelity simulation. Our method is validated across three designed challenging scenarios, notably outperforming a state-of-the-art optimization-based approach by a 3x speedup during gate traversal maneuvers. Furthermore, the learned policies achieve successful zero-shot sim-to-real transfer, demonstrating remarkable agility and safety in real-world experiments, running in real time on an onboard computer.},
+  number={3},
+  journal={IEEE Robotics and Automation Letters},
+  author={Cao, Dongcheng and Zhou, Jin and Wang, Xian and Li, Shuo},
+  year={2026},
+  month=mar, pages={3653–3660} 
+ }
+
+ @misc{Rapuano_Shen_Califano_Gabellieri_Franchi_2026,
+  title={Nonlinear Predictive Control of the Continuum and Hybrid Dynamics of a Suspended Deformable Cable for Aerial Pick and Place},
+  url={https://arxiv.org/abs/2602.17199v1},
+  abstractNote={This paper presents a framework for aerial manipulation of an extensible cable that combines a high-fidelity model based on partial differential equations (PDEs) with a reduced-order representation suitable for real-time control. The PDEs are discretised using a finite-difference method, and proper orthogonal decomposition is employed to extract a reduced-order model (ROM) that retains the dominant deformation modes while significantly reducing computational complexity. Based on this ROM, a nonlinear model predictive control scheme is formulated, capable of stabilizing cable oscillations and handling hybrid transitions such as payload attachment and detachment. Simulation results confirm the stability, efficiency, and robustness of the ROM, as well as the effectiveness of the controller in regulating cable dynamics under a range of operating conditions. Additional simulations illustrate the application of the ROM for trajectory planning in constrained environments, demonstrating the versatility of the proposed approach. Overall, the framework enables real-time, dynamics-aware control of unmanned aerial vehicles (UAVs) carrying suspended flexible cables.},
+  journal={arXiv.org},
+  author={Rapuano, Antonio and Shen, Yaolei and Califano, Federico and Gabellieri, Chiara and Franchi, Antonio},
+  year={2026},
+  month=feb, language={en} 
+ }
+
+ @article{Torrente_Kaufmann_Föhn_Scaramuzza_2021,
+  title={Data-Driven MPC for Quadrotors},
+  volume={6},
+  ISSN={2377-3766},
+  url={https://ieeexplore.ieee.org/abstract/document/9361343},
+  DOI={10.1109/LRA.2021.3061307},
+  abstractNote={Aerodynamic forces render accurate high-speed trajectory tracking with quadrotors extremely challenging. These complex aerodynamic effects become a significant disturbance at high speeds, introducing large positional tracking errors, and are extremely difficult to model. To fly at high speeds, feedback control must be able to account for these aerodynamic effects in real-time. This necessitates a modeling procedure that is both accurate and efficient to evaluate. Therefore, we present an approach to model aerodynamic effects using Gaussian Processes, which we incorporate into a Model Predictive Controller to achieve efficient and precise real-time feedback control, leading to up to 70% reduction in trajectory tracking error at high speeds. We verify our method by extensive comparison to a state-of-the-art linear drag model in synthetic and real-world experiments at speeds of up to 14 m/s and accelerations beyond 4 g.},
+  number={2},
+  journal={IEEE Robotics and Automation Letters},
+  author={Torrente, Guillem and Kaufmann, Elia and Föhn, Philipp and Scaramuzza, Davide},
+  year={2021},
+  month=apr, pages={3769–3776} 
+ }
+
+ @misc{Wang_Huang_Lim_Zhang_Ichnowski_Seita_Chen_Goldberg_2024,
+  title={Self-Supervised Learning of Dynamic Planar Manipulation of Free-End Cables},
+  url={https://arxiv.org/abs/2405.09581v2},
+  abstractNote={Dynamic manipulation of free-end cables has applications for cable management in homes, warehouses and manufacturing plants. We present a supervised learning approach for dynamic manipulation of free-end cables, focusing on the problem of getting the cable endpoint to a designated target position, which may lie outside the reachable workspace of the robot end effector. We present a simulator, tune it to closely match experiments with physical cables, and then collect training data for learning dynamic cable manipulation. We evaluate with 3 cables and a physical UR5 robot. Results over 32x5 trials on 3 cables suggest that a physical UR5 robot can attain a median error distance ranging from 22% to 35% of the cable length among cables, outperforming an analytic baseline by 21% and a Gaussian Process baseline by 7% with lower interquartile range (IQR).},
+  journal={arXiv.org},
+  author={Wang, Jonathan and Huang, Huang and Lim, Vincent and Zhang, Harry and Ichnowski, Jeffrey and Seita, Daniel and Chen, Yunliang and Goldberg, Ken},
+  year={2024},
+  month=may, language={en} 
+ }
+
+ @article{Pan_Xing_Reiter_Zhai_Aljalbout_Scaramuzza_2026,
+  title={Learning on the Fly: Rapid Policy Adaptation via Differentiable Simulation},
+  volume={11},
+  ISSN={2377-3766},
+  url={https://ieeexplore.ieee.org/abstract/document/11358700},
+  DOI={10.1109/LRA.2026.3655300},
+  abstractNote={Learning control policies in simulation enables rapid, safe, and cost-effective development of advanced robotic capabilities. However, transferring these policies to the real world remains difficult due to the sim-to-real gap, where unmodeled dynamics and environmental disturbances can degrade policy performance. Existing approaches, such as domain randomization and Real2Sim2Real pipelines, can improve policy robustness, but either struggle under out-of-distribution conditions or require costly offline retraining. In this work, we approach these problems from a different perspective. Instead of relying on diverse training conditions before deployment, we focus on rapidly adapting the learned policy in the real world in an online fashion. To achieve this, we propose a novel online adaptive learning framework that unifies residual dynamics learning with real-time policy adaptation inside a differentiable simulation. Starting from a simple dynamics model, our framework continuously refines the model using real-world data to capture unmodeled effects and disturbances, such as payload changes and wind. The refined dynamics model is embedded in a differentiable simulation framework, enabling gradient backpropagation through the dynamics and thus rapid, sample-efficient policy updates. All components of our system are designed for rapid adaptation, enabling the policy to adjust to unseen disturbances within 5 seconds of training. We validate the approach on agile quadrotor control under various disturbances in both simulation and the real world. Our framework reduces hovering error by up to 81% compared to mathcal L_1-MPC and 55% compared to DATT, while also demonstrating robustness in vision-based control without explicit state estimation.},
+  number={3},
+  journal={IEEE Robotics and Automation Letters},
+  author={Pan, Jiahe and Xing, Jiaxu and Reiter, Rudolf and Zhai, Yifan and Aljalbout, Elie and Scaramuzza, Davide},
+  year={2026},
+  month=mar, pages={3542–3549} 
+ }
+
+ @inproceedings{Bergou_Wardetzky_Robinson_Audoly_Grinspun_2008,
+  address={Los Angeles California},
+  title={Discrete elastic rods},
+  ISBN={9781450301121},
+  url={https://dl.acm.org/doi/10.1145/1399504.1360662},
+  DOI={10.1145/1399504.1360662},
+  booktitle={ACM SIGGRAPH 2008 papers},
+  publisher={ACM},
+  author={Bergou, Miklós and Wardetzky, Max and Robinson, Stephen and Audoly, Basile and Grinspun, Eitan},
+  year={2008},
+  month=aug, pages={1–12},
+  language={en} 
+ }
+
+ @inproceedings{Chen_Bretl_Pham_2025, title={Accurate Simulation and Parameter Identification of Deformable Linear Objects using Discrete Elastic Rods in Generalized Coordinates},
+  ISSN={2153-0866},
+  url={https://ieeexplore.ieee.org/abstract/document/11247160},
+  DOI={10.1109/IROS60139.2025.11247160},
+  abstractNote={This paper presents a fast and accurate model of a deformable linear object (DLO) – e.g., a rope, wire, or cable – integrated into an established robot physics simulator, MuJoCo. Most accurate DLO models with low computational times exist in standalone numerical simulators, which are unable or require tedious work to handle external objects. Based on an existing state-of-the-art DLO model – Discrete Elastic Rods (DER) – our implementation provides an improvement in accuracy over MuJoCo’s own native cable model. To minimize computational load, our model utilizes force-lever analysis to adapt the Cartesian stiffness forces of the DER into its generalized coordinates. As a key contribution, we introduce a novel parameter identification pipeline designed for both simplicity and accuracy, which we utilize to determine the bending and twisting stiffness of three distinct DLOs. We then evaluate the performance of each model by simulating the DLOs and comparing them to their real-world counterparts and against theoretically proven validation tests.},
+  booktitle={2025 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
+  author={Chen, Qi Jing and Bretl, Timothy and Pham, Quang-Cuong},
+  year={2025},
+  month=oct, pages={20454–20460} 
+ }
+
+ @article{Mamedov_Geist_Viljoen_Trimpe_Swevers_2025, title={Learning Deformable Linear Object Dynamics From a Single Trajectory},
+  volume={10},
+  ISSN={2377-3766},
+  url={https://ieeexplore.ieee.org/abstract/document/11027671},
+  DOI={10.1109/LRA.2025.3577421},
+  abstractNote={The dynamic manipulation of deformable objects poses a significant challenge in robotics. While model-based approaches for controlling such objects hold significant potential, their effectiveness hinges on the availability of an accurate and computationally efficient dynamics model. This work focuses on sample-efficient learning of models to capture the dynamic behavior of deformable linear objects (DLOs). Inspired by the pseudo-rigid body method, we present a physics-informed neural ODE that approximates a DLO as a serial chain of rigid bodies interconnected by passive elastic joints. However, unlike traditional uniform spatial discretization and linear spring-damper joints, our approach involves learning-based discretization and nonlinear elastic joints that characterize interaction forces via a neural network. Through real-world and simulation experiments involving DLOs with markedly different physical properties, we demonstrate the model’s ability to accurately predict DLO motion.},
+  number={7},
+  journal={IEEE Robotics and Automation Letters},
+  author={Mamedov, Shamil and Geist, A. René and Viljoen, Ruan and Trimpe, Sebastian and Swevers, Jan},
+  year={2025},
+  month=july, pages={7635–7642} 
+ }
+
+ @misc{Yang_Fei_Wang_Li_Dai_Kou_Li_Choset_2026, title={DeformX: A Versatile Co-Simulation Framework for Deformable Linear Objects},
+  url={https://arxiv.org/abs/2606.22116v1},
+  abstractNote={Deformable linear objects (DLOs) such as wires, cables, and ropes are common in robotic manipulation tasks, yet simulating them with both visual realism and physical accuracy remains challenging. Existing visual simulation methods typically rely on procedural geometric primitives that lack physically grounded deformation behavior, while physics-based approaches with robot learning support often approximate DLOs as rigid-link chains or generic soft bodies, failing to accurately capture the bending, twisting, and shear mechanics of slender elastic structures. In this work, we introduce DeformX, a co-simulation framework that integrates a dedicated Cosserat rod physics engine with NVIDIA Isaac Sim, enabling DLO simulations that are both physically faithful and visually realistic. Our Cosserat rod engine simulates the dynamics and self-collisions of DLOs, and contact interactions with arbitrary free-form meshes. To achieve high-fidelity visualization, we employ mesh skinning to map discrete rod deformations onto imported CAD models. To the best of our knowledge, DeformX is the one of the first frameworks for DLO simulation that unifies realistic visualization, principled physics, and compatibility with robot learning pipelines. We demonstrate its versatility across synthetic data generation and policy learning for DLO manipulation, and validate visual and physical fidelity through comparisons against real-world experiments. Notably, fine-tuning Segment Anything Model 3 (SAM3) on DeformX-generated data yields a 10.2% mAP@75 improvement in real-image wire segmentation, and a rope-swinging policy trained entirely in DeformX achieves a mean target-hitting error of 6.6 cm on a UR5e manipulator in real-world trials, highlighting its strong sim-to-real transfer capability.},
+  journal={arXiv.org},
+  author={Yang, Yi and Fei, Xiang and Wang, Lehong and Li, Chenhao and Dai, Zilin and Kou, Henry and Li, Lu and Choset, Howie},
+  year={2026},
+  month=june, language={en} 
+ }
+
+ @misc{Luo_Zhou_Zhang_Liu_Huang_Yang_Han_Hu_Yang_Yu_et al._2026, title={FLASH: Fast Learning via GPU-Accelerated Simulation for High-Fidelity Deformable Manipulation in Minutes},
+  url={https://arxiv.org/abs/2604.17513v1},
+  abstractNote={Simulation frameworks such as Isaac Sim have enabled scalable robot learning for locomotion and rigid-body manipulation; however, contact-rich simulation remains a major bottleneck for deformable object manipulation. The continuously changing geometry of soft materials, together with large numbers of vertices and contact constraints, makes it difficult to achieve high accuracy, speed, and stability required for large-scale interactive learning. We present FLASH, a GPU-native simulation framework for contact-rich deformable manipulation, built on an accurate NCP-based solver that enforces strict contact and deformation constraints while being explicitly designed for fine-grained GPU parallelism. Rather than porting conventional single-instruction-multiple-data (SIMD) solvers to GPUs, FLASH redesigns the physics engine from the ground up to leverage modern GPU architectures, including optimized collision handling and memory layouts. As a result, FLASH scales to over 3 million degrees of freedom at 30 FPS on a single RTX 5090, while accurately simulating physical interactions. Policies trained solely on FLASH-generated synthetic data in minutes achieve robust zero-shot sim-to-real transfer, which we validate on physical robots performing challenging deformable manipulation tasks such as towel folding and garment folding, without any real-world demonstration, providing a practical alternative to labor-intensive real-world data collection.},
+  journal={arXiv.org},
+  author={Luo, Siyuan and Zhou, Bingyang and Zhang, Chong and Liu, Xin and Huang, Zhenhao and Yang, Gang and Han, Zhengtao and Hu, Xiaotian and Yang, Eric and Yu, Rymon and Zeng, Ziqiu and Shi, Fan},
+  year={2026},
+  month=apr, language={en} 
+ }
+
+ @article{Kamaras_Ramamoorthy_2025, title={Distributional Treatment of Real2Sim2Real for Object-Centric Agent Adaptation in Vision-Driven DLO Manipulation},
+  volume={10},
+  ISSN={2377-3766},
+  url={https://ieeexplore.ieee.org/abstract/document/11045513},
+  DOI={10.1109/LRA.2025.3581744},
+  abstractNote={We present an integrated (or end-to-end) framework for the Real2Sim2Real problem of manipulating deformable linear objects (DLOs) based on visual perception. Working with a parameterised set of DLOs, we use likelihood-free inference (LFI) to compute the posterior distributions for the physical parameters using which we can approximately simulate the behaviour of each specific DLO. We use these posteriors for domain randomisation while training, in simulation, object-specific visuomotor policies (i.e. assuming only visual and proprioceptive sensory) for a DLO reaching task, using model-free reinforcement learning. We demonstrate the utility of this approach by deploying sim-trained DLO manipulation policies in the real world in a zero-shot manner, i.e. without any further fine-tuning. In this context, we evaluate the capacity of a prominent LFI method to perform fine classification over the parametric set of DLOs, using only visual and proprioceptive data obtained in a dynamic manipulation trajectory. We then study the implications of the resulting domain distributions in sim-based policy learning and real-world performance.},
+  number={8},
+  journal={IEEE Robotics and Automation Letters},
+  author={Kamaras, Georgios and Ramamoorthy, Subramanian},
+  year={2025},
+  month=aug, pages={8075–8082} 
+ }
+
+ @inproceedings{Chebotar_Handa_Makoviychuk_Macklin_Issac_Ratliff_Fox_2019, title={Closing the Sim-to-Real Loop: Adapting Simulation Randomization with Real World Experience},
+  ISSN={2577-087X},
+  url={https://ieeexplore.ieee.org/abstract/document/8793789},
+  DOI={10.1109/ICRA.2019.8793789},
+  abstractNote={We consider the problem of transferring policies to the real world by training on a distribution of simulated scenarios. Rather than manually tuning the randomization of simulations, we adapt the simulation parameter distribution using a few real world roll-outs interleaved with policy training. In doing so, we are able to change the distribution of simulations to improve the policy transfer by matching the policy behavior in simulation and the real world. We show that policies trained with our method are able to reliably transfer to different robots in two real world tasks: swing-peg-in-hole and opening a cabinet drawer. The video of our experiments can be found at https://sites.google.com/view/simopt.},
+  booktitle={2019 International Conference on Robotics and Automation (ICRA)},
+  author={Chebotar, Yevgen and Handa, Ankur and Makoviychuk, Viktor and Macklin, Miles and Issac, Jan and Ratliff, Nathan and Fox, Dieter},
+  year={2019},
+  month=may, pages={8973–8979} 
+ }
+
+ @misc{Ren_Dai_Burchfiel_Majumdar_2023, title={AdaptSim: Task-Driven Simulation Adaptation for Sim-to-Real Transfer},
+  url={https://arxiv.org/abs/2302.04903v2},
+  abstractNote={Simulation parameter settings such as contact models and object geometry approximations are critical to training robust robotic policies capable of transferring from simulation to real-world deployment. Previous approaches typically handcraft distributions over such parameters (domain randomization), or identify parameters that best match the dynamics of the real environment (system identification). However, there is often an irreducible gap between simulation and reality: attempting to match the dynamics between simulation and reality across all states and tasks may be infeasible and may not lead to policies that perform well in reality for a specific task. Addressing this issue, we propose AdaptSim, a new task-driven adaptation framework for sim-to-real transfer that aims to optimize task performance in target (real) environments -- instead of matching dynamics between simulation and reality. First, we meta-learn an adaptation policy in simulation using reinforcement learning for adjusting the simulation parameter distribution based on the current policy’s performance in a target environment. We then perform iterative real-world adaptation by inferring new simulation parameter distributions for policy training, using a small amount of real data. We perform experiments in three robotic tasks: (1) swing-up of linearized double pendulum, (2) dynamic table-top pushing of a bottle, and (3) dynamic scooping of food pieces with a spatula. Our extensive simulation and hardware experiments demonstrate AdaptSim achieving 1-3x asymptotic performance and $sim$2x real data efficiency when adapting to different environments, compared to methods based on Sys-ID and directly training the task policy in target environments. Website: https://irom-lab.github.io/AdaptSim/},
+  journal={arXiv.org},
+  author={Ren, Allen Z. and Dai, Hongkai and Burchfiel, Benjamin and Majumdar, Anirudha},
+  year={2023},
+  month=feb, language={en} 
+ }
+
+ @inproceedings{Kuroki_Guo_Matsushima_Okubo_Kobayashi_Ikeda_Takanami_Yoo_Matsuo_Iwasawa_2024, title={GenDOM: Generalizable One-shot Deformable Object Manipulation with Parameter-Aware Policy},
+  url={https://ieeexplore.ieee.org/abstract/document/10611378},
+  DOI={10.1109/ICRA57147.2024.10611378},
+  abstractNote={Due to the inherent uncertainty in their deformability during motion, previous methods in deformable object manipulation, such as rope and cloth, often required hundreds of real-world demonstrations to train a manipulation policy for each object, which hinders their applications in our ever-changing world. To address this issue, we introduce GenDOM, a framework that allows the manipulation policy to handle different deformable objects with only a single real-world demonstration. To achieve this, we augment the policy by conditioning it on deformable object parameters and training it with a diverse range of simulated deformable objects so that the policy can adjust actions based on different object parameters. At the time of inference, given a new object, GenDOM can estimate the deformable object parameters with only a single real-world demonstration by minimizing the disparity between the grid density of point clouds of real-world demonstrations and simulations in a differentiable physics simulator. Empirical validations on both simulated and real-world object manipulation setups clearly show that our method can manipulate different objects with a single demonstration and significantly outperforms the baseline in both environments (a 62% improvement for in-domain ropes and a 15% improvement for out-of-distribution ropes in simulation, as well as a 26% improvement for ropes and a 50% improvement for cloths in the real world), demonstrating the effectiveness of our approach in one-shot deformable object manipulation. https://sites.google.com/view/gendom/home.},
+  booktitle={2024 IEEE International Conference on Robotics and Automation (ICRA)},
+  author={Kuroki, So and Guo, Jiaxian and Matsushima, Tatsuya and Okubo, Takuya and Kobayashi, Masato and Ikeda, Yuya and Takanami, Ryosuke and Yoo, Paul and Matsuo, Yutaka and Iwasawa, Yusuke},
+  year={2024},
+  month=may, pages={14792–14799} 
+ }
+
+ @inproceedings{Huang_Zhang_Cao_Liu_Xu_Ding_Francis_Chen_Zhao_2023, title={What Went Wrong? Closing the Sim-to-Real Gap via Differentiable Causal Discovery},
+  ISSN={2640-3498},
+  url={https://proceedings.mlr.press/v229/huang23c.html},
+  abstractNote={Training control policies in simulation is more appealing than on real robots directly, as it allows for exploring diverse states in an efficient manner. Yet, robot simulators inevitably exhibit disparities from the real-world rebut{dynamics},
+  yielding inaccuracies that manifest as the dynamical simulation-to-reality (sim-to-real) gap. Existing literature has proposed to close this gap by actively modifying specific simulator parameters to align the simulated data with real-world observations. However, the set of tunable parameters is usually manually selected to reduce the search space in a case-by-case manner, which is hard to scale up for complex systems and requires extensive domain knowledge. To address the scalability issue and automate the parameter-tuning process, we introduce COMPASS, which aligns the simulator with the real world by discovering the causal relationship between the environment parameters and the sim-to-real gap. Concretely, our method learns a differentiable mapping from the environment parameters to the differences between simulated and real-world robot-object trajectories. This mapping is governed by a simultaneously learned causal graph to help prune the search space of parameters, provide better interpretability, and improve generalization on unseen parameters. We perform experiments to achieve both sim-to-sim and sim-to-real transfer, and show that our method has significant improvements in trajectory alignment and task success rate over strong baselines in several challenging manipulation tasks. Demos are available on our project website: https://sites.google.com/view/sim2real-compass.},
+  booktitle={Proceedings of The 7th Conference on Robot Learning},
+  publisher={PMLR},
+  author={Huang, Peide and Zhang, Xilun and Cao, Ziang and Liu, Shiqi and Xu, Mengdi and Ding, Wenhao and Francis, Jonathan and Chen, Bingqing and Zhao, Ding},
+  year={2023},
+  month=dec, pages={734–760},
+  language={en} 
+ }
+
+ @misc{Wu_Martín-Martín_Fei-Fei_2026, title={Rapid Adaptation of Particle Dynamics for Generalized Deformable Object Mobile Manipulation},
+  url={https://arxiv.org/abs/2603.18246v1},
+  abstractNote={We address the challenge of learning to manipulate deformable objects with unknown dynamics. In non-rigid objects, the dynamics parameters define how they react to interactions -- how they stretch, bend, compress, and move -- and they are critical to determining the optimal actions to perform a manipulation task successfully. In other robotic domains, such as legged locomotion and in-hand rigid object manipulation, state-of-the-art approaches can handle unknown dynamics using Rapid Motor Adaptation (RMA). Through a supervised procedure in simulation that encodes each rigid object’s dynamics, such as mass and position, these approaches learn a policy that conditions actions on a vector of latent dynamic parameters inferred from sequences of state-actions. However, in deformable object manipulation, the object’s dynamics not only includes its mass and position, but also how the shape of the object changes. Our key insight is that the recent ground-truth particle positions of a deformable object in simulation capture changes in the object’s shape, making it possible to extend RMA to deformable object manipulation. This key insight allows us to develop RAPiD, a two-phase method that learns to perform real-robot deformable object mobile manipulation by: 1) learning a visuomotor policy conditioned on the object’s dynamics embedding, which is encoded from the object’s privileged information in simulation, such as its mass and ground-truth particle positions, and 2) learning to infer this embedding using non-privileged information instead, such as robot visual observations and actions, so that the learned policy can transfer to the real world. On a mobile manipulator with 22 degrees of freedom, RAPiD enables over 80%+ success rates across two vision-based deformable object mobile manipulation tasks in the real world, under various object dynamics, categories, and instances.},
+  journal={arXiv.org},
+  author={Wu, Bohan and Martín-Martín, Roberto and Fei-Fei, Li},
+  year={2026},
+  month=mar, language={en} 
+ }
+
+ @article{Gao_Michelis_Spielberg_Katzschmann_2024, title={Sim-to-Real of Soft Robots With Learned Residual Physics},
+  volume={9},
+  ISSN={2377-3766},
+  url={https://ieeexplore.ieee.org/abstract/document/10640230},
+  DOI={10.1109/LRA.2024.3446287},
+  abstractNote={Accurately modeling soft robots in simulation is computationally expensive and commonly falls short of representing the real world. This well-known discrepancy, known as the sim-to-real gap, can have several causes, such as coarsely approximated geometry and material models, manufacturing defects, viscoelasticity and plasticity, and hysteresis effects. Residual physics networks learn from real-world data to augment a discrepant model and bring it closer to reality. Here, we present a residual physics method for modeling soft robots with large degrees of freedom. We train neural networks to learn a residual term — the modeling error between simulated and physical systems. Concretely, the residual term is a force applied on the whole simulated mesh, while real position data is collected with only sparse motion markers. The physical prior of the analytical simulation provides a starting point for the residual network, and the combined model is more informed than if physics were learned tabula rasa. We demonstrate our method on 1) a silicone elastomeric beam and 2) a soft pneumatic arm with hard-to-model, anisotropic fiber reinforcements. Our method outperforms traditional system identification up to text60%. We show that residual physics need not be limited to low degrees of freedom but can effectively bridge the sim-to-real gap for high dimensional systems.},
+  number={10},
+  journal={IEEE Robotics and Automation Letters},
+  author={Gao, Junpeng and Michelis, Mike Y. and Spielberg, Andrew and Katzschmann, Robert K.},
+  year={2024},
+  month=oct, pages={8523–8530} 
+ }
+
+ @misc{Cho_Chen_2026, title={RAFL: Generalizable Sim-to-Real of Soft Robots with Residual Acceleration Field Learning},
+  url={https://arxiv.org/abs/2603.22039v1},
+  abstractNote={Differentiable simulators enable gradient-based optimization of soft robots over material parameters, control, and morphology, but accurately modeling real systems remains challenging due to the sim-to-real gap. This issue becomes more pronounced when geometry is itself a design variable. System identification reduces discrepancies by fitting global material parameters to data; however, when constitutive models are misspecified or observations are sparse, identified parameters often absorb geometry-dependent effects rather than reflect intrinsic material behavior. More expressive constitutive models can improve accuracy but substantially increase computational cost, limiting practicality. We propose a residual acceleration field learning (RAFL) framework that augments a base simulator with a transferable, element-level corrective dynamics field. Operating on shared local features, the model is agnostic to global mesh topology and discretization. Trained end-to-end through a differentiable simulator using sparse marker observations, the learned residual generalizes across shapes. In both sim-to-sim and sim-to-real experiments, our method achieves consistent zero-shot improvements on unseen morphologies, while system identification frequently exhibits negative transfer. The framework also supports continual refinement, enabling simulation accuracy to accumulate during morphology optimization.},
+  journal={arXiv.org},
+  author={Cho, Dong Heon and Chen, Boyuan},
+  year={2026},
+  month=mar, language={en} 
+ }
+
+ @misc{Williams_Aldrich_Theodorou_2015, title={Model Predictive Path Integral Control using Covariance Variable Importance Sampling},
+  url={https://arxiv.org/abs/1509.01149v3},
+  abstractNote={In this paper we develop a Model Predictive Path Integral (MPPI) control algorithm based on a generalized importance sampling scheme and perform parallel optimization via sampling using a Graphics Processing Unit (GPU). The proposed generalized importance sampling scheme allows for changes in the drift and diffusion terms of stochastic diffusion processes and plays a significant role in the performance of the model predictive control algorithm. We compare the proposed algorithm in simulation with a model predictive control version of differential dynamic programming.},
+  journal={arXiv.org},
+  author={Williams, Grady and Aldrich, Andrew and Theodorou, Evangelos},
+  year={2015},
+  month=sept, language={en} 
+ }
+
+ @misc{Schulman_Wolski_Dhariwal_Radford_Klimov_2017, title={Proximal Policy Optimization Algorithms},
+  url={https://arxiv.org/abs/1707.06347v2},
+  abstractNote={We propose a new family of policy gradient methods for reinforcement learning, which alternate between sampling data through interaction with the environment, and optimizing a “surrogate” objective function using stochastic gradient ascent. Whereas standard policy gradient methods perform one gradient update per data sample, we propose a novel objective function that enables multiple epochs of minibatch updates. The new methods, which we call proximal policy optimization (PPO), have some of the benefits of trust region policy optimization (TRPO), but they are much simpler to implement, more general, and have better sample complexity (empirically). Our experiments test PPO on a collection of benchmark tasks, including simulated robotic locomotion and Atari game playing, and we show that PPO outperforms other online policy gradient methods, and overall strikes a favorable balance between sample complexity, simplicity, and wall-time.},
+  journal={arXiv.org},
+  author={Schulman, John and Wolski, Filip and Dhariwal, Prafulla and Radford, Alec and Klimov, Oleg},
+  year={2017},
+  month=july, language={en} 
+ }
+
+ @article{Ribeiro_Tiels_Umenberger_Schön_Aguirre_2020, title={On the smoothness of nonlinear system identification},
+  volume={121},
+  ISSN={0005-1098},
+  url={https://www.scopus.com/pages/publications/85088927225},
+  DOI={10.1016/j.automatica.2020.109158},
+  abstractNote={We shed new light on the smoothness of optimization problems arising in prediction error parameter estimation of linear and nonlinear systems. We show that for regions of the parameter space where the model is not contractive, the Lipschitz constant and β-smoothness of the objective function might blow up exponentially with the simulation length, making it hard to numerically find minima within those regions or, even, to escape from them. In addition to providing theoretical understanding of this problem, this paper also proposes the use of multiple shooting as a viable solution. The proposed method minimizes the error between a prediction model and the observed values. Rather than running the prediction model over the entire dataset, multiple shooting splits the data into smaller subsets and runs the prediction model over each subset, making the simulation length a design parameter and making it possible to solve problems that would be infeasible using a standard approach. The equivalence to the original problem is obtained by including constraints in the optimization. The new method is illustrated by estimating the parameters of nonlinear systems with chaotic or unstable behavior, as well as neural networks. We also present a comparative analysis of the proposed method with multi-step-ahead prediction error minimization.},
+  number={109158},
+  journal={Automatica},
+  author={Ribeiro, Antônio H. and Tiels, Koen and Umenberger, Jack and Schön, Thomas B. and Aguirre, Luis A.},
+  year={2020},
+  month=nov
+ }
+
+ @inproceedings{Suh_Simchowitz_Zhang_Tedrake_2022, title={Do Differentiable Simulators Give Better Policy Gradients?},
+  ISSN={2640-3498},
+  url={https://proceedings.mlr.press/v162/suh22b.html},
+  abstractNote={Differentiable simulators promise faster computation time for reinforcement learning by replacing zeroth-order gradient estimates of a stochastic objective with an estimate based on first-order gradients. However, it is yet unclear what factors decide the performance of the two estimators on complex landscapes that involve long-horizon planning and control on physical systems, despite the crucial relevance of this question for the utility of differentiable simulators. We show that characteristics of certain physical systems, such as stiffness or discontinuities, may compromise the efficacy of the first-order estimator, and analyze this phenomenon through the lens of bias and variance. We additionally propose an $alpha$-order gradient estimator, with $alpha in [0,1]$, which correctly utilizes exact gradients to combine the efficiency of first-order estimates with the robustness of zero-order methods. We demonstrate the pitfalls of traditional estimators and the advantages of the $alpha$-order estimator on some numerical examples.},
+  booktitle={Proceedings of the 39th International Conference on Machine Learning},
+  publisher={PMLR},
+  author={Suh, Hyung Ju and Simchowitz, Max and Zhang, Kaiqing and Tedrake, Russ},
+  year={2022},
+  month=june, pages={20668–20696},
+  language={en} 
+ }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

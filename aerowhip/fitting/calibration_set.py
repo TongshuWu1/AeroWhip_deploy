@@ -11,6 +11,7 @@ A failed take is never used, whatever its role or spans (the user's rule, 2026-1
 complete (`completed: false`: interrupted, landed early), or one in which the cable touched the drone
 (aerowhip.takes.contact, from the recorded marker cloud, cached as contact.json in the flight folder).
 """
+import os
 from pathlib import Path
 
 import numpy as np
@@ -18,7 +19,10 @@ import numpy as np
 from aerowhip.fitting.manifest import Manifest
 from aerowhip.takes.calibration_flights import load, windows
 
-DEFAULT_ROOT = Path('/home/tony-lab/Documents/PHD/Crazyflie/crazyswarm2_jazzy_whipping/calibration_data')
+# The flight stack's data, beside this repository (…/PHD/AeroWhip_deploy and …/PHD/Crazyflie/crazyswarm2_jazzy_whipping);
+# AEROWHIP_CALIBRATION_DATA overrides it on a computer laid out differently.
+DEFAULT_ROOT = Path(os.environ.get('AEROWHIP_CALIBRATION_DATA',
+                                   Path(__file__).resolve().parents[2].parent/'Crazyflie'/'crazyswarm2_jazzy_whipping'/'calibration_data'))
 
 
 def manifest(root=DEFAULT_ROOT):

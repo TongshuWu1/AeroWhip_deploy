@@ -142,15 +142,10 @@ established.
 
 Running a learned policy through ROS is not implemented yet.
 
-For a short scripted PVA connection check, leave the custom simulation running
-and use a separate host terminal in AeroWhip:
-
-```bash
-python scripts/custom_simulation_test.py --robot cf_2
-```
-
-Its result is saved in the Crazyswarm checkout's `logs/` directory. Host
-connection evidence is saved under AeroWhip `output/custom_simulation/`.
+To check the connection end to end, fly a rehearsal through the series runner in the
+custom-simulation shell (`collect_series.py --simulation --setup cf_6 --trajectory <plan>`; see
+"One live view" below for the real flight). Host connection evidence is saved under AeroWhip
+`output/custom_simulation/`.
 `--headless --duration 10` runs a bounded launch without the viewer. The default
 transport port is `47654`; `--port 0` selects an unused port. If another server
 owns the simulation domain, close it or select a different domain with

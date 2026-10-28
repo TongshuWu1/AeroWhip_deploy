@@ -31,7 +31,7 @@ reward, data format or file-writing behaviour was changed.
 
 ## Checks performed (all windows shown on DISPLAY=:1, never off-screen)
 
-Pictures in `internal/gui_screenshots/` are the windows' own renderings with the 3D views
+Pictures in `internal/archive/gui_screenshots/` are the windows' own renderings with the 3D views
 pasted in from their render windows (Wayland blocks screen capture of the desktop).
 
 | Window | Data | Picture |
@@ -65,4 +65,4 @@ variance and entropy; replays show commanded vs achieved acceleration and tilt; 
 review shows per-marker labels and chain-length error over time; the flight viewer has a
 rolling time-history dock; the cable fit shows convergence. Behaviour unchanged except:
 policy tester Run is disabled until a checkpoint is loaded. Checked visually on
-DISPLAY=:1 with the data listed in `internal/gui_review.md`; live real flight not tested.
+DISPLAY=:1 with the data listed in `internal/archive/gui_review.md`; live real flight not tested.

@@ -1054,7 +1054,7 @@ Hand-painted charts are replaced by matplotlib figures with SI units:
 
 Behaviour is unchanged except that the policy tester's Run stays disabled until a
 checkpoint is loaded. Checked visually on DISPLAY=:1 (screenshots and the data used are in
-`internal/gui_review.md` and `internal/gui_screenshots/`); live real flight was not tested.
+`internal/archive/gui_review.md` and `internal/archive/gui_screenshots/`); live real flight was not tested.
 
 ## Dated change note — 2026-10-28 engine v2 (branch `engine-v2`, not merged)
 
@@ -1939,7 +1939,7 @@ through the simulated host law match real flights.
   steady lean present at rest (model equilibrium 2.3° off the measured hanging shape, 40 mm at the
   tip), the same in every speed bin; the measured cable has 2–3° kinks at every joint and edge lengths
   83.2 … 96.9 mm against the configured 85/100. Numbers and sources in
-  [internal/fitting_and_adaptation_design.md](fitting_and_adaptation_design.md).
+  [internal/archive/fitting_and_adaptation_design.md](fitting_and_adaptation_design.md).
 - `scripts/residual_targets.py`: per-frame force targets (measured minus model acceleration, tension
   part removed). Kept as evidence that such targets are unusable here: the model's stiffness reacts to
   the label-noise kinks with 6–20 m/s², against measured accelerations of 2–7 m/s².
@@ -2374,7 +2374,7 @@ simulated. The configured cable (cf_2's stage-3 fit, with its residual) underpre
 to sharp strokes severely; the stroke-window previews of 2026-10-28 (tip peak speed 0.90 of
 measured) pointed the same way at smaller amplitude. Consequence: the simulator cannot screen for
 flip-over, and the cable model is wrong where the whip task lives. The user paused data collection
-to rethink the approach (see `internal/online_identification_proposal.md`).
+to rethink the approach (see `internal/archive/online_identification_proposal.md`).
 
 ## Dated change note — 2026-10-28 the flip stroke replayed from the measured clamp motion
 

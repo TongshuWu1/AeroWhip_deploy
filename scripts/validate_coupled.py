@@ -12,7 +12,7 @@ and the held-out flights.
    decay, strokes and whip flights (`scripts/stroke_diagnostics.py`). Per stroke the tip's peak
    speed against the measured one (ratio, frame shift), the tip error over the stroke, the drone's
    position error and its tilt error (per-flight offset removed). This is the yardstick of the
-   fitting design (internal/fitting_and_adaptation_design.md).
+   fitting design (internal/archive/fitting_and_adaptation_design.md).
 
 The per-flight bias is the flight's own, estimated from its own segments, as a trim measured in hover
 would be in flight.
