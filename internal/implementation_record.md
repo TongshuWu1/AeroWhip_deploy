@@ -2523,3 +2523,17 @@ editor or a shell naming the file no longer counts). Checked offscreen: layout, 
 playback at 1× (50 frames/s), seeking, and the automatic preview job; the 3D view on the real
 display was not inspected by me. The preview is a simulation of the adopted model, labelled as
 such in the view; the real flight is what the envelope measures.
+
+## Dated change note — 2026-10-28 lab scan in the 3D view (display only)
+
+The user scanned the lab with Polycam (GLB, 246k faces, three 4K textures, metric). It stays local:
+`data/lab_scan/` is git-ignored. `scripts/clean_lab_scan.py` (settings in `configs/lab_scan.yaml`)
+turns it Z-up, levels the floor plane (RANSAC, tilt was 0.25°), keeps the room polygon, cuts the
+walls at 2.9 m, drops small loose pieces that float (pieces on the floor are kept: the scan splits
+real furniture into patches; a 400-face threshold punched holes in desks), snaps the floor flat and
+moves it into OptiTrack coordinates (`origin_xy`, `x_axis_deg`): 200k faces kept. `scene.add_lab`
+shows it textured as scanned (baked lighting, back faces culled for a doll's-house view); the Lab
+button toggles it against the plain floor. Every cf_6 flight takes off at the OptiTrack origin with
+yaw ≈ 0 (parameters.json origin_m ≈ (0.02, 0.01)), so the origin is the take-off spot; **where that
+is in the room is a guess (centre of the mats, +x towards the desks) until the user confirms it**.
+Checked: offscreen renders of the cleaned scan and of the window with it.

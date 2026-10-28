@@ -57,6 +57,7 @@ QTabBar#segments::tab {{ padding: 7px 16px; border: 0; border-bottom: 2px solid 
 QTabBar#segments::tab:selected {{ color: {T['text']}; border-bottom: 2px solid {ACCENT}; }}
 QToolButton#camera {{ background: rgba(30,36,44,210); border: 1px solid #2f3a45; border-radius: 5px; padding: 4px 10px; color: {T['text']}; }}
 QToolButton#camera:hover {{ background: #2a3440; }}
+QToolButton#camera:checked {{ background: #22303c; border-color: {ACCENT}; color: {ACCENT}; }}
 QToolButton#play {{ background: {ACCENT}; color: #0e1418; border: 0; border-radius: 16px; font-size: 15px; font-weight: 700; }}
 QPushButton#primary {{ background: {ACCENT}; color: #0e1418; border-color: {ACCENT}; font-weight: 650; padding: 7px 14px; }}
 QPushButton#primary:disabled {{ background: {T['hover']}; color: {T['disabled']}; border-color: {T['border']}; }}
@@ -251,6 +252,15 @@ class LoopWindow(QtWidgets.QMainWindow):
             b.setText(text)
             b.clicked.connect(lambda _=False, w=which: self.scene.view(w))
             cr.addWidget(b)
+        cr.addSpacing(12)
+        self.room_button = QtWidgets.QToolButton(objectName='camera')
+        self.room_button.setText('Lab')
+        self.room_button.setCheckable(True)
+        self.room_button.setChecked(bool(self.scene.lab))
+        self.room_button.setEnabled(bool(self.scene.lab))
+        self.room_button.setToolTip('The scanned lab (scripts/clean_lab_scan.py)' if self.scene.lab else 'No lab scan: see configs/lab_scan.yaml')
+        self.room_button.toggled.connect(self.scene.set_lab_visible)
+        cr.addWidget(self.room_button)
         cr.addStretch(1)
         grid.addWidget(cameras, 0, 0, QtCore.Qt.AlignmentFlag.AlignTop | QtCore.Qt.AlignmentFlag.AlignLeft)
         self.preview_note = label('', 'brandSub', wrap=False)

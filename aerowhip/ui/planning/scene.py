@@ -17,6 +17,7 @@ from aerowhip.planning.simulate import FLIGHT_STACK
 from aerowhip.viewer.drone_model import load_frame_meshes
 
 SCENE = ROOT/'configs'/'scenes'/'default.toml'
+LAB_CONFIG = ROOT/'configs'/'lab_scan.yaml'
 BACKGROUND = ('#11161c', '#1f2933')
 FLOOR, GRID, GRID_MAJOR = '#1a2129', '#26313c', '#34424f'
 AREA, CEILING = '#3d93d1', '#D55E00'
@@ -31,6 +32,39 @@ def arena():
         return yaml.safe_load((FLIGHT_STACK/'config'/'arena.yaml').read_text())
     except OSError:
         return dict(x_m=[-2., 2.], y_m=[-1.5, 1.5], margin_m=.3)
+
+
+def lab_scan_path():
+    """The cleaned lab scan (scripts/clean_lab_scan.py), or None."""
+    import yaml
+    try:
+        path = ROOT/yaml.safe_load(LAB_CONFIG.read_text())['cleaned']
+    except (OSError, KeyError, TypeError):
+        return None
+    return path if path.exists() else None
+
+
+def add_lab(plotter, path, name='lab'):
+    """The lab scan, textured as scanned (its lighting is baked in), in OptiTrack coordinates."""
+    import trimesh
+    from PIL import Image
+    scene = trimesh.load(path)
+    actors = []
+    for i, (key, g) in enumerate(scene.geometry.items()):
+        T, _ = scene.graph[scene.graph.geometry_nodes[key][0]]
+        g = g.copy()
+        g.apply_transform(T)
+        mesh = pv.wrap(g)
+        material = getattr(g.visual, 'material', None)
+        image = getattr(material, 'baseColorTexture', None) if material is not None else None
+        if image is not None and getattr(g.visual, 'uv', None) is not None:
+            mesh.active_texture_coordinates = np.asarray(g.visual.uv, np.float32)
+            texture = pv.numpy_to_texture(np.asarray(image.convert('RGB') if isinstance(image, Image.Image) else image))
+            # back faces culled: a wall between the camera and the room disappears (a doll's-house view)
+            actors.append(plotter.add_mesh(mesh, texture=texture, lighting=False, culling='back', name=f'{name}/{i}', pickable=False))
+        else:
+            actors.append(plotter.add_mesh(mesh, color='#8c96a0', name=f'{name}/{i}', pickable=False))
+    return actors
 
 
 def viewer_settings():
@@ -61,6 +95,9 @@ class Scene3D(QtWidgets.QWidget):
         self._drone = []
         self._frame_index = 0
         self._room()
+        path = lab_scan_path()
+        self.lab = add_lab(p, path) if path is not None else []
+        self.set_lab_visible(bool(self.lab), render=False)
         self._add_drone()
         self.cable_line = pv.lines_from_points(np.tile(self.hover, (11, 1))-np.linspace(0, 1, 11)[:, None]*[0, 0, 1])
         self.cable_actor = p.add_mesh(self.cable_line.tube(radius=.004), color=CABLE, smooth_shading=True, name='cable')
@@ -74,15 +111,15 @@ class Scene3D(QtWidgets.QWidget):
     # static scene
     def _room(self):
         p = self.plotter
-        p.add_mesh(pv.Plane(center=(0, 0, -.001), direction=(0, 0, 1), i_size=12, j_size=12), color=FLOOR, name='floor',
-                   ambient=.4, diffuse=.6)
+        self.floor_actors = [p.add_mesh(pv.Plane(center=(0, 0, -.001), direction=(0, 0, 1), i_size=12, j_size=12), color=FLOOR,
+                                        name='floor', ambient=.4, diffuse=.6)]
         for spacing, colour, name in ((.5, GRID, 'grid'), (1., GRID_MAJOR, 'grid_major')):
             lines = []
             for v in np.arange(-5, 5+1e-9, spacing):
                 lines += [[(v, -5, 0), (v, 5, 0)], [(-5, v, 0), (5, v, 0)]]
             pts = np.array(lines).reshape(-1, 3)
             cells = np.hstack([[2, 2*i, 2*i+1] for i in range(len(lines))])
-            p.add_mesh(pv.PolyData(pts, lines=cells), color=colour, line_width=1, name=name, lighting=False)
+            self.floor_actors.append(p.add_mesh(pv.PolyData(pts, lines=cells), color=colour, line_width=1, name=name, lighting=False))
         a = arena()
         cx, cy = self.hover[0]-np.mean(a['x_m']), self.hover[1]-np.mean(a['y_m'])
         x0, x1 = a['x_m'][0]+cx, a['x_m'][1]+cx
@@ -113,6 +150,9 @@ class Scene3D(QtWidgets.QWidget):
         self.plan = None
         if preview is not None:
             self.hover = np.asarray(preview['reference'][0], float)
+        M = np.eye(4); M[:2, 3] = self.hover[:2]           # the scan is in OptiTrack coordinates: take-off spot at the origin
+        for actor in self.lab:
+            actor.user_matrix = M
         p.add_mesh(pv.Sphere(radius=.02, center=self.hover), color='#93a0ad', name='hover_point', lighting=False)
         p.add_mesh(pv.Line(self.hover, (self.hover[0], self.hover[1], 0)), color='#93a0ad', line_width=1, opacity=.35,
                    name='hover_drop', lighting=False)
@@ -127,6 +167,16 @@ class Scene3D(QtWidgets.QWidget):
             self.set_frame(0)
         else:
             self._place_drone(self.hover, np.eye(3), np.vstack([self.hover+[0, 0, -.055-.1*k] for k in range(11)]), None)
+            self.plotter.render()
+
+    def set_lab_visible(self, visible, render=True):
+        """The scanned lab in place of the plain floor and grid (when there is a scan)."""
+        visible = visible and bool(self.lab)
+        for actor in self.lab:
+            actor.SetVisibility(visible)
+        for actor in self.floor_actors:
+            actor.SetVisibility(not visible)
+        if render:
             self.plotter.render()
 
     def frames(self):

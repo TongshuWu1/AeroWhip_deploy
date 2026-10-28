@@ -24,3 +24,6 @@ __pycache__/
 
 # Locally regenerated refactoring reference (scripts/equivalence_check.py --record at 375b44e).
 /tests/data/*.pt
+
+# Lab scan (local only: a phone scan of the lab, display backdrop)
+/data/lab_scan/
