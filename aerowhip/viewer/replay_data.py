@@ -160,8 +160,18 @@ class PresentationData:
 
     @property
     def output_direction(self):
-        """Task output direction in world axes, for live tip-velocity display."""
-        return self.config.task.output_direction_world
+        """Task direction in world axes (the strike target direction), for live tip-velocity display."""
+        return tuple(self.config.task.target_direction_world)
+
+    @property
+    def target(self):
+        """The strike target of the replayed episode in world coordinates, or None."""
+        try:
+            record = json.loads(str(self.replay.arrays['task_record_json']))
+        except (KeyError, ValueError):
+            return None
+        target = record.get('target_world_m')
+        return None if target is None else np.asarray(target, float)
 
     def evidence(self):
         return dict(run=str(self.directory), replay=self.filename,

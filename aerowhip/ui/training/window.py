@@ -1,6 +1,7 @@
 """Training window: configure, start, resume and monitor PPO runs; manual and automatic start share one handler."""
 from copy import deepcopy
 from pathlib import Path
+import json
 import sys
 from PySide6 import QtCore, QtWidgets
 
@@ -137,9 +138,11 @@ class TrainingWindow(QtWidgets.QMainWindow):
         central=QtWidgets.QWidget(objectName='trainingPage'); self.setCentralWidget(central)
         style.apply(self)
         layout=QtWidgets.QVBoxLayout(central); layout.setContentsMargins(20,16,20,16); layout.setSpacing(12)
-        top=QtWidgets.QHBoxLayout()
-        title=QtWidgets.QLabel('PPO training'); title.setObjectName('heading')
-        top.addWidget(title); top.addStretch()
+        top=QtWidgets.QHBoxLayout(); top.setSpacing(10)
+        title=QtWidgets.QLabel('Strike training'); title.setObjectName('heading')
+        top.addWidget(title)
+        self.subtitle=QtWidgets.QLabel(''); self.subtitle.setObjectName('muted'); top.addWidget(self.subtitle)
+        top.addStretch()
         self.status=QtWidgets.QLabel('Ready'); top.addWidget(self.status)
         self.status.setObjectName('section')
         self.start_button=QtWidgets.QPushButton('Start'); self.start_button.clicked.connect(self.start)
@@ -173,10 +176,14 @@ class TrainingWindow(QtWidgets.QMainWindow):
         self.checkpoint_button=QtWidgets.QPushButton('Choose checkpoint'); self.checkpoint_button.clicked.connect(self.choose_checkpoint); self.checkpoint_button.setEnabled(False)
         grid.addWidget(self.mode,2,0); grid.addWidget(self.checkpoint_label,2,1,1,2); grid.addWidget(self.checkpoint_button,2,3)
         layout.addWidget(setup)
-        cards=QtWidgets.QHBoxLayout(); self.cards={}
-        for key,label in (('round','Collections'),('episodes','Episodes'),('steps','Environment steps'),('gradient_updates','Gradient updates'),('elapsed','Elapsed')):
-            box=QtWidgets.QGroupBox(label); inner=QtWidgets.QVBoxLayout(box); inner.setContentsMargins(6,2,6,2)
-            value=QtWidgets.QLabel('—'); value.setObjectName('value'); inner.addWidget(value); cards.addWidget(box); self.cards[key]=value
+        cards=QtWidgets.QHBoxLayout(); cards.setSpacing(10); self.cards={}; self.card_notes={}
+        for key,label in (('round','Collections'),('episodes','Episodes'),('stage','Curriculum stage'),('strike_rate','Strike rate (window)'),
+                          ('evaluation','Last evaluation'),('elapsed','Elapsed')):
+            box=QtWidgets.QFrame(); box.setObjectName('card'); inner=QtWidgets.QVBoxLayout(box); inner.setContentsMargins(12,8,12,8); inner.setSpacing(0)
+            caption=QtWidgets.QLabel(label); caption.setObjectName('cardTitle'); inner.addWidget(caption)
+            value=QtWidgets.QLabel('—'); value.setObjectName('value'); inner.addWidget(value)
+            note=QtWidgets.QLabel(''); note.setObjectName('note'); inner.addWidget(note)
+            cards.addWidget(box,1); self.cards[key]=value; self.card_notes[key]=note
         layout.addLayout(cards)
         self.live_detail=QtWidgets.QLabel('No active worker. Start a new experiment or resume a checkpoint.')
         self.live_detail.setWordWrap(True); self.live_detail.setObjectName('muted'); layout.addWidget(self.live_detail)
@@ -246,8 +253,14 @@ class TrainingWindow(QtWidgets.QMainWindow):
         self.setup_toggle.setText(f"Training setup · PPO · {r['device'].upper()} · {r['parallel_environments']} lanes")
         self.setWindowTitle(f"Training — PPO — {self.config_path.stem}")
         stages=t['curriculum']['stages']; final=stages[-1]; rnd=v.get('randomisation',{})
+        self.subtitle.setText(f"{t['name']} · {r['parallel_environments']} lanes · {r['training_episodes']:,} episodes · {r['device'].upper()}")
+        self.config_label.setText(
+            f"Strike a target {final['target_distance_m']:g} m along +X with the cable tip (within {t['hit_radius_m']:g} m at ≥ {final['speed_threshold_mps']:g} m/s), then recover. "
+            f"{len(stages)} curriculum stages: " + ', '.join(f"{s['target_distance_m']:g} m / {s['speed_threshold_mps']:g} m/s" for s in stages) +
+            f". {v['duration_s']:g} s episodes, {v['policy_rate_hz']} Hz actions, {t['curriculum']['reference_state_fraction']:.0%} reference starts, "
+            f"{rnd.get('groups',0)} model groups per cohort. Full definition under Experiment details.")
         if True:
-            self.config_label.setText(
+            self.description_details=(
                 f"Task {t['name']}: strike a target with the cable tip, then recover. Target {final['target_distance_m']:g} m along +X, "
                 f"{t['target_below_origin_m']:g} m below the origin; hit within {t['hit_radius_m']:g} m at ≥ {final['speed_threshold_mps']:g} m/s.\n"
                 f"{r['parallel_environments']} training lanes · {r['training_episodes']} episodes · {v['duration_s']:g} s horizon, a hit ends the episode "
@@ -264,7 +277,8 @@ class TrainingWindow(QtWidgets.QMainWindow):
                 f"Heights {w['height_lower_world_m']:g}–{w['height_upper_world_m']:g} m.\n"
                 f"Evaluation: {r.get('evaluation_episodes',1)} independent deterministic episodes at the final stage every {r['evaluation_interval_episodes']} training episodes. "
                 f"Entropy {e['final_weight']:g} + {e['initial_weight']-e['final_weight']:g} exp(−{e['decay_exponent']:g} n/N); AR(1) action noise {1000*ppo['action_noise_correlation_s']:g} ms.\n"
-                "Whip event (reported, not rewarded): peak tip speed ≥ threshold, ≥ 2× the attachment's speed, tip at ≥ 90 % of the cable length.")
+                "Whip event (reported, not rewarded): peak tip speed ≥ threshold, ≥ 2× the attachment's speed, tip at ≥ 90 % of the cable length.\n\n"
+                +json.dumps(self.experiment,indent=1))
 
     def edit_settings(self):
         if self.process is not None or self.mode.currentIndex()==1:
@@ -429,12 +443,30 @@ class TrainingWindow(QtWidgets.QMainWindow):
         self.evaluation_rows=rows
         if history:
             latest=history[-1]
-            for key in ('round','episodes','steps','gradient_updates'):
+            for key in ('round','episodes'):
                 item=next((e[key] for e in reversed(history) if key in e),None)
                 self.cards[key].setText(f'{item:,}' if isinstance(item,int) else str(item) if item is not None else '—')
+            total=next((e['total_rounds'] for e in reversed(history) if 'total_rounds' in e),None)
+            self.card_notes['round'].setText(f'of {total}' if total else '')
+            updates=next((e['gradient_updates'] for e in reversed(history) if 'gradient_updates' in e),None)
+            self.card_notes['episodes'].setText(f'{updates:,} gradient updates' if isinstance(updates,int) else '')
+            stage=next((e for e in reversed(history) if e.get('phase')=='curriculum'),None)
+            if stage:
+                self.cards['stage'].setText(f"{stage['stage']+1} of {stage['stages']}")
+                self.card_notes['stage'].setText(f"target {stage['target_distance_m']:g} m · ≥ {stage['speed_threshold_mps']:g} m/s · r {stage['workspace_radius_m']:g} m")
+                self.cards['strike_rate'].setText(f"{100*stage['stage_strike_rate']:.0f} %")
+                self.card_notes['strike_rate'].setText(f"{stage['stage_episodes']} episodes in the window")
+            evaluation=next((e for e in reversed(history) if e.get('phase')=='evaluation'),None)
+            if evaluation:
+                c=evaluation.get('components',{})
+                self.cards['evaluation'].setText(f"{100*c.get('strike',0):.0f} % strikes")
+                self.card_notes['evaluation'].setText(f"{100*c.get('whip_event',0):.0f} % whip events · {100*c.get('recovered',0):.0f} % recovered · "
+                                                      f"collection {evaluation['round']}")
             seconds=int(latest.get('elapsed_s',0)); self.cards['elapsed'].setText(f'{seconds//3600:02}:{seconds//60%60:02}:{seconds%60:02}')
+            steps=next((e['steps'] for e in reversed(history) if 'steps' in e),None)
+            self.card_notes['elapsed'].setText(f'{steps:,} environment steps' if isinstance(steps,int) else '')
         self.curves.set_history(directory,history,selected)
-        self.evaluations.setHorizontalHeaderLabels(['Collection',f'Return ×{scale:g}','Whip events',
+        self.evaluations.setHorizontalHeaderLabels(['Collection','Return' if scale==1 else f'Return ×{scale:g}','Whip events',
             'Strikes','Valid','Outside workspace (s)','Workspace cost'])
         self.evaluations.setRowCount(len(rows))
         for i,e in enumerate(rows):

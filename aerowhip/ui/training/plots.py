@@ -86,6 +86,15 @@ class LearningCurves(QtWidgets.QWidget):
                 c.draw_idle()
                 return
             x = np.array([e['round'] for e in rounds], float)
+            # Curriculum stages as shaded spans behind the returns.
+            stages = [e for e in history if e.get('phase') == 'curriculum']
+            if stages:
+                edges = [e['round'] for e in stages if e.get('advanced')]
+                bounds = [x[0]-.5, *[r+.5 for r in edges], x[-1]+.5]
+                for k, (a, b) in enumerate(zip(bounds[:-1], bounds[1:])):
+                    ret.axvspan(a, b, color=PALETTE['sky'] if k % 2 else PALETTE['yellow'], alpha=.08, linewidth=0)
+                    ret.text(a+.2, .98, f'stage {k+1}', transform=ret.get_xaxis_transform(), fontsize=7,
+                             va='top', color=ROLE['reference'])
             # Episode return: per-collection median and 10-90 % band; evaluation markers.
             bands = self.returns.quantiles(directory, [e['round'] for e in rounds])
             have = np.array([b is not None for b in bands])
@@ -98,7 +107,9 @@ class LearningCurves(QtWidgets.QWidget):
                 ret.plot(*_series(rounds, 'return_mean', scale), color=ROLE['model'], label='training mean')
             if evaluations:
                 ex, ey = _series(evaluations, 'evaluation_return', scale)
-                ret.plot(ex, ey, 'o', color=ROLE['evaluation'], markersize=3.5, label='evaluation (1 case)')
+                n = evaluations[-1].get('evaluation_episodes', 1)
+                ret.plot(ex, ey, 'o', color=ROLE['evaluation'], markersize=3.5,
+                         label=f'evaluation (mean of {n})' if n > 1 else 'evaluation (1 case)')
                 bx, by = _series(evaluations, 'best_return', scale)
                 ret.step(bx, by, where='post', color=ROLE['evaluation'], linewidth=.8, linestyle='--',
                          label='best evaluation')
@@ -137,7 +148,7 @@ class LearningCurves(QtWidgets.QWidget):
                     plotted = True
             if plotted:
                 decomposition.axhline(0, color=ROLE['reference'], linewidth=.6)
-                decomposition.legend(loc='best')
+                decomposition.legend(loc='upper left', fontsize=7, ncols=2)
                 decomposition.set_title('Return decomposition (collection mean)')
                 decomposition.set_ylabel(f'×{scale:g}')
             else:

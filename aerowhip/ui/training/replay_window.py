@@ -106,6 +106,11 @@ class ReplayWindow(QtWidgets.QMainWindow):
         self.viewer._toggle_world_axes()
         self.plotter.add_axes(interactive=False, color='#344958', line_width=2)
         add_cylinder_boundary(self.plotter, **data.config.environment.workspace.description(data.scene.initial_state.position_world_m))
+        target = data.target
+        if target is not None:       # the strike target with its hit radius
+            self.plotter.add_mesh(pv.Sphere(radius=float(data.config.task.hit_radius_m), center=target), color='#E69F00',
+                                  opacity=.35, name='strike_target')
+            self.plotter.add_mesh(pv.Sphere(radius=.012, center=target), color='#E69F00', name='strike_target_centre')
         candidate = self.measurement_candidate
         if candidate is not None:
             positions = self.replay.arrays['cable_positions'][:, -1]

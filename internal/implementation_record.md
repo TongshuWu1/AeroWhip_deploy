@@ -1841,3 +1841,12 @@ User's request: one systematic, automated data collection with a single calibrat
 - An accidental full training run (64 lanes, CUDA) started from the Training window while it was
   on screen for screenshots (no automatic start exists in the code; the Start button was pressed);
   it was stopped after under a minute and its folder removed.
+- **Training window polished for the strike task** (same structure as before): header with the
+  experiment summary; six cards (collections, episodes, curriculum stage with its target/threshold/
+  radius, window strike rate, last evaluation's strike/whip-event/recovery rates, elapsed); a short
+  task description with the full definition and the experiment JSON under Experiment details;
+  learning curves with strike/whip-event/recovered outcome curves, curriculum stage bands and the
+  evaluation marker labelled by its episode count; evaluations table with whip-event and strike
+  columns; the saved-motion replay reads the task direction from `target_direction_world` and draws
+  the strike target with its hit radius (`replay_data.target`). Checked on screen with the smoke run
+  (`runs/ppo/20261027-195823-610845`, 2 collections). 107 tests pass.
