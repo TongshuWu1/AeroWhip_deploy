@@ -10,6 +10,9 @@ fraction of its scale), so F is dimensionless and comparable across parameters. 
       (what a least-squares fit would learn about it alone);
   score = min_i log10 marginal(i) over the parameters that matter: the trajectory is as good as the
       parameter it teaches least about (E-optimal flavour; IDTD's Schur score is this marginal).
+  coupling: the correlations of the parameter estimates, C = F^-1 normalised. Coupled parameters
+      (two that move the measurements alike) already lower each other's marginal; the pairs are
+      reported so it is visible which ones a trajectory fails to separate.
 Parameters: the cable fit's search vector (log EI, log Cb, Cd, log drag, residual terms) and the
 drone's (motor response, drag xy, drag z); the inertia scale is left out (not identifiable).
 """
@@ -75,19 +78,27 @@ def fisher(base_result, perturbed_results, parameters, step=RELATIVE_STEP):
     return J.T@J
 
 
-def scores(F, parameters):
-    """Per-parameter marginal information (log10) and the overall score (the weakest parameter)."""
+def scores(F, parameters, coupled=.8):
+    """Per-parameter marginal information (log10), the overall score (the weakest parameter) and the
+    parameter pairs whose estimates correlate beyond `coupled` (strongest first)."""
     n = len(parameters)
     F = np.asarray(F, float)+1e-9*np.eye(n)
     try:
         inverse = np.linalg.inv(F)
         marginal = 1./np.maximum(np.diag(inverse), 1e-300)
+        d = np.sqrt(np.maximum(np.diag(inverse), 1e-300))
+        correlation = inverse/np.outer(d, d)
     except np.linalg.LinAlgError:
         marginal = np.full(n, 1e-300)
+        correlation = np.eye(n)
     log_marginal = np.log10(np.maximum(marginal, 1e-300))
+    pairs = sorted(((parameters[i][0], parameters[j][0], float(correlation[i, j]))
+                    for i in range(n) for j in range(i+1, n) if abs(correlation[i, j]) > coupled),
+                   key=lambda r: -abs(r[2]))
     return dict(marginal_log10={p[0]: float(v) for p, v in zip(parameters, log_marginal)},
                 score=float(log_marginal.min()), weakest=parameters[int(np.argmin(log_marginal))][0],
-                log_det=float(np.linalg.slogdet(F)[1]/np.log(10)))
+                log_det=float(np.linalg.slogdet(F)[1]/np.log(10)), coupled=pairs,
+                correlation=np.round(correlation, 3).tolist())
 
 
 def trajectory_information(ensemble, firmware, motion, parameters=None, runner=None):

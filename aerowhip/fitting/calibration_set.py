@@ -68,7 +68,9 @@ def flight_windows(folder, *, root=DEFAULT_ROOT, duration_s=2., stride_s=1., min
     until, excluded = m.usable(entry) if entry else (None, ())
     result = []
     for w in windows(flight, duration_s=duration_s, stride_s=stride_s, min_seen=min_seen):
-        if w.phase.startswith(('takeoff', 'land', 'settle')) or any(w.phase.startswith(p) for p in excluded):
+        # only the recorded hover-to-hover span: no takeoff or landing, nor a safety landing ('link-landing',
+        # 'link-settling': lost link or cable over the drone), where the cable may touch the ground
+        if w.phase.startswith(('takeoff', 'land', 'settle', 'link-')) or any(w.phase.startswith(p) for p in excluded):
             continue
         if until is not None:
             # flight time of the window end, from the log's stamp/time pairing

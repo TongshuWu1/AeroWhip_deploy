@@ -2475,3 +2475,29 @@ planner's random parts failed the same constraint (not a scoring bug: fast attit
 low throttle). Hence the frequency and vertical caps above; the motor-floor constraint stays.
 The plan's step 1 is `optimize_trajectory.py`; `plan_flight.py` (primitives) remains the
 warm start and the fallback.
+
+## Dated change note — 2026-10-28 Identification Loop window, coupling report, organisation
+
+- `aerowhip.ui.planning` (`python -m aerowhip.ui.planning`, IDE launcher "Identification Loop"): the
+  five steps of the plan in one window: optimise (`optimize_trajectory.py` as a detached job, output
+  in `runs/planning/jobs/`), fly (copies the trajectory to the flight stack's
+  `calibration_data/plans/` and puts the container command on the clipboard; the window never
+  flies), measure (`envelope.py`), label (`label_sequence.py` on the newest trajectory flight) and
+  fit / check (opens Model Fit). Views: the trajectory, its information per parameter with the
+  estimate correlations and the optimiser's search, the members' predicted safety, the envelope,
+  the job log. Computing actions are disabled while `acceleration_circle_cf2.py` runs on the host
+  (process list only, no ROS query). Checked: renders offscreen on excitation_001 and the cf_6
+  envelope; the actions were not run from the window.
+- Coupling (user's question: parameters affect each other): `information.scores` already scored the
+  marginal information 1/(F⁻¹)ᵢᵢ, which accounts for coupling; it now also returns the correlation
+  of the estimates (F⁻¹ normalised) and the pairs beyond 0.8, which the optimiser prints and writes
+  into the trajectory file. Checked on a 3-parameter example (two parameters with F 10 each and
+  correlation −0.95 have marginal ≈ 1). excitation_001 predates this.
+- Fit windows exclude the safety landings too (`link-landing`, `link-settling`: lost link or cable
+  over the drone), so only the recorded hover-to-hover span is fitted (user, 2026-10-28: before and
+  after it the cable may lie on the ground). The recording itself starts after the settling hover
+  and ends after the final hover; the envelope reads parts only.
+- Flight stack: the flown `--trajectory` / `--plan` file is copied into the flight folder;
+  earlier experiment scripts moved to `scripts/legacy/` (the 9 failures of
+  test_acceleration_circle_cf2.py predate the move). The command given earlier with a host path to
+  the trajectory would not have worked in the container (only the flight stack is mounted).

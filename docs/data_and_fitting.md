@@ -210,3 +210,17 @@ estimates (0.106 against 0.109), whereas the independent-residual formula is 5�
    cancelled: shape 28.8 mm and tip 46.1 mm per 1 s segment (38.2 and 60.9 mm before the
    residual), drone position 48.7 mm and tilt 1.0° (unchanged); strokes: tip error 31.7 mm (36.7
    before), tip peak speed 0.90 of the measured (0.94 before), one frame late.
+
+## Planned identification
+
+Each identification flight is planned: `scripts/optimize_trajectory.py` searches for a free
+trajectory (a sum of sines per axis, at rest at both ends, 0.1–1.2 Hz) whose peak horizontal
+acceleration is one level above what the cable has flown cleanly (the measured envelope), that
+every member of an ensemble of fitted models predicts safe (the cable stays below the
+attachment, motors above a floor), and that teaches the fit the most about the parameter it knows
+least: the Fisher information of the simulated marker and attitude measurements, scored per
+parameter after the others are allowed to vary (so coupled parameters count as poorly
+determined), with the correlations of the estimates reported. The Identification Loop window
+(`python -m aerowhip.ui.planning`) runs the loop: optimise, fly, measure the envelope, label and
+fit, check. Only the recorded span from the settling hover to the final hover is used; takeoff,
+landing and safety landings are excluded, since the cable may then touch the ground.

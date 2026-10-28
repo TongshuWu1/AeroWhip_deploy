@@ -155,12 +155,18 @@ def main():
         raise SystemExit('no feasible trajectory found; lower --level or widen --error-limit')
     args.output.parent.mkdir(parents=True, exist_ok=True)
     T.write(best['theta'], args.output, extra=dict(level=level, score=best['score'], weakest=best['information']['weakest'],
-                                                   marginal_log10=best['information']['marginal_log10'], members=[n for n, _ in members],
+                                                   marginal_log10=best['information']['marginal_log10'], coupled=best['information']['coupled'],
+                                                   parameters=[p[0] for p in params], correlation=best['information']['correlation'],
+                                                   members=[n for n, _ in members], member_rows=best['members'],
                                                    worst_rise=best['worst_rise'], summary=best['summary']))
     print(f'\nbest: score {best["score"]:.3f}, weakest parameter {best["information"]["weakest"]}, worst member rise {best["worst_rise"]:+.2f} m, '
           f'{best["summary"]} -> {args.output}')
     for name, v in sorted(best['information']['marginal_log10'].items(), key=lambda kv: kv[1]):
         print(f'  {name:28s} {v:6.2f}')
+    coupled = best['information']['coupled']
+    print('coupled estimates (|correlation| > 0.8): '+('none' if not coupled else ''))
+    for a, b, c in coupled[:8]:
+        print(f'  {a} ~ {b}: {c:+.2f}')
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)
         args.report.write_text(json.dumps(dict(setup=args.setup, level=level, members=[n for n, _ in members], parameters=[p[0] for p in params],

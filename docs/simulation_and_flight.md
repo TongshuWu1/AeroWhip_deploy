@@ -49,17 +49,15 @@ checkout, open a shell configured for the custom simulation:
 ./docker/shell.sh --custom-sim
 ```
 
-Then run a flight script inside that shell. For example, for `cf_2`:
+Then run the flight script inside that shell (the robot is the one enabled in
+`config/crazyflies.yaml`). For example, an optimised excitation trajectory:
 
 ```bash
-python3 /workspace/scripts/full_state_pva_csv_repeat.py \
-  /workspace/scripts/trajectory_csv/fullstate_30hz_M5_replan.csv \
-  --drone cf_2 \
-  --repeats 3 \
-  --between-hover 15 \
-  --pre-hover 15 \
-  --post-hover 3
+python3 /workspace/scripts/acceleration_circle_cf2.py --trajectory /path/to/excitation.json
 ```
+
+The earlier CSV trajectory players are kept in the Crazyswarm checkout's
+`scripts/legacy/`.
 
 Use ordinary spaces in copied multiline commands. The custom shell selects ROS
 domain `142` and enables simulation time; client timing follows the native
