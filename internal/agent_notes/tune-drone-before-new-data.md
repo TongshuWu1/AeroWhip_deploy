@@ -18,7 +18,7 @@ Status end of 2026-10-28: firmware 2026.08 flashed; extQuatStdDev 0.01 adopted; 
 (kw_xy default) but commented out in the YAML; integral not flown. cf_2 grounded: a motor failed
 after an emergency drop and the replacement does not spin (ESC channel suspected); a colleague will
 fix it or another Bolt is used (then: own robot name, physical.yaml entry, firmware flash, gain
-re-check, data kept separate from cf_2). Abort-rule change proposed, awaiting the user's decision.
+re-check, data kept separate from cf_2). Abort rule changed on the user's decision (2026-10-28): a lost link lands the drone (crazyswarm2 e9d246d).
 
 Fresh start on cf_6 (2026-10-28, user): all cf_2 data, logs and runs archived (dated archive
 folders), manifest emptied to cf_6; tuning restarts with plans cf6_baseline, cf6_estimator,
