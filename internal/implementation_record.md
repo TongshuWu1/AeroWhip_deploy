@@ -2764,3 +2764,18 @@ Session ended before the user moves to the other computer. `internal/handoff_202
 is the entry point (CLAUDE.md points to it): state, the move, how to run the loop, the user's
 decisions, verified vs not, open findings, next steps. Agent notes synced from the memory folder.
 No code changed.
+
+## Dated change note — 2026-10-28 night: cleanup and data into git (user)
+
+Audit before the push. Removed (dead or superseded; in git history): scripts mix_prescreen,
+residual_targets, custom_simulation_test; modules deployment/ros_test, viewer/saved_replay; the flight
+stack's scripts/legacy and test_audit_regressions; merged local branches and a stale agent worktree.
+Archived: superseded internal notes to internal/archive/. Moved: the literature notes into
+internal/literature/. Added: scripts/README.md. Kept although unused by the identification loop:
+training, policy, whip evaluation, interactive tools, tuning tools, the diagnostics cited here.
+`calibration_set.DEFAULT_ROOT` is now relative to the repository (`AEROWHIP_CALIBRATION_DATA`
+overrides). Data now tracked: AeroWhip runs/ (except the old PPO checkpoints) and the lab scan
+sources; the flight stack's calibration_data/. Removed a test artifact:
+runs/planning/excitation_002_flown_001.npz (the measured-flight overlay cached from the synthetic
+test, which would have shown a synthetic flight as round 1 flown). Tests: AeroWhip 106 pass, the known
+reset-bank failures; crazyswarm2 22 pass, 9 stale (see the handoff).

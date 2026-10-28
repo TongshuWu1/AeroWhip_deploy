@@ -18,20 +18,27 @@ An **online fit** estimates six drone/cable parameters every second during a fli
 is the **running model** the planner uses. **Nothing of this has flown for real yet.** Round 1
 (`runs/planning/excitation_002.json`) is planned, rehearsed in the simulator and ready.
 
-Not pushed: AeroWhip `engine-v2` is 40 commits ahead of origin, crazyswarm2 `main` 28 ahead
-(as of writing; the user decides when to push).
+Pushed (code and data) to GitHub at the end of the session: AeroWhip `engine-v2`, crazyswarm2 `main`.
+Cleanup before the push (see the record): dead scripts and modules removed, `scripts/legacy/` removed
+from the flight stack, superseded internal notes in `internal/archive/`, `scripts/README.md` indexes
+the scripts. The 9 failing tests in crazyswarm2 `test_acceleration_circle_cf2.py` are stale (written
+before the arena limits, the estimator tuning and cf_6: fake drone outside the area, missing
+parameters, robot name); the flight script itself is fine.
 
 ## Switching to the other computer (the user is doing this now)
 
-1. Code: push both repos and clone them there (or copy `~/Documents/PHD` whole; a clone lacks
-   `CLAUDE.md`, which `.git/info/exclude` keeps out of git — `AGENTS.md` has the same rules and pointer). Keep the **same
-   user name and paths** (`/home/tony-lab/Documents/PHD/...`): `aerowhip/fitting/calibration_set.py`
-   has `DEFAULT_ROOT` as an absolute path, and the manifest and run JSONs store absolute folders.
-2. Data not in git, copy by hand: `Crazyflie/crazyswarm2_jazzy_whipping/calibration_data/` (all
-   flights, manifest `model_calibration.yaml`, `envelope/`, `plans/`, firmware bundles, the archived
-   cf_2 data, `contact.json` caches) and `AeroWhip_deploy/runs/` (the archived cf_2 fits under
-   `runs/archive_cf_2_2026-10-28/fits/` are the current prior for everything; `runs/planning/`
-   holds round 1; `runs/online/` the validation runs). `data/lab_scan/` (the Polycam scans) too.
+1. Code **and data are on GitHub** (pushed 2026-10-28 night): clone both into one folder, side by side:
+   `<folder>/AeroWhip_deploy` (branch **`engine-v2`**: `git checkout engine-v2` after cloning; `main` is
+   older) and `<folder>/Crazyflie/crazyswarm2_jazzy_whipping` (branch `main`). The AeroWhip code finds
+   the flight data beside it (`../Crazyflie/crazyswarm2_jazzy_whipping/calibration_data`), whatever the
+   user name; `AEROWHIP_CALIBRATION_DATA` overrides it. A clone lacks `CLAUDE.md` (excluded from git
+   locally); `AGENTS.md` has the same rules and the pointer here.
+2. In git now: the flight data (`calibration_data/`: cf_6, cf_6_nocable, the archived cf_2 flights,
+   manifest, envelope, plans, firmware bundles) and AeroWhip `runs/` (the archived cf_2 fits that are
+   the current prior, reset bank, diagnostics, round 1, online validation runs) and the lab scan
+   sources. **Not** in git, left on the old computer: the old cf_2 PPO training checkpoints
+   (`runs/archive_cf_2_2026-10-28/ppo*`, 1.1 GB, a retired model), AeroWhip `output/` (9 GB of viewer
+   and simulation evidence) and `tmp/` (4 GB scratch), the flight stack's `logs/`.
 3. AeroWhip setup: `README.md` → Setup (venv, `pip install -e ".[build,dev]"`, `scripts/build_engine.py`).
    Added this session to the venv: `trimesh`, `pymeshlab` (lab scan only).
 4. Flight stack: the Docker image (`crazyswarm2:jazzy-pinned`; `docker save`, or rebuild from
@@ -41,7 +48,7 @@ Not pushed: AeroWhip `engine-v2` is 40 commits ahead of origin, crazyswarm2 `mai
    machine (`~/.claude/projects/<key of the folder you start in>/memory/`; on the old machine the key
    was `-home-tony-lab`). `MEMORY.md` is the index.
 6. Check after the move: AeroWhip `pytest` → 106 pass, 11 fail/error (all the missing reset bank,
-   known); crazyswarm2 `pytest scripts/tests` → 25 pass, 9 fail (old `test_acceleration_circle_cf2.py`
+   known); crazyswarm2 `pytest scripts/tests` → 22 pass, 9 fail (old `test_acceleration_circle_cf2.py`
    failures, known, unrelated). Open the window once: `python -m aerowhip.ui.planning`.
 7. The old machine (i7-13700K) was unstable all day: random worker crashes, segfaults in tests,
    whole-PC crashes, and a corrupted system library (`libLLVM.so.20.1` failed `dpkg --verify`; it
