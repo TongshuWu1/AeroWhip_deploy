@@ -54,5 +54,5 @@
     0.3971693249999999
   ],
   "motor_layout": "crazyflie legacy mixer: M1 front-right, M2 rear-right, M3 rear-left, M4 front-left; x forward, y left",
-  "calibration_note": "drone cf_6 from 2026-10-28 (cf_2 before): arm measured 2026-10-27 on the same frame: adjacent motor centres 9.8 cm (square), so +-0.049 m per body axis (arm 0.0693 m); propeller plane 0.015 m below the tracking origin on cf_6 (0.010 on cf_2), and 0.008 m above the centre of mass on both (centre of mass 0.023 m below the origin on cf_6, 0.018 on cf_2: same frame, markers mounted 5 mm higher); response time from stage 2 on cf_2, to be refitted on cf_6"
+  "calibration_note": "drone cf_6 from 2026-10-28 (cf_2 before): arm measured 2026-10-27 on the same frame: adjacent motor centres 9.8 cm (square), so +-0.049 m per body axis (arm 0.0693 m); propeller plane 0.015 m below the tracking origin on cf_6 (0.010 on cf_2), and 0.008 m above the centre of mass on both (centre of mass taken 0.025 m below the origin on cf_6 (user's assumption, 2026-10-28; 0.018 on cf_2): on the centre line, not measured); response time from stage 2 on cf_2, to be refitted on cf_6"
 }

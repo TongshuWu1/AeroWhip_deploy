@@ -25,7 +25,7 @@ Defined in [configs/physics/drone_cable.json](../configs/physics/drone_cable.jso
 | Drone mass (with battery and clamp, without cable) | 0.156 kg (weighed 2026-10-28) |
 | Cable and marker mass (total) | 0.016 kg (weighed 2026-10-27; assembly 0.162 kg) |
 | Cable length / mesh | 0.977 m / 10 edges between 11 nodes (the marker intervals from the labelled flights: 83.2, 100.1, 99.3, 101.7, 100.3, 98.9, 101.2, 98.9, 100.1, 96.9 mm, the means over all frames of the 21 cable flights, std about 1 mm) |
-| Tracking origin → centre of mass / → attachment | (0, 0, −0.023) / (0, 0, −0.055) m (attachment measured; the centre of mass is nominal, 0.008 m below the measured propeller plane at −0.015 m) |
+| Tracking origin → centre of mass / → attachment | (0, 0, −0.025) / (0, 0, −0.055) m (attachment measured; the centre of mass is assumed on the centre line, 1 cm below the measured propeller plane at −0.015 m) |
 | Bending stiffness EI / bending damping Cb | 1.40e−4 N m² (×/÷ 1.65) / 4.15e−5 N m² s (×/÷ 1.21), 95 % |
 | Cable diameter / normal drag coefficient Cd / air density | 3.5 mm / 0.75 ± 0.10 / 1.2 kg m⁻³ |
 | Linear drag | 0.178 s⁻¹ (×/÷ 1.21; on node velocity, mass proportional) |
