@@ -23,11 +23,20 @@ class Manifest:
             if f['role'] not in ROLES:
                 raise ValueError(f"{f['folder']}: unknown role {f['role']!r}")
 
-    def vehicle(self, setup='cf_2'):
+    def default_setup(self):
+        """The cable setup of the one vehicle the manifest describes (its name; '<name>_nocable' is
+        the same drone without the cable). With several vehicles the setup must be given."""
+        vehicles = [k for k in self.data['vehicle'] if isinstance(self.data['vehicle'][k], dict) and 'drone_mass_kg' in self.data['vehicle'][k]]
+        if len(vehicles) != 1:
+            raise ValueError(f'{self.path}: {len(vehicles)} vehicles ({vehicles}); name the setup')
+        return vehicles[0]
+
+    def vehicle(self, setup=None):
         """Measured values of the vehicle (the setup's base name without '_nocable')."""
+        setup = self.default_setup() if setup is None else setup
         return self.data['vehicle'][setup.replace('_nocable', '')]
 
-    def measurement(self, name, setup='cf_2'):
+    def measurement(self, name, setup=None):
         entry = self.vehicle(setup)[name]
         if entry.get('value') is None:
             raise ValueError(f'{name} is not measured yet ({entry.get("status", "missing")})')

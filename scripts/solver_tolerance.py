@@ -28,7 +28,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aerowhip.fitting import flight_cable, flight_drone
-from aerowhip.fitting.calibration_set import flight_windows, folders, split
+from aerowhip.fitting.calibration_set import flight_windows, folders, split, default_setup
 from aerowhip.physics.model import Model
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
 from aerowhip.takes.calibration_flights import load
@@ -86,7 +86,7 @@ def main():
     args = parser.parse_args()
     base = load_model_configuration(DEFAULT_MODEL)
     firmware = flight_drone.firmware_config()
-    found = folders('cf_2')
+    found = folders()
     reference_tolerance = args.tolerances[0]
     out = dict(model=str(DEFAULT_MODEL), tolerances=args.tolerances, reference_tolerance=reference_tolerance,
                coupled={}, cable={})
@@ -109,7 +109,7 @@ def main():
                 print(f"{key:18s} {t:.0e}: drone max {m['drone_max_m']*1e3:.4f} mm, marker max {m['marker_max_m']*1e3:.4f} mm, "
                       f"peak tip speed {m['peak_tip_speed_relative_max']*100:.4f} %, shift <= {m['peak_time_shift_frames_max']} frames, "
                       f"failed {m['failed']}; {seconds[t]:.1f} s vs {seconds[reference_tolerance]:.1f} s", flush=True)
-    train, held = split('cf_2', duration_s=1., stride_s=1.)
+    train, held = split(default_setup(), duration_s=1., stride_s=1.)
     windows = [w for group in (train, held) for v in group.values() for w in v]
     runs, seconds = {}, {}
     for tolerance in args.tolerances:

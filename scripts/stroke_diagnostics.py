@@ -26,7 +26,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aerowhip.fitting import coupled, flight_drone
-from aerowhip.fitting.calibration_set import folders, is_held_out
+from aerowhip.fitting.calibration_set import folders, is_held_out, default_setup
 from aerowhip.fitting.least_squares import ProcessRunner, bias_profile, strong_correlations, uncertainty
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
 from aerowhip.physics.state import quaternion_xyzw_to_rotation_matrix
@@ -250,7 +250,7 @@ def main():
     config = load_model_configuration(DEFAULT_MODEL)
     firmware = tomllib.loads(flight_drone.FIRMWARE.read_text())
     out = dict(horizon_s=args.horizon, lead_s=args.lead, phases=args.phases, threshold_m_s2=THRESHOLD, results={})
-    for setup, cable in (('cf_2_nocable', False), ('cf_2', True)):
+    for setup, cable in ((default_setup(cable=False), False), (default_setup(), True)):
         groups = stroke_windows(setup, args.horizon, args.lead, tuple(args.phases))
         groups = {n: v for n, v in groups.items() if v}
         items = [item for v in groups.values() for item in v]

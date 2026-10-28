@@ -935,7 +935,7 @@ class DataView(QtWidgets.QScrollArea):
         rows, colours, tips = [], {}, {}
         for (setup, motion), entries in sorted(groups.items()):
             roles = sorted({e['role'] for e in entries})
-            cable = setup == 'cf_2' and any(e['role'] in ('fit', 'held_out') for e in entries)
+            cable = not setup.endswith('_nocable') and any(e['role'] in ('fit', 'held_out') for e in entries)
             labelled = sum((self.manifest.folder(e)/'cable_labels.npz').exists() for e in entries if e['role'] in ('fit', 'held_out'))
             used = sum(e['role'] in ('fit', 'held_out') for e in entries)
             i = len(rows)

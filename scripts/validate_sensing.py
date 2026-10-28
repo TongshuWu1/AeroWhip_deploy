@@ -84,7 +84,7 @@ def main():
     attachment = np.asarray(model['attachment']['position_tracking_m'], float)
     config = experiment.environment.sensing
     results = {}
-    for motion, folder in folders('cf_2').items():
+    for motion, folder in folders().items():
         if not (folder/'cable_reconstruction.npz').exists():
             print(motion, 'skipped: no reconstruction'); continue
         passes = [synthetic(folder, config, arc, attachment, args.seed) for _ in range(2)]

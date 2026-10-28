@@ -32,7 +32,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aerowhip.fitting import coupled, flight_drone
-from aerowhip.fitting.calibration_set import is_held_out
+from aerowhip.fitting.calibration_set import is_held_out, default_setup
 from aerowhip.fitting.least_squares import ProcessRunner
 from aerowhip.fitting.progress import Progress
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
@@ -74,7 +74,7 @@ def _stroke_replay(parameters):
 
 def stroke_test(config, firmware, biases, horizon):
     """Per-stroke metrics on the decay, strokes and whip flights, summarised per role."""
-    groups = {n: v for n, v in stroke_diagnostics.stroke_windows('cf_2', horizon).items() if v}
+    groups = {n: v for n, v in stroke_diagnostics.stroke_windows(default_setup(), horizon).items() if v}
     items = [item for v in groups.values() for item in v]
     runner = ProcessRunner(items, _stroke_replay)
     results = [r for r, _ in runner((config, firmware, biases))]

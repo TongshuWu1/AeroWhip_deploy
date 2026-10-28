@@ -27,7 +27,7 @@ WORDS = {'com_z': 'centre of mass height (m)', 'attachment_z': 'attachment heigh
          'log10_Cb': 'log10 Cb', 'Cd': 'normal drag Cd', 'log10_drag': 'log10 linear drag'}
 
 
-def segments(horizon, setup='cf_2'):
+def segments(horizon, setup=None):
     """({name: [(window, flight)]} fit flights, {...} held out) of the cable flights, with markers."""
     train, held = {}, {}
     for name, folder in folders(setup).items():

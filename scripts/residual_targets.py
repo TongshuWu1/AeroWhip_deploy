@@ -151,7 +151,7 @@ def main():
     args = parser.parse_args()
     t0 = time.time()
     config = load_model_configuration(DEFAULT_MODEL)
-    items = [(folder, config, args.window, 'held_out' if is_held_out(folder) else 'fit') for folder in folders('cf_2').values()]
+    items = [(folder, config, args.window, 'held_out' if is_held_out(folder) else 'fit') for folder in folders().values()]
     runner = ProcessRunner(items, _prepare, chunks_per_worker=1)
     results = [r for r, message in runner(None) if r is not None]
     runner.close()

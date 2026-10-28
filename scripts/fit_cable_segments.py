@@ -34,7 +34,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aerowhip.fitting import flight_cable
-from aerowhip.fitting.calibration_set import is_held_out, split
+from aerowhip.fitting.calibration_set import is_held_out, split, default_setup
 from aerowhip.fitting.least_squares import Fit, FAILED_RESIDUAL_M, ProcessRunner, strong_correlations, uncertainty
 from aerowhip.fitting.progress import Progress
 from aerowhip.physics.model import Model
@@ -248,11 +248,11 @@ def main():
         # --horizon long; the role follows the flight
         import stroke_diagnostics
         train, held = {}, {}
-        for name, items in stroke_diagnostics.stroke_windows('cf_2', args.horizon).items():
+        for name, items in stroke_diagnostics.stroke_windows(default_setup(), args.horizon).items():
             if items:
                 (held if is_held_out(items[0][1].folder) else train)[name] = [w for w, _ in items]
     else:
-        train, held = split('cf_2', duration_s=args.horizon, stride_s=args.horizon)
+        train, held = split(default_setup(), duration_s=args.horizon, stride_s=args.horizon)
     progress.phase_done(math.nan)
     progress.phase(1)
     residuals = Residuals(config, train, parameters)

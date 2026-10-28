@@ -84,7 +84,7 @@ def main():
     attachment = np.asarray(model['attachment']['position_tracking_m'], float)
     length = float(np.sum(model['cable']['marker_interval_lengths_m']))
     results = {}
-    for k, (motion, folder) in enumerate(folders('cf_2').items()):
+    for k, (motion, folder) in enumerate(folders().items()):
         (first, frames), (second, _) = replay(folder, arc, attachment, length), replay(folder, arc, attachment, length)
         same = {key: v for key, v in first.items() if key != 'seconds_per_frame'} == {key: v for key, v in second.items() if key != 'seconds_per_frame'}
         if not same:

@@ -81,7 +81,7 @@ def main():
     args = parser.parse_args()
     config = load_model_configuration(DEFAULT_MODEL)
     firmware = flight_drone.firmware_config()
-    found = folders('cf_2')
+    found = folders()
     out = dict(model=str(DEFAULT_MODEL), steps_s=args.steps, reference_step_s=args.steps[-1], results={})
     t0 = time.time()
     for motion in args.flights:

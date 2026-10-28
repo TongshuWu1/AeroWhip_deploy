@@ -22,7 +22,7 @@ def main():
     parser.add_argument('--labels', default='cable_labels.npz', help='cable_labels.npz (sequence labels) or cable_labels_filter.npz')
     args = parser.parse_args()
     flights = {}
-    for motion, folder in folders('cf_2').items():
+    for motion, folder in folders().items():
         flights[motion] = s = flight_statistics(folder, args.labels)
         print(f"{motion:12s} frames {s['camera']['frames']:5d}  in-reach <10: {s['camera']['frames_in_reach_lt10']*100:5.2f} %  "
               f"label gap frames: {s['labels_statistics']['frames_with_gap']*100:5.2f} %  "

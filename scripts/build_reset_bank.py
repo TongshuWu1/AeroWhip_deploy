@@ -55,7 +55,7 @@ def main():
     replay = flight_drone.DroneReplay(config, flight_drone.firmware_config())
     native_model = replay.model.native
     states, sources, times, tip_speeds = [], [], [], []
-    for name, folder in folders('cf_2').items():
+    for name, folder in folders().items():
         if not name.startswith('whip'):
             continue
         flight = load(folder)

@@ -103,7 +103,7 @@ def main():
                         help='filter time: the 10 ms camera frame clock, or the recorded (host receipt) stamps')
     args = parser.parse_args()
     results = {}
-    for motion, folder in folders('cf_2').items():
+    for motion, folder in folders().items():
         first, second = flight_check(folder, args.snap, args.clock), flight_check(folder, args.snap, args.clock)
         if json.dumps(first) != json.dumps(second):
             raise RuntimeError(f'{motion} did not reproduce')

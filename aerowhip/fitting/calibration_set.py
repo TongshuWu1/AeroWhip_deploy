@@ -29,15 +29,24 @@ def named(entries):
     return {(f['motion'] if count[f['motion']] == 1 else f"{f['motion']}/{Path(f['folder']).name}"): f for f in entries}
 
 
-def folders(setup, root=DEFAULT_ROOT, roles=('fit', 'held_out')):
-    """{name: folder} of every flight of one setup ('cf_2' with cable, 'cf_2_nocable' without)."""
+def default_setup(root=DEFAULT_ROOT, cable=True):
+    """The manifest's one vehicle as a setup name: with the cable, or '<name>_nocable'."""
+    name = manifest(root).default_setup()
+    return name if cable else name+'_nocable'
+
+
+def folders(setup=None, root=DEFAULT_ROOT, roles=('fit', 'held_out')):
+    """{name: folder} of every flight of one setup (the vehicle's name with the cable, '<name>_nocable'
+    without; None: the manifest's vehicle with the cable)."""
     m = manifest(root)
+    setup = m.default_setup() if setup is None else setup
     return {name: m.folder(f) for name, f in named(m.flights(setup, roles=roles)).items()}
 
 
-def held_out(setup='cf_2', root=DEFAULT_ROOT):
+def held_out(setup=None, root=DEFAULT_ROOT):
     """Names (as in `folders`) of the flights held out of every fit."""
     m = manifest(root)
+    setup = m.default_setup() if setup is None else setup
     return tuple(name for name, f in named(m.flights(setup)).items() if f['role'] == 'held_out')
 
 

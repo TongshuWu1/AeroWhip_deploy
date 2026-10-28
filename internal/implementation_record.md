@@ -2401,3 +2401,28 @@ the real closed loop, and the sim's closed-loop command against the real one is 
 check. For the cable itself the remaining gap is ~25 % in the rise, a parameter-level gap, to be
 fitted with stroke windows weighed in; a differentiable engine is not needed for that (finite-
 difference Jacobians in the batch runtime on ~6–12 parameters).
+
+## Dated change note — 2026-10-28 planned identification: flight-script plan mode, cable watch, envelope, ensemble, bracket check
+
+Implementation of `internal/safe_planned_identification.md`, first parts.
+Flight stack (crazyswarm2 bcf9d84, edb4f38): `--plan FILE` flies a planned flight (bounded primitive
+parts, the planner's output); cable setups watch the raw cloud every frame and land at ~0.5 m/s with
+the motors running when two or more points are over 5 cm above the attachment for 0.15 s (the
+flips showed +0.28 m, normal strokes −0.07 m); `scripts/envelope.py` tabulates per kind/heading/level
+the cable's highest rise, share of frames over the drone, tilt and outcome (cf_6: sharp stops on x
+at 3 m/s² clean twice, −0.01 m; at 6 m/s² +0.50 m, 8 % of frames over, both failed). 15 tests on
+the simulated drone pass (link loss, battery run, cable watch, plan files).
+Here: the fitting code's setup is now the manifest's one vehicle (`Manifest.default_setup`,
+`calibration_set.default_setup`; the 'cf_2' literals are gone); `aerowhip/planning/` with the cable
+measures (highest node above the attachment: the flip measure; the first-link angle is not), phase
+windows cut from recordings without requiring labels after the start, and the ensemble
+(`Ensemble`: members drawn from the fits' clustered uncertainties, plus named bracket members).
+`scripts/bracket_check.py` on `cf_6/mix_a/002` 'decay 0 6' (2.5 s, full coupled replay from the sent
+commands, flown gains): adopted model +0.22 m, the 16 members sampled at 2σ of the fit's
+uncertainty +0.16..+0.25 m, measured +0.29 m; reached only by the bracket members with the bending
+damping ÷3 (+0.31), ÷10 (+0.35), with the drag halved and damping ÷3 (+0.37). So the fit's
+uncertainty does not cover the sharp-stroke response; a less damped cable does, which is what the
+stroke-window previews showed earlier today. For planning the ensemble must include the damping
+brackets (`runs/planning/bracket_mix_a_002.json`). The test suite: 100 pass; 11 fail or error, all
+on the archived reset bank (`runs/reset_bank/whip.npz` no longer exists after the fresh start; to be
+rebuilt from cf_6 recordings before training).
