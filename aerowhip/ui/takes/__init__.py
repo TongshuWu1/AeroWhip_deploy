@@ -1,1 +1,1 @@
-"""Take-processing manager and recorded-take replay windows."""
+"""Cable-marker label review window (scripts/label_cable.py)."""

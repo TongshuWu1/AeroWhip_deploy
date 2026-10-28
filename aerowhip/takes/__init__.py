@@ -1,1 +1,1 @@
-"""Recorded-take discovery, preparation and inspection."""
+"""Recorded calibration flights: loading on the camera frame clock, and cable-marker labels."""

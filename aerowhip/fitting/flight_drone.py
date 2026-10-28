@@ -29,6 +29,23 @@ def firmware_config(path=FIRMWARE):
     return tomllib.loads(path.read_text())
 
 
+def vehicle(base, x, *, cable):
+    """A configuration with the stage-2 vehicle parameters x = (roll/pitch inertia scale, motor arm
+    scale, motor response s, command delay s) and the weighed drone mass from the calibration
+    manifest; without the cable it is `drone_only`."""
+    from aerowhip.fitting.calibration_set import manifest
+    inertia, arm, response, delay = x
+    c = deepcopy(base) if cable else drone_only(base)
+    c['drone']['mass_kg'] = manifest().measurement('drone_mass_kg')
+    J = c['drone']['inertia_body_about_com_kg_m2']
+    J[0][0] *= float(inertia); J[1][1] *= float(inertia)
+    c['controller'] = dict(c['controller'], command_delay_s=float(delay))
+    c['actuator'] = deepcopy(c['actuator'])
+    c['actuator']['motor_positions_com_m'] = [[q[0]*float(arm), q[1]*float(arm), q[2]] for q in c['actuator']['motor_positions_com_m']]
+    c['actuator']['response_time_s'] = [float(response)]*4
+    return c
+
+
 def drone_only(config):
     """The model without cable: the engine needs one, so a single 2 cm link of 1 mg remains. Its
     effect on the drone is below 0.12 mm over 2 s (a 0.1 g ten-link cable moved the drone by up to
@@ -75,7 +92,7 @@ def centred_state(window, half=5):
 class DroneReplay:
     def __init__(self, config, firmware, *, delay_s=None):
         self.config, self.firmware = config, firmware
-        self.model = Model(config, load_weights=False)
+        self.model = Model(config)
         self.native = native_module()
         self.delay = config['controller']['command_delay_s'] if delay_s is None else delay_s
         self.period = config['controller']['controller_period_s']

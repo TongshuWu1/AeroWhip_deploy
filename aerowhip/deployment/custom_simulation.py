@@ -102,9 +102,9 @@ class RosSimulationSource(SimulationSource):
         self._packet = None
         self.display_epoch = 0
         if hasattr(commands, 'acceleration_only'):
-            from aerowhip.deployment.acceleration_control import RosController
-            simulation.dynamics.controller = RosController(simulation.dynamics.model, commands)
-            simulation.dynamics.controller.set_command(simulation.dynamics.applied_command)
+            # An armed acceleration-only flight script runs the host law itself: its acceleration
+            # goes straight to the firmware; otherwise the simulated host tracks its P/V/A reference.
+            simulation.dynamics.controller.direct = lambda: commands.acceleration_only and commands.armed
         super().__init__(simulation)
 
     def _publish(self):

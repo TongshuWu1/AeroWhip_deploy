@@ -25,11 +25,10 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aerowhip.fitting import coupled
+from aerowhip.fitting.flight_drone import FIRMWARE
 from aerowhip.fitting.least_squares import Fit, strong_correlations, uncertainty
 from aerowhip.fitting.progress import Progress
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fit_firmware_drone import FIRMWARE
 
 BOUNDS = dict(com_z=(-.08, .02), attachment_z=(-.058, -.052), log10_EI=(-9., -3.), log10_Cb=(-7., -1.),
               Cd=(0., 6.), log10_drag=(-4., .5))

@@ -86,12 +86,12 @@ def main():
             'command_timestep_s': trajectory.timestep_s,
             'physics_maximum_timestep_s': simulation.dynamics.model.physics_dt,
             'command_delay_s': simulation.dynamics.delay_s,
-            'controller': 'geometric_motor',
+            'controller': 'flight_pipeline (host PID, firmware law)',
             'controller_period_s': simulation.dynamics.controller_period_s,
             'command_columns': arrays['command_columns'].tolist(),
-            'command_convention': 'World P/V/A at tracking origin (m, m/s, m/s^2); '
-                                  'acceleration excludes gravity; yaw in rad; omega in nominal desired body rad/s '
-                                  '(legacy zero-yaw-rate packets expand to three zero body rates).',
+            'command_convention': 'Reference P/V at tracking origin (m, m/s); acceleration (m/s^2, gravity '
+                                  'excluded) is the host command sent to the firmware (reference + host PID + hover trim); '
+                                  'yaw in rad; body rates unused.',
             'sample_convention': 'State row k is at time_s[k]. Requested/applied command rows are '
                                  'left-endpoint snapshots; exact event times/values are retained separately.',
             'acceleration_convention': 'World tracking-origin backward velocity difference; '

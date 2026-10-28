@@ -17,7 +17,7 @@ from aerowhip.paths import ROOT
 
 PHYSICS = ROOT/'configs/physics/drone_cable.json'
 ACTUATOR = ROOT/'configs/actuators/drone.json'
-CONTROLLER = ROOT/'configs/controllers/geometric.toml'
+CONTROLLER = ROOT/'configs/controllers/onboard.toml'
 FIRMWARE = ROOT/'configs/controllers/crazyflie_firmware.toml'
 FITS = ROOT/'runs/fits'
 PYTHON = ROOT/'.venv/bin/python'
@@ -106,12 +106,10 @@ class ThrustMap(Stage):
 
     def summary(self, r):
         before, after = r['current'], r['best']
-        adopt = r.get('adopt', {})
+        adopt = r['adopt']
         names = list(self.current())
-        # results before the motor-spread factor have no 'adopt' block: the fitted map as it is
-        fitted = ([adopt['thrust_scale'], adopt['thrust_exponent'], adopt['voltage_slope_v_inv']] if adopt
-                  else list(after['x']))
-        spread = r.get('motor_spread_factor')
+        fitted = [adopt['thrust_scale'], adopt['thrust_exponent'], adopt['voltage_slope_v_inv']]
+        spread = r['motor_spread_factor']
         rows = []
         for i, (band, value) in enumerate(after['bands'].items()):
             rows.append([band, value['samples'], before['bands'].get(band, {}).get('mean_ratio'), value['mean_ratio']])
@@ -119,8 +117,7 @@ class ThrustMap(Stage):
             headline=[('map / required thrust, rms over PWM bins (%)', before['bin_rms']*100, after['bin_rms']*100)],
             parameters=[(n, b, a) for n, b, a in zip(names, before['x'], fitted)],
             flights=dict(columns=['thrust band', 'samples', 'ratio before', 'ratio after'], rows=rows),
-            notes=[f"{r['samples']} motor samples from {len(r['flights'])} flights; " +
-                   (f'motor-spread factor {spread:.3f} folded into κ' if spread else 'no motor-spread factor (older result)')])
+            notes=[f"{r['samples']} motor samples from {len(r['flights'])} flights; motor-spread factor {spread:.3f} folded into κ"])
 
     def adopt(self, r):
         values = r['adopt']
@@ -141,47 +138,9 @@ class Drone(Stage):
                 'motor response (s)': actuator['response_time_s'][0], 'command delay (s)': controller['command_delay_s'],
                 'drag xy (1/s)': drag[0], 'drag z (1/s)': drag[2]}
 
-    def adopt_values(self, r):
-        """Absolute values to write. Results written before the 'adopt' block hold only scales of
-        the configuration at fit time; they are converted only if the parameters fitted in absolute
-        terms still start from the configuration now (evidence that it has not changed since)."""
-        if 'adopt' in r:
-            return r['adopt']
-        current = list(self.current().values())
-        x0, x = r['start']['x'], r['best']['x']
-        if not all(math.isclose(a, b, rel_tol=1e-6, abs_tol=1e-9) for a, b in zip(x0[2:], current[2:])):
-            raise ValueError('older result fitted against a different configuration; rerun the stage')
-        return dict(inertia_xy_kg_m2=current[0]*x[0], arm_scale=float(x[1]), motor_response_s=float(x[2]),
-                    command_delay_s=max(0., float(x[3])), body_drag_s_inv=[float(x[4]), float(x[4]), float(x[5])])
-
     def summary(self, r):
-        if r.get('method') == 'least_squares':
-            return self._segments_summary(r)
-        start, best = r['start'], r['best']
-        try:
-            adopt = self.adopt_values(r)
-        except ValueError:
-            adopt = {}
-        current = self.current()
-        x0, x = start['x'], best['x']
-        names = list(current)
-        # inertia and arm are scales of the configuration at fit time; the absolute values are in 'adopt'
-        base = adopt['inertia_xy_kg_m2']/x[0] if 'inertia_xy_kg_m2' in adopt else None
-        before = [None if base is None else base*x0[0], current['motor arm (m)']*x0[1], x0[2], max(0., x0[3]), x0[4], x0[5]]
-        after = [adopt.get('inertia_xy_kg_m2'), current['motor arm (m)']*x[1], x[2], max(0., x[3]), x[4], x[5]]
-        rows = []
-        for group, label in (('fit', 'drone only'), ('cable_fit', 'with cable')):
-            for name, raw in best[group]['per_flight_raw_rms_m'].items():
-                rows.append([f'{label} · {name}', _mm(start[group]['per_flight_raw_rms_m'].get(name)), _mm(raw),
-                             _mm(start[group]['per_flight_debiased_rms_m'].get(name)), _mm(best[group]['per_flight_debiased_rms_m'][name])])
-        return dict(
-            headline=[('drone only, raw 2 s error (mm)', _mm(start['fit']['raw_rms_m']), _mm(best['fit']['raw_rms_m'])),
-                      ('drone only, debiased (mm)', _mm(start['fit']['debiased_rms_m']), _mm(best['fit']['debiased_rms_m'])),
-                      ('cable flights, raw (mm)', _mm(start['cable_fit']['raw_rms_m']), _mm(best['cable_fit']['raw_rms_m'])),
-                      ('cable flights, debiased (mm)', _mm(start['cable_fit']['debiased_rms_m']), _mm(best['cable_fit']['debiased_rms_m']))],
-            parameters=list(zip(names, before, after)),
-            flights=dict(columns=['flight', 'raw before', 'raw after', 'debiased before', 'debiased after'], rows=rows),
-            notes=[f"reproduced twice: {best.get('reproduced_twice')}"])
+        """Least squares on short segments (scripts/fit_drone_segments.py)."""
+        return self._segments_summary(r)
 
     def _segments_summary(self, r):
         """Least squares on short segments (scripts/fit_drone_segments.py)."""
@@ -213,7 +172,7 @@ class Drone(Stage):
                    f"reproduced twice: {best['reproduced_twice']}"])
 
     def adopt(self, r):
-        values = self.adopt_values(r)
+        values = r['adopt']
         if abs(values['arm_scale']-1) > 1e-9:
             raise ValueError('this result refits the motor arm; only fits with the measured arm (--fix-arm) are adopted')
         physics, actuator = _json(PHYSICS), _json(ACTUATOR)
@@ -237,15 +196,8 @@ class Cable(Stage):
                 'normal drag Cd': cable['normal_drag_coefficient'], 'linear drag (1/s)': cable['external_drag_s_inv']}
 
     def summary(self, r):
-        if r.get('method') == 'least_squares':
-            return self._segments_summary(r)
-        start, best = r['start'], r['best']
-        rows = [[name, _mm(start['fit_per_flight_rms_m'].get(name)), _mm(value)] for name, value in best['fit_per_flight_rms_m'].items()]
-        return dict(
-            headline=[('cable marker error, measured clamp (mm)', _mm(start['fit_rms_m']), _mm(best['fit_rms_m']))],
-            parameters=[(n, start['values'][k], best['values'][k]) for n, k in zip(self.current(), self.KEYS)],
-            flights=dict(columns=['flight', 'before', 'after'], rows=rows),
-            notes=[f"reproduced twice: {best.get('reproduced_twice')}"])
+        """Least squares on short segments (scripts/fit_cable_segments.py)."""
+        return self._segments_summary(r)
 
     def _segments_summary(self, r):
         """Least squares on short segments (scripts/fit_cable_segments.py)."""
@@ -276,19 +228,22 @@ class Cable(Stage):
 
 class Coupled(Stage):
     def summary(self, r):
-        rows = []
-        for model, flights in r['results'].items():
-            for name, v in flights.items():
-                rows.append([name, _mm(v['drone_raw_rms_m']), _mm(v['drone_debiased_rms_m']), _mm(v['cable_shape_rms_m']),
-                             _mm(v['tip_shape_rms_m']), v.get('failed', 0)])
-        def pooled(key):
-            values = [row[key] for row in rows if row[key] is not None]
-            return sum(values)/len(values) if values else None
-        return dict(headline=[('mean drone raw (mm)', None, pooled(1)), ('mean drone debiased (mm)', None, pooled(2)),
-                              ('mean cable shape (mm)', None, pooled(3)), ('mean tip (mm)', None, pooled(4))],
-                    parameters=[],
-                    flights=dict(columns=['flight', 'drone raw', 'drone debiased', 'cable shape', 'tip', 'failed'], rows=rows),
-                    notes=['nothing is fitted: the adopted model, free from the sent commands'])
+        """scripts/validate_coupled.py: pooled and per-flight errors, fit and held-out flights."""
+        results = r['results']
+        headline, rows = [], []
+        for role, label in (('fit', 'fit flights'), ('held_out', 'held-out flights')):
+            s = results.get(role)
+            if not s:
+                continue
+            headline += [(f'{label}: drone position (mm)', None, _mm(s['position_m'])), (f'{label}: tilt (deg)', None, s['tilt_deg']),
+                         (f'{label}: cable shape (mm)', None, _mm(s['shape_m'])), (f'{label}: tip (mm)', None, _mm(s['tip_m']))]
+            for name, v in s['per_flight'].items():
+                rows.append([f'{name} ({"held out" if role == "held_out" else "fit"})', _mm(v['position_m']), v['tilt_deg'],
+                             _mm(v['shape_m']), _mm(v['tip_m'])])
+        return dict(headline=headline, parameters=[],
+                    flights=dict(columns=['flight', 'drone position (mm)', 'tilt (deg)', 'cable shape (mm)', 'tip (mm)'], rows=rows),
+                    notes=[f'Nothing is fitted: the configured model on {r["horizon_s"]:g} s segments from the sent commands; '
+                           'drone position with one bias per flight removed, tilt with one offset per flight removed.'])
 
 
 STAGES = [
@@ -301,20 +256,13 @@ STAGES = [
     Cable('cable', 'Cable', 'Bending stiffness and damping and air drag by least squares on 1 s segments, the measured '
           'drone pose driving the clamp and the cable starting from the measured markers.',
           'scripts/fit_cable_segments.py', [], 'cable flights', 'm'),
-    Coupled('coupled', 'Coupled validation', 'The whole model, free from the sent commands; nothing is fitted.',
-            'scripts/validate_coupled.py', ['--adopted'], 'cable flights', 'm', adoptable=False),
+    Coupled('coupled', 'Coupled validation', 'The whole model on 1 s segments of the cable flights, from the sent '
+            'commands; nothing is fitted. Reported for fit and held-out flights.',
+            'scripts/validate_coupled.py', [], 'cable flights', 'm', adoptable=False),
 ]
 BY_KEY = {s.key: s for s in STAGES}
 
 
 def stage_of(result_path):
-    """The stage a result file belongs to (by folder, or by the name of older results)."""
-    path = Path(result_path)
-    if path.parent.name in BY_KEY:
-        return BY_KEY[path.parent.name]
-    name = path.name
-    for key, prefixes in (('thrust_map', ('thrust_map',)), ('drone', ('drone_fit_fixed_arm', 'drone_joint')),
-                          ('cable', ('cable_fit',)), ('coupled', ('coupled_validation',))):
-        if name.startswith(prefixes):
-            return BY_KEY[key]
-    return None
+    """The stage a result file belongs to (by its folder under runs/fits)."""
+    return BY_KEY.get(Path(result_path).parent.name)

@@ -1,6 +1,5 @@
 {
   "physics": "configs/physics/drone_cable.json",
-  "controller": "configs/controllers/geometric.toml",
-  "actuator": "configs/actuators/drone.json",
-  "residual": "configs/residuals/current.toml"
+  "controller": "configs/controllers/onboard.toml",
+  "actuator": "configs/actuators/drone.json"
 }

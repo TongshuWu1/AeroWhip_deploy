@@ -4,20 +4,10 @@ Last reviewed: 2026-10-28.
 
 ## Active training and handoff
 
-**Training is stopped.** Only the four-second +X Stage 1 PPO recipe remains supported.
-Read [the complete Stage 1 specification](../docs/fold_transport_task.md) for the reward, fold tracking,
-termination, control, exploration, evidence and limitations. The default is
-[the v6 experiment file](../configs/experiments/stage1_fold_x_v6.json):
-64 lanes, 200 collections, 12,800 episodes, ten physical links, fresh actor/critic.
-The latest production run `20261025-215750-176045` completed zero collections and
-zero optimizer updates. Its stopped checkpoint is not a learned policy. Its saved
-task snapshot uses the pre-2026-10-26 task layout, so current code no longer opens
-it; use commit `375b44e` to inspect it.
-
-There is no target-hit reward, early completion, automatic Stage 2 or hardware deployment.
-Current reward and physics are unchanged by the cleanup. Old reward modes, Stage 2–4
-training, SAC and historical actor-transfer paths have been removed with explicit user
-approval; old checkpoint execution/replay compatibility is not promised.
+The training task is the strike task of [docs/strike_task.md](../docs/strike_task.md), experiment
+file [configs/experiments/strike_x_v1.json](../configs/experiments/strike_x_v1.json). The earlier
+fold-transport (Stage 1) task and its experiment files were removed (change note of 2026-10-28
+below); its runs are not opened by the current code.
 
 [Other-computer setup and restoration](handoff-20261025/README.md).
 The full previous implementation record and historical model artifacts remain in
@@ -40,97 +30,31 @@ inertia use the body frame/about COM. Public drone position/velocity refer to
 the tracked top-plate origin. Quaternions use XYZW. Cable nodes, including
 attachment node 0, use world coordinates.
 
-| Quantity | Default |
-|---|---|
-| Drone mass excluding cable | 0.145 kg |
-| Cable and moving-marker mass (total) | 0.017 kg; markers 10 × 0.96 g (unchanged), bare cable 7.4 g |
-| Cable length / mesh | 0.995 m / 11 nodes, 10 edges (0.095 m, then 9 × 0.1 m) |
-| Tracking-to-COM / attachment offset | (0,0,-0.018) / (0,0,-0.0423) m |
-| Maximum physics step | 1/600 s |
-| Observation / controller / policy rate | 100 / 200 / 50 Hz for current training |
-| Command delay | 0.03 s |
-| EI / Cb | 1.178939873e-8 N m² / 8.174015594e-5 N m² s |
-| GJ / Ct | 1.178939873e-8 N m² / 8.174015594e-6 N m² s |
+The parameter table, the cable model (twist-free discrete elastic rod, Kelvin–Voigt bending
+damping, quadratic normal drag plus linear drag, point clamp), the drone body drag, the
+integration (projected Lie-BDF2, 2 ms maximum step chosen by `scripts/step_convergence.py`) and
+the flight pipeline are described in [docs/simulation_model.md](../docs/simulation_model.md);
+the values are the configured ones (`configs/simulation.json` and the files it links), with
+each adoption recorded in `runs/fits/adoptions.jsonl`. There is one engine, the native C++ one
+([native/engine.cpp](../native/engine.cpp)): single-flight `Runtime`, `BatchRuntime` for
+training (OpenMP lanes), and the prescribed-clamp cable replay used by the cable fit. The
+earlier Torch tensor engine, its CUDA conditional solver and the learned drag correction
+("structured aerodynamic residual", never fitted) were removed on 2026-10-28; a residual model,
+if any, is a new design.
 
-These are working model assumptions, not newly identified hardware parameters.
-The ten measured marker intervals form the ten edges. The inextensible cable
-is naturally straight and isotropic. A point clamp follows drone position and
-body-down tangent; the first finite edge may bend. The free tip has no imposed
-pose/end couple. Attachment force and direct material moment react on the drone
-through one two-way coupled solve.
-
-[native/material_frame.inc](../native/material_frame.inc) and the scalar/tensor
-engine implement objective material bending/twist with Kelvin-Voigt damping.
-Cb is internal material damping; external cable drag is a separate coefficient
-in inverse seconds. Rayleigh dissipated power is twice its damping potential.
-Material-angle history remains despite assumed negligible angular inertia.
-This checkout's deployment/training solvers have no cable self-collision,
-ground/wall contact, or measured wind. The separate standalone coupled simulator
-now has experimental cable-only self-contact, described below.
-Degenerate edges and antiparallel tangent singularities are rejected.
-A pre-contact standalone 20-edge diagnostic with 0.5 m X-amplitude Oscillation,
-1.5 s cycle and 4 s startup produces self-overlap from about 4.77 s, then fails
-implicit endpoint convergence after the last accepted 20.85 s at a 1/600 s
-maximum step. An in-memory 1/1200 s variant reaches 30 s but still self-overlaps;
-no production default was changed by that diagnostic. The subsequently approved
-standalone contact/retry change completes this 30 s case, but its folded-motion
-prediction remains sensitive to timestep/barrier choices and physically unvalidated.
-Earlier non-contact trajectory checks do not validate contact. See
-[fold reproduction](../tmp/cable-fold-review-20261025/oscillation-1p5-reproduction.json)
-and [step-size diagnostic](../tmp/cable-fold-review-20261025/timestep-1200-summary.json).
-
-The solvers use float64 projected Lie-BDF2. Uniform steps use BDF2; startup and
-excessive step growth restart at backward-Euler order. Endpoint geometry,
-velocities, material rates, loads, and constraints iterate together. The cap
-is 20 Picard slots, relative-change tolerance 2e-11, length tolerance 1e-10 m,
-velocity-constraint tolerance 1e-9 m/s, and four position projections per slot.
-Controller, command, and output event times remain exact. Solver convergence
-does not establish physical accuracy.
-
-The geometric controller retains its velocity-feedback path for `velocity_v1`.
-The new `acceleration_direct_v1` path converts world XYZ acceleration requests
-(excluding gravity) directly to nominal force with the existing static cable-weight
-trim, then desired attitude, collective thrust and body torque. Initial yaw stays
-fixed. This path has no position/velocity feedback or integrated references;
-zero acceleration supplies weight trim, not braking or position hold. Both paths
-use the existing attitude loop. There is no integral loop or exact dynamic
-cable-force cancellation.
-Motor inverse mixing is clipped per motor; first-order motor response supplies
-the delivered wrench. Motor parameters are marked uncalibrated. Continuation
-requires previous BDF2 state/step, motors, held wrench, command queue, and clocks.
-Drone telemetry alone cannot exactly resume a simulated trajectory.
-
-Captured CUDA tasks default to the GPU-controlled Picard loop on 64-bit Windows
-and on64-bit Linux when Torch was built with CUDA12.8 or newer. Other platforms
-and older Linux Torch CUDA builds default to host-controlled replay.
-`AEROWHIP_CONDITIONAL_SOLVER=0` selects the host path; `1` selects the conditional
-path and requires a CUDA driver API12.8+ and working NVRTC. An explicit task
-constructor choice takes precedence over this environment variable. The
-[conditional driver](../aerowhip/physics/conditional_driver.py) loads the Windows driver
-or Linux `libcuda.so.1`, and locates NVRTC in Torch/NVIDIA package libraries or
-the Linux system library search. Backend failures propagate rather than silently
-changing the solver. The same compiled Picard slot, first-converged endpoint
-mask,20-slot cap, and numerical acceptance gates remain in use. CPU/differentiable
-fitting paths are separate.
-
-The retained [Linux scheduler comparison](../tmp/simulation-performance-20261011/scheduler-parity.json)
-checks50 synthetic100-Hz steps in both1- and128-lane batches. Host and conditional
-paths match every physical, BDF2-history, motor and held-wrench field bitwise;
-the one-lane scalar comparison's maximum absolute difference is3.17524e-14,
-within the existing1e-9 numerical comparison tolerance. Both schedulers reject
-collapsed first edges and retain the20-slot cap. This is numerical evidence,
-not a model fit, policy result or real-flight result. A full current Stage1–4
-Linux campaign and a fresh Windows/Linux execution comparison remain unverified.
-
-The [local performance record](../tmp/simulation-performance-20261011/summary.json)
-uses RTX4080, Torch2.11/CUDA13.0 and the existing11-node float64 plant. Across
-three warm trials, the median of mean128-lane100-Hz step times is41.897 ms for
-the host scheduler and37.056 ms for the conditional scheduler:11.55% less step
-time, or13.06% more plant throughput. This measures the plant adapter without
-policy inference, task scoring or PPO updates; it does not establish the same
-gain for complete training. Native single-flight PVA steps average2.143 ms and
-the prescribed cable adapter2.009 ms in separate mild synthetic motions; these
-are not timing guarantees for whipping maneuvers or a causal real-flight observer.
+Every tool flies the same onboard pipeline, the native `FlightController` (firmware law,
+[crazyflie_firmware.toml](../configs/controllers/crazyflie_firmware.toml); the identified law of
+[crazyflie_flight.toml](../configs/controllers/crazyflie_flight.toml) is the fallback), at the
+500 Hz controller clock of [onboard.toml](../configs/controllers/onboard.toml), behind the
+command delay there. What sends its acceleration setpoint differs: the policy in training (plus a
+per-lane hover feed-forward), the recorded commands in the fitting replays, and in the
+interactive tools (simulator, trajectory editor, headless runner, Crazyswarm simulation server)
+the host tracking law of [control/flight_pipeline.py](../aerowhip/control/flight_pipeline.py):
+the cf_2 flight scripts' PID (k_p 4, k_d 3, k_i 0.6, integral action ≤ 1.5 m/s² per axis) on the
+tracked position, plus the training hover feed-forward, once per 10 ms output step. A Crazyswarm
+script streaming acceleration-only commands runs its own host law; its acceleration then passes
+straight through. The interactive runtime's checkpoint holds the plant, motors and command
+queues, not the firmware's memory or the host integral.
 
 The [viewer](../aerowhip/viewer/pyvista_viewer.py) renders through NVIDIA OpenGL. The prior
 1440×900 off-screen display-motion baseline averaged2.159 ms per geometry update
@@ -628,7 +552,7 @@ velocity and material geometry checks remain active. A `z=0` initial position
 does not implement resting contact, cable support, touchdown or unpowered flight.
 General physical world/contact behavior remains unimplemented. Neither hardware
 firmware parameters nor the YAML robot type override the explicit native model
-or geometric controller; the adapter still owns one selected drone/cable plant.
+or flight pipeline; the adapter still owns one selected drone/cable plant.
 
 ROS uses domain142 by default, separate from the existing real/stock simulation
 domain42. The new launcher and test reject domain42. Both sides identify the
@@ -682,7 +606,7 @@ including analytic P/V/A and nominal desired-body rate feedforward from firmware
 flatness (`GRAV=9.81` m/s²). Uploaded trajectories support1..64 eight-coefficient
 pieces, piece offsets without gaps, positive timescale, reverse playback and
 relative XYZ shifts. This planner layer does not change native physics, the
-200-Hz geometric controller,30-ms modeled delay or the motor model.
+flight pipeline, the modeled command delay or the motor model.
 
 Streaming has priority until `notifySetpointsStop`; its validity interval begins
 at the actual native notification boundary. Separate ROS service/topic clients
@@ -707,22 +631,14 @@ failure ends the bridge session rather than continuing with uncertain state;
 reconnect requires restarting the session. These parameters are control metadata,
 not changes to physical model parameters.
 
-The separate boolean parameter `aerowhip.acceleration_only` selects the ROS-only
-[controller wrapper](../aerowhip/deployment/acceleration_control.py), default false. It
-must be set alone. Its owner-thread commit requires disarmed hold, an empty
-command queue and matching native requested/applied references (mode transitions
-must drain the modeled delay). In this mode an armed plant uses FullState world
-acceleration and yaw, ignoring P/V placeholders; body-rate feedforward must be
-zero and high-level trajectory requests are rejected. It uses the unchanged
-nominal force equation `m*a - (m + sum(cable_node_mass))*gravity`, attitude loop,
-motor dynamics, 200-Hz controller and 30-ms modeled command delay. No firmware
-gain emulation or identification is implied. Disarmed hold uses PVA control.
-Reset clears acceleration mode, and successful scripted completion explicitly
-restores PVA. Status/evidence records `acceleration_only` and the selected
-`controller_interface`; `reference_position_world_m` is unavailable in direct
-mode because the transmitted P is a placeholder. Direct-mode checkpoint exports
-use `aerowhip_ros_acceleration_runtime_v1` so generic PVA restore rejects them;
-a dedicated continuation importer is not implemented.
+The separate boolean parameter `aerowhip.acceleration_only`, default false, must be set alone.
+Its owner-thread commit requires disarmed hold, an empty command queue and matching native
+requested/applied references (mode transitions must drain the modeled delay). While it is set
+and the plant is armed, the flight pipeline's host law is bypassed: the FullState world
+acceleration (plus the hover feed-forward) and yaw go straight to the firmware law, P/V
+placeholders are ignored, body-rate feedforward must be zero and high-level trajectory requests
+are rejected. Otherwise the simulated host law tracks the P/V/A reference. Reset clears
+acceleration mode, and successful scripted completion explicitly restores PVA.
 
 The free-space plant holds its configured pose with control active and
 API arming enabled. `arm(False)` gates new commands, cancels queued plans and
@@ -823,58 +739,13 @@ This is best-effort cleanup: asynchronous parameter writes and physical gain
 restoration still require hardware verification. No force definition, gain
 default, calibration formula or learned-policy interface changed.
 
-Original source recordings remain external and untouched. For active use, copy
-the collection inside `data/recordings/` with its original `data/flight_batches`
-and linked rehearsal layout. Take Processing selects only project-contained
-collections; it no longer infers an external root from historical catalog paths.
-The prior personal catalog was removed from tracked files during the earlier
-containment cleanup. Its former project-run backup is no longer available.
-New catalogs and local preferences are ignored by Git. A clone
-has an empty recording folder and needs user-supplied data for fitting.
-Fitting checks catalog/alignment/source
-hashes and complete 100 Hz windows. Missing observations are masked, not invented.
-Causal history initializes velocities; twist and initial motors remain assumptions
-where telemetry is absent. Command-driven and measured-boundary replay answer
-different model-validation questions.
-
-[estimate_clock_alignment.py](../aerowhip/takes/estimate_clock_alignment.py)
-writes the `<batch>/time_alignment.json` entry that `load_take` requires
-before commands are attached. The entry is keyed by take stem and records
-`offset_s` such that logger `time_s` = Motive `Time (Seconds)` + `offset_s`, plus
-the export and logger SHA-256s. It searches offsets on a 10 ms grid within
-`--max-lag` (default ±30 s) of aligned starts and refines to 0.1 ms. The score is
-the RMS distance between Motive drone positions and logger poses linearly
-interpolated at the shifted times; no interpolation spans a logger gap over 50 ms,
-and source data are not modified. Because the logger stamps receipt time, the
-offset includes transport latency. Entries are saved with `clock_verified: false`
-and the method, residuals and acceptance settings. Nothing is written if the RMS
-exceeds `--max-rms` (0.01 m), if an offset more than 0.25 s away scores within
-2× the best RMS (for example a take with no motion; start each take with a sharp
-vertical bump), or if the best offset is on the search boundary. Existing entries
-need `--replace`. Comparing positions directly assumes the export and the logger's
-`/poses` stream share a frame (Z up); a mismatch fails the RMS check rather than
-being corrected. These thresholds are initial engineering settings. On 2026-10-26
-the script was checked only on synthetic files, which recovered a known offset
-plus the injected 0–4 ms latency to within 1 ms. It has not been run on a
-recorded take.
-
-[check_take.py](../aerowhip/takes/check_take.py) is a read-only post-capture
-check of one Motive export. It reports:
-
-- export units, coordinate space and rotation type
-- capture and export rates, required to be exactly 100 Hz
-- frame-number jumps and off-nominal (non-10 ms) steps
-- drone, cable, unlabeled and rigid-body-marker labels
-- per-marker completeness and longest dropout
-- the hanging-cable direction, required to be −Z
-- complete, gap-free 100 Hz runs of at least `--min-window` (default 1.8 s =
-  1.7 s fit window + 0.1 s history)
-- whether `load_take` accepts the file and an alignment is applied
-- which logger sidecars are present
-
-It exits 1 on a blocking problem; a missing alignment is a warning. It does not
-assess command logs, motion content or fit quality. On 2026-10-26 it was also
-checked only on synthetic files.
+The model is fitted on the calibration flights of the companion repository
+(`calibration_data/<setup>/<take>/<NNN>/`, listed with their roles in `model_calibration.yaml`):
+loading on the camera frame clock, cable labels, the sensing statistics and the fitting stages
+are described in [docs/data_and_fitting.md](../docs/data_and_fitting.md). The earlier take-based
+pipeline (Motive CSV exports with logger sidecars, `check_take`, `estimate_clock_alignment`,
+the take-processing application, the calibration and refit runners and the residual fitter) was
+removed on 2026-10-28; its retained results under `runs/` are kept but no longer read.
 
 Handheld OptiTrack demonstrations are a proposed next source of motion evidence;
 no such recording is currently available in the project. The recommended pilot
@@ -889,34 +760,14 @@ headers; export physical marker observations rather than substituting solved
 constraint positions for occluded cable markers. These controls are described
 in [OptiTrack's CSV export documentation](https://docs.optitrack.com/motive/data-export/data-export-csv).
 
-This is a capture/retargeting proposal, not an implemented imitation pipeline.
-[load_take](../aerowhip/takes/take_data.py) currently expects a drone identity
-and ten named cable markers; existing fitting preparation additionally requires
-verified flight-command clock alignment and contiguous native 100 Hz data, with
-no resampling. A hand take should not be relabeled as drone flight or supplied
-invented command logs. It provides observed motion, not drone action labels.
-The proposed sequence is measured-boundary cable replay, then a search for
-feasible bounded drone commands and timing, then imitation from those simulated
-state/action trajectories. The existing prescribed-cable engine can represent
-attachment P/V/A and mounting rotation/angular rate, but hand-specific import,
-fixture calibration, derived-data resampling if needed, retargeting objectives
-and imitation remain unimplemented. Wrist motion and drone actuation may differ;
-physical parameters, rewards and curriculum are not changed automatically to
-match a demonstration.
-
-[fitting/run_refit.py](../aerowhip/fitting/run_refit.py) requires an explicit base model.
-It fits cable EI/Cb/external drag with measured attachment motion, then vehicle
-controller response scales with cable/motors frozen in the coupled plant. Default
-selection is four training and thirteen historically exposed comparison takes.
-`--data`, `--split`, and `--prepare-only` select/record inputs. Candidates and
-comparisons are saved under `runs/refit` without automatic default installation.
-
-[fitting/run_residual_fit.py](../aerowhip/fitting/run_residual_fit.py) separately fits
-structured nonnegative aerodynamic coefficients: cable first, then drone with
-cable weights frozen. It requires a calibrated physical base and gradient gates.
-The active residual remains unfitted/disabled. Low fitting loss does not establish
-identifiability or reliable whole-maneuver cable prediction.
-
+This is a capture/retargeting proposal, not an implemented imitation pipeline. A hand take
+should not be relabeled as drone flight or supplied invented command logs: it provides observed
+motion, not drone action labels. The proposed sequence is measured-boundary cable replay (the
+engine's prescribed-clamp replay can represent attachment P/V/A and mounting rotation/angular
+rate), then a search for feasible bounded drone commands and timing, then imitation from those
+simulated state/action trajectories. Hand-specific import, fixture calibration, retargeting
+objectives and imitation remain unimplemented. Physical parameters, rewards and curriculum are
+not changed automatically to match a demonstration.
 
 ## Dated change note — 2026-10-25 cleanup
 
@@ -1999,3 +1850,55 @@ User's request: one systematic, automated data collection with a single calibrat
   drone errors worse (position 52.5 → 57.2 mm, tilt 1.39 → 1.51° on a fifth of the segments); a refit
   with it (`fit_drone_segments.py --estimator -2.0 0.055 2.4`) decides. Motive and the drone setup
   are unchanged (the user's decision: keep every recorded flight valid). 112 tests pass.
+
+## Dated change note — 2026-10-28 old pipeline removed; interactive tools on the flight pipeline
+
+At the user's request ("I don't want old stuff at all"), everything not used by the current
+pipeline was deleted from the working tree (retained run results under `runs/` are kept):
+- the Torch tensor engine and its CUDA solver (`native/tensor_*`, `physics/tensor_model.py`,
+  `iteration_graph`, `conditional_graph`, `conditional_driver`, `prescribed_cable`,
+  `control/tensor_controller.py`), the old single-flight environment (`envs/environment.py`) and
+  `scripts/equivalence_check.py`; the tensor build in `setup.py` and `scripts/build_engine.py`;
+- the learned drag correction ("structured aerodynamic residual", never fitted): the network in
+  the native engine and bindings, `Model(residual=..., load_weights=...)`, the `residual` entry of
+  `configs/simulation.json`, `configs/residuals/`, and the experiment check on it. Older run
+  snapshots that carry a `residual` section still load (it is ignored);
+- the take-based pipeline: `takes/` loaders and checks (`take_data`, `check_take`,
+  `estimate_clock_alignment`, `library`, `quality`, `baseline`, `position_plots`, `paths`), the
+  take-processing, calibration and cable-fit windows, the take fitting runners and objectives
+  (`run_fit`, `run_refit`, `run_residual_fit`, `run_baseline`, `cable_fit`, `coupled_fit`,
+  `residual_fit`, `calibration*`, `dataset`, `prepare_window`, `recorded_replay`, the batched and
+  prescribed objectives), `configs/fitting/residual.json`, `tests/test_take_checks.py`;
+- the superseded Nelder–Mead fits and one-off analyses on the calibration flights:
+  `fit_firmware_drone.py`, `fit_drone_flights.py`, `fit_cable_flights.py`, `fit_drone_joint.py`,
+  `fit_drone_drag.py` (the segment drone fit fits drag), `cable_error_split.py`,
+  `compare_cable_v1.py`, `take_processing.py`. What other scripts used from them moved:
+  `flight_drone.vehicle` and `flight_drone.FIRMWARE`; `nelder_mead` into `fit_thrust_map.py`;
+- the geometric controller (`control/geometric_controller.py`) and its ROS wrapper
+  (`deployment/acceleration_control.py`). `configs/controllers/geometric.toml` is now
+  `onboard.toml` and holds only what is used: the controller clock, the command delay and the
+  attitude gains of the identified fallback law.
+
+Kept because they are part of the current pipeline: the cable labelling and review
+(`label_cable.py`, `ui/takes/cable_review.py`), the sensing identification
+(`identify_sensing.py`, `validate_sensing.py`, `fitting/sensing_statistics.py`), the observer and
+filter checks (`replay_observer.py`, `filter_velocity_check.py`) and `step_convergence.py`.
+
+The interactive tools (simulator, trajectory editor, headless runner, Crazyswarm simulation
+server) now fly the same onboard pipeline as training and fitting:
+[control/flight_pipeline.py](../aerowhip/control/flight_pipeline.py) runs the cf_2 flight scripts'
+host PID on the reference once per 10 ms step and sends the acceleration, plus the training hover
+feed-forward, to the native `FlightController` (firmware law) through the runtime's command delay.
+`scripts/replay.py` had a leading space on its first line (a syntax error) and runs again. The
+stage-5 coupled validation was rewritten on the segment residuals of `fitting/coupled.py`
+(fit and held-out flights, position, tilt, shape and tip); the Model Fit window reads only the
+results of the current stages, so the earlier 2 s-window coupled result is no longer listed.
+
+Checked: the native extension rebuilds; every `aerowhip` import in the repository resolves; 108
+tests pass (four take-check tests went with their module). The interactive runtime holds hover
+exactly for 5 s with the firmware law (hover feed-forward 1.40 m/s²), a 0.3 m step reference
+settles to 0.33 m within 2 s, and a 0.3 m stroke run through `controller_headless.py` reaches
+0.295 m at 1.5 s with 2.7 mm vertical deviation; the simulator, trajectory editor and Model Fit
+windows start and run for 15–20 s on the lab display without errors. Not checked: the Crazyswarm
+simulation server with the ROS container (needs the stack), and whether position references
+through the simulated host law match real flights.

@@ -25,8 +25,10 @@ python scripts/simulate.py
 
 This uses [configs/scenes/default.toml](../configs/scenes/default.toml) for initial
 state and display settings, and [configs/simulation.json](../configs/simulation.json)
-for the physical model, controller, actuator, and residual configuration. It
-does not start the ROS bridge. In PyCharm, select this checkout's `.venv`
+for the physical model, onboard controller timing and actuator. The drone flies the flight
+pipeline: the host tracking law of the cf_2 flight scripts turns the reference into an
+acceleration command, which the ported Crazyflie firmware (Mellinger, translation gains zeroed)
+receives after the command delay. It does not start the ROS bridge. In PyCharm, select this checkout's `.venv`
 interpreter and run `scripts/simulate.py`.
 
 ### Connect Crazyswarm scripts to the simulation
@@ -117,7 +119,9 @@ zero, the hanging cable can extend below the displayed floor. Disarm cancels
 commands and requests a controlled hold; emergency suspends physics until Reset
 or restart. Neither behavior implements physical motor cutoff or ground contact.
 The CSV player's simulation landing reference returns to the configured initial
-height. These command checks do not establish firmware controller equivalence.
+height. Position references (takeoff, go-to, PVA FullState) are tracked by the simulated host
+law, not by the firmware's own position loop, so they are not a test of the onboard position
+controller.
 
 FullState streaming, arm, takeoff/land, go-to, polynomial trajectories, group
 masks, stream release, and emergency are supported. 
@@ -131,11 +135,12 @@ python3 /workspace/scripts/acceleration_circle_cf2.py --simulation
 
 It rises 1.3 m, flies a 0.2 m radius circle, returns to its starting height and
 restores PVA mode for subsequent waypoint scripts. Only acceleration changes in
-FullState; P/V are placeholders. The script selects the nominal direct controller
-and uses native feedback at 50 Hz simulation time. The model includes static
-cable-weight trim and has no floor contact. If a bound or settling check fails,
-use viewer Reset/Play or restart. This is a scripted controller test; real-flight
-Mellinger equivalence and learned-policy deployment are not established.
+FullState; P/V are placeholders. While the script streams acceleration-only commands its
+acceleration goes straight to the simulated firmware (the script runs its own host law on
+native feedback at 50 Hz simulation time); the hover feed-forward for drone and cable is added
+as in training. The model has no floor contact. If a bound or settling check fails, use viewer
+Reset/Play or restart. This is a scripted test in simulation; learned-policy deployment is not
+established.
 
 Running a learned policy through ROS is not implemented yet.
 

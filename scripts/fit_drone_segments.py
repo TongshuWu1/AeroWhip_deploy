@@ -35,8 +35,6 @@ from aerowhip.fitting.least_squares import FAILED_RESIDUAL_M, Fit, ProcessRunner
 from aerowhip.fitting.progress import Progress
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
 from aerowhip.takes.calibration_flights import load
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fit_firmware_drone import FIRMWARE, configured as vehicle
 
 NAMES = ('inertia_scale_xy', 'motor_response_s', 'body_drag_xy_s_inv', 'body_drag_z_s_inv')
 SCALE = np.array([1., .01, 1., 1.])          # the search runs on x/SCALE (all of order one)
@@ -73,7 +71,7 @@ class Residuals:
         self.scale = (report['position_m'], math.radians(report['tilt_deg']))
 
     def config(self, x, delay):
-        c = vehicle(base=self.base, x=[x[0], 1., x[1], delay], cable=False)
+        c = flight_drone.vehicle(self.base, [x[0], 1., x[1], delay], cable=False)
         c['drone']['body_drag_s_inv'] = [float(x[2]), float(x[2]), float(x[3])]
         return c
 
@@ -153,7 +151,7 @@ def main():
     args = parser.parse_args()
     t0 = time.time()
     base = load_model_configuration(DEFAULT_MODEL)
-    firmware = tomllib.loads(FIRMWARE.read_text())
+    firmware = tomllib.loads(flight_drone.FIRMWARE.read_text())
     if firmware.get('law') != 'firmware':
         raise SystemExit('The firmware law is required')
     if args.estimator:

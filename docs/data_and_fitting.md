@@ -1,8 +1,7 @@
 # Flight data and model fitting
 
-Two recording formats exist: calibration flights recorded by the companion
-repository's flight script (below), and the earlier takes (Motive CSV plus logger
-sidecars, further down). The fitting tools currently read the earlier takes.
+The model is fitted on calibration flights recorded by the companion repository's flight
+script.
 
 ## Calibration flights
 
@@ -127,49 +126,6 @@ length error between adjacent labelled markers against the flag tolerance. A
 click selects a point; 1–9, 0 label it c1–c10; Delete marks the selected marker not
 visible; Backspace returns it to automatic; A accepts a flagged run; Ctrl+S saves.
 
-## Takes
-
-A take is one Motive CSV export plus logger sidecars, loaded by
-`aerowhip.takes.take_data.load_take`:
-
-- **Motive export** in metres, Global coordinates, quaternion rotations, captured
-  and exported at exactly 100 Hz. The drone rigid body is named `cf_N` (or as given
-  in a `.tracking.json` file); the ten cable markers are labelled `cable:c1`…`cable:c10`.
-- **Logger files** from the Crazyswarm flight logger
-  (`scripts/experiment_logger_optitrack_pva_motor_v3.py` in the companion
-  repository): `experiment_*.csv` with drone poses and commands on the host clock,
-  plus `.commands.csv` and `.motors.csv`.
-- **Clock alignment** in `<batch>/time_alignment.json`, mapping logger time to
-  Motive time. Without it, commands are not attached to the take.
-
-Put collections under `data/recordings/` (not tracked by Git).
-
-### Checking a take
-
-```bash
-python -m aerowhip.takes.check_take path/to/take.csv
-```
-
-Reports export units, frame space and rotation type; capture and export rate
-(must be 100 Hz); frame-number jumps and off-nominal steps; drone, cable and
-unlabelled marker labels; per-marker completeness and longest dropout; whether
-the hanging cable points along −Z; and gap-free 100 Hz runs of at least 1.8 s.
-It exits with status 1 on a blocking problem.
-
-### Estimating the clock offset
-
-```bash
-python -m aerowhip.takes.estimate_clock_alignment path/to/take.csv
-```
-
-Finds `offset_s` with logger time = Motive time + offset by matching drone
-positions: a 10 ms grid search within ±30 s, refined to 0.1 ms, scored by RMS
-position distance. It refuses to write an entry if the RMS exceeds 1 cm, the best
-offset lies on the search boundary, or a different offset (> 0.25 s away) scores
-within twice the best (for example a take with no motion — start each take with a
-sharp vertical bump). The offset includes logger receipt latency; entries are
-saved with `clock_verified: false`.
-
 ## Fitting
 
 Fitting uses the calibration flights through the native engine
@@ -179,8 +135,8 @@ Which flights exist, their roles (`fit`, `held_out`, `hover`, `excluded`), usabl
 logs, the vehicle measurements and the bench tests all come from one manifest beside the
 data, `model_calibration.yaml` (`aerowhip.fitting.manifest`), written during the sessions
 and checked by the data repository's `check_calibration_data.py`; nothing about the data set
-is hard-coded in the fitting code. At present every flight has the role `fit`; evaluation
-motions not used by any fit are to be recorded separately. A cable flight is used only once its
+is hard-coded in the fitting code. Flights with the role `held_out` are never used by a fit and
+are scored separately. A cable flight is used only once its
 markers are labelled (`scripts/label_sequence.py` writes `cable_labels.npz`); loading an
 unlabelled cable flight is an error. Every reported number is computed twice.
 
@@ -192,7 +148,7 @@ too), compares a result with the configuration and adopts it only on an explicit
 adoption is appended to `runs/fits/adoptions.jsonl`. New results are written to
 `runs/fits/<stage>/`.
 
-0. **Thrust map** (`scripts/fit_thrust_map.py`): from the motor PWM logs of the drone-only
+1. **Thrust map** (`scripts/fit_thrust_map.py`): from the motor PWM logs of the drone-only
    flights, the map T = κ(1+β(V−V0))/4 Σ(pwm/massThrust)^p is fitted so that its mean over
    2500-count PWM bins matches the thrust the measured motion requires (mass × acceleration
    along the body axis, with the drone drag). The four motors swing several thousand counts
@@ -200,68 +156,41 @@ adoption is appended to `runs/fits/adoptions.jsonl`. New results are written to
    is convex this raises the real mean thrust, and the measured factor (about 1.07) is folded
    into the collective κ the simulation uses.
 
-**Least squares on short segments** (`aerowhip.fitting.least_squares`; current stages 2 and 3).
+**Least squares on short segments** (`aerowhip.fitting.least_squares`; stages 2–5).
 Each flight is cut into consecutive segments (1 s by default, `--horizon`), and every segment is
 replayed from the measured state at its start (multiple shooting), so errors cannot build up over
-long open-loop horizons. The residuals are per-frame position errors; scipy's trust-region least
-squares fits the parameters within bounds with a finite-difference Jacobian. Segments that fail at
-the start point are dropped once, with their reasons recorded; a failure during the search is
-counted and gives a large fixed residual, so the step is rejected; only numerical failures are
-caught. The 95 % intervals use the covariance clustered by flight (sandwich estimate), because
-residuals within a flight are strongly correlated; on synthetic data with flight-level errors it
-matches the true scatter of the estimates (0.106 against 0.109), whereas the independent-residual
-formula is 5–9 times too small.
+long open-loop horizons. Commands still in the delay line at a segment start are applied
+(`DroneReplay.run(pipeline=True)`). Scipy's trust-region least squares fits the parameters within
+bounds with a finite-difference Jacobian. Segments that fail at the start point are dropped once,
+with their reasons recorded; a failure during the search is counted and gives a large fixed
+residual, so the step is rejected; only numerical failures are caught. The 95 % intervals use the
+covariance clustered by flight (sandwich estimate), because residuals within a flight are strongly
+correlated; on synthetic data with flight-level errors it matches the true scatter of the
+estimates (0.106 against 0.109), whereas the independent-residual formula is 5–9 times too small.
 
-- **Drone** (`scripts/fit_drone_segments.py`, drone-only flights): roll/pitch inertia, motor
-  response and body drag (the measured motor arm kept). One constant acceleration bias per flight
-  and axis is removed analytically (attitude-estimate offsets and trims the host loop absorbs);
-  three numbers per flight cannot absorb dynamics as a per-window bias can. The command delay
-  acts only at the 2 ms controller ticks, so the loss is a staircase in it: the other parameters
-  are fitted at each delay of a grid and the profile is reported. Commands still in the delay line
-  at a segment start are applied (`DroneReplay.run(pipeline=True)`).
-- **Cable** (`scripts/fit_cable_segments.py`, cable flights): log10 EI, log10 Cb, Cd and log10
-  linear drag; the measured drone pose drives the clamp and each segment starts from the measured
-  markers; residuals are the marker position errors of every seen marker.
-
-The earlier Nelder–Mead fits below are kept for their retained results.
-
-1. **Drone pipeline** (`aerowhip.fitting.flight_drone`, `scripts/fit_drone_flights.py`,
-   `scripts/fit_firmware_drone.py`): the sent acceleration commands drive the flight
-   controller and plant open loop from the measured state. The thrust map and, for the
-   identified law, the attitude response are identified directly from the measured thrust
-   (mass × acceleration along the body axis) and body attitude. For the firmware law the
-   controller gains are firmware constants and the vehicle around it is fitted instead: the
-   roll/pitch inertia scale, the motor arm scale, the motor response time and the command
-   delay (Nelder–Mead on the debiased open-loop position error of the drone-only flights);
-   the cable flights are then scored with nothing refitted, raw and debiased, as the
-   cross-check. The open-loop position error over 2 s, after removing a constant
-   acceleration drift per window, checks the result. The drone's linear air drag
-   (`scripts/fit_drone_drag.py`) is fitted afterwards on the same flights with everything
-   else fixed, on the raw error (it is a slowly varying force): horizontal 0.52 s⁻¹,
-   vertical 0.85 s⁻¹. It roughly halves the raw open-loop error (drone-only held out 265 →
-   134 mm, cable flights held out 250 → 164 mm) and lowers the debiased error (57.7 → 42.2
-   and 54.2 → 45.6 mm). The vertical rate is larger than a regression of the residuals on
-   velocity suggests (0.2–0.33 s⁻¹) and may also absorb vertical thrust dynamics; it should be
-   re-checked once the motor map is identified on the bench.
-   `scripts/cable_error_split.py` separates the cable model's own error from the drone's: the
-   same windows are replayed with the measured drone pose driving the clamp. On the whip flight
-   the cable alone accounts for 68 of the 74 mm coupled cable-shape error (tip 127 of 135 mm),
-   and on every flight for most of it; the error grows with marker speed (whip: 39 mm below
-   1 m/s, 130–190 mm above 2 m/s) and along the cable. A finer mesh (two or three segments per
-   marker interval) changes it by 1.5–2.3 mm; the bending damping Cb is the sensitive term
-   (lower Cb helps the whip and hurts the slower flights), so the fitted value is a compromise
-   across speeds.
-2. **Cable** (`aerowhip.fitting.flight_cable`, `scripts/fit_cable_flights.py`): the measured
-   drone pose drives the clamp; the cable starts from the measured markers and runs open
-   loop. Loss: RMS distance between simulated and measured markers over the markers that were
-   seen. Search: Nelder–Mead on log EI, log Cb, the normal drag coefficient and the linear
-   drag.
-3. **Coupled check** (`scripts/validate_coupled.py`): the full model, driven by the sent
-   commands, scored on the cable flights for drone position and cable shape, with nothing
-   fitted.
-
-The identified values and their residuals are in `runs/calibration_<session>/`. EI is not
-identifiable from flight data on this cable (its shape is set by gravity, inertia, damping
-and air); the fits report it but it is not a measured property. The earlier take-based
-fitting tools (`aerowhip.fitting.cable_fit`, `coupled_fit`, `run_refit`, the take-processing
-application) remain for the older recordings.
+2. **Drone** (`scripts/fit_drone_segments.py`, drone-only flights): roll/pitch inertia, motor
+   response and body drag (the measured motor arm kept), with the command delay profiled on a grid
+   (it acts only at the 2 ms controller ticks, so the loss is a staircase in it). Two residuals
+   per frame, each normalised to 1 at the configuration now: the position error after removing
+   one constant acceleration bias per flight and axis (attitude-estimate offsets and trims the
+   host loop absorbs; three numbers per flight cannot absorb dynamics as a per-window bias can),
+   and the roll/pitch error after removing one constant offset per flight. `--estimator` adds the
+   onboard attitude-estimate model of the firmware configuration.
+3. **Cable** (`scripts/fit_cable_segments.py`, cable flights): log₁₀ EI, log₁₀ Cb, Cd and log₁₀
+   linear drag; the measured drone pose drives the clamp and each segment starts from the
+   measured markers; residuals are the marker position errors of every seen marker.
+4. **Coupled sensitivity** (`scripts/coupled_sensitivity.py`) and **refinement**
+   (`scripts/fit_coupled_segments.py`): the full model (drone driven by the sent commands,
+   carrying the cable) from the measured drone state and markers, with three residuals each
+   normalised to 1 at the configuration now (`aerowhip.fitting.coupled`): drone position (one
+   acceleration bias per flight removed), drone tilt (one offset per flight removed) and cable
+   shape (each marker relative to the drone). The sensitivity run differentiates this loss with
+   respect to the centre-of-mass height, the attachment height and the four cable parameters
+   and gives the intervals a joint fit would have. On the cable fit flights
+   (`runs/fits/coupled_sensitivity/20261027-210207.json`) every one-step change moves the loss by
+   less than 0.4 %, and the joint 95 % half-widths are ±35 mm for the centre-of-mass height and
+   ±14 mm for the attachment height (measured to ±3 mm): the coupling geometry is not
+   identifiable from these flights, so it is measured, not fitted.
+5. **Coupled validation** (`scripts/validate_coupled.py`): the same coupled residuals with
+   nothing fitted, reported per flight and pooled, separately for the fit and the held-out
+   flights: drone position, tilt, cable shape and tip (last marker) errors.

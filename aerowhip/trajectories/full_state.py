@@ -2,8 +2,8 @@
 
 World position refers to the top-of-drone tracking origin, not the COM.
 Acceleration is kinematic feedforward (gravity is added by the inner controller).
-Yaw is in radians; omega is rad/s in the nominal desired body frame. The fitted
-controller requires zero rates; the optional geometric controller consumes them.
+Yaw is in radians; omega is rad/s in the nominal desired body frame (kept for the
+format; the flight pipeline's firmware law does not use body rates).
 """
 
 import numpy as np

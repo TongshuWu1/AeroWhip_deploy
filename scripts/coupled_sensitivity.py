@@ -21,11 +21,10 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from aerowhip.fitting import coupled
+from aerowhip.fitting.flight_drone import FIRMWARE
 from aerowhip.fitting.least_squares import strong_correlations, uncertainty
 from aerowhip.fitting.progress import Progress
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fit_firmware_drone import FIRMWARE
 
 STEPS = dict(com_z=.005, attachment_z=.003, log10_EI=.1, log10_Cb=.1, Cd=.1, log10_drag=.1)
 

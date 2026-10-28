@@ -30,10 +30,49 @@ from aerowhip.fitting.calibration_set import manifest
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
 from aerowhip.physics.state import quaternion_xyzw_to_rotation_matrix
 from aerowhip.takes.calibration_flights import DT, camera_frames
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fit_cable_flights import nelder_mead
 
 G = 9.80665
+
+
+def nelder_mead(f, x0, step, *, iterations=80, tolerance=2e-5, progress=None):
+    """Minimise f from x0. progress (aerowhip.fitting.progress.Progress or None) receives every
+    evaluation and every iteration's best point."""
+    if progress is not None:
+        objective = f
+
+        def f(x):
+            value = objective(x)
+            progress.evaluation(x, value)
+            return value
+    n = len(x0)
+    simplex = [np.array(x0, float)]+[np.array(x0, float)+np.eye(n)[i]*step[i] for i in range(n)]
+    values = [f(x) for x in simplex]
+    history = []
+    for it in range(iterations):
+        order = np.argsort(values)
+        simplex, values = [simplex[i] for i in order], [values[i] for i in order]
+        history.append((it, float(values[0]), simplex[0].tolist()))
+        if progress is not None:
+            progress.iteration(it, values[0], simplex[0])
+        print(f'  iteration {it:2d}  best {values[0]:.6g}  x {np.round(simplex[0], 4).tolist()}', flush=True)
+        if values[-1]-values[0] < tolerance:
+            break
+        centroid = np.mean(simplex[:-1], axis=0)
+        reflected = centroid+(centroid-simplex[-1]); fr = f(reflected)
+        if fr < values[0]:
+            expanded = centroid+2*(centroid-simplex[-1]); fe = f(expanded)
+            simplex[-1], values[-1] = (expanded, fe) if fe < fr else (reflected, fr)
+        elif fr < values[-2]:
+            simplex[-1], values[-1] = reflected, fr
+        else:
+            contracted = centroid+.5*(simplex[-1]-centroid); fc = f(contracted)
+            if fc < values[-1]:
+                simplex[-1], values[-1] = contracted, fc
+            else:
+                for i in range(1, n+1):
+                    simplex[i] = simplex[0]+.5*(simplex[i]-simplex[0]); values[i] = f(simplex[i])
+    best = int(np.argmin(values))
+    return simplex[best], values[best], history
 
 
 def samples(folder, model, span_s, lag_s=0.):
@@ -50,7 +89,6 @@ def samples(folder, model, span_s, lag_s=0.):
     motors = [json.loads(l) for l in (folder/'motors.jsonl').read_text().splitlines()]
     rows = [json.loads(l) for l in (folder/'flight.jsonl').read_text().splitlines()]
     # flying: between the first and last log row whose phase is neither takeoff/settle nor landing
-    log_stamp = np.array([r['pose_stamp'] if r.get('pose_stamp') is not None else np.nan for r in rows])
     flying = [r['pose_stamp'] for r in rows if r.get('pose_stamp') is not None
               and not r['phase'].startswith(('takeoff', 'settle', 'land'))]
     if not flying:

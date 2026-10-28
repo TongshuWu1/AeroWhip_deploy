@@ -1,4 +1,4 @@
- """Launch saved motions or --measurement-report review; never train or simulate."""
+"""Launch saved motions or --measurement-report review; never train or simulate."""
 import sys
 from pathlib import Path
 

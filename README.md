@@ -55,8 +55,8 @@ MSVC and a Windows SDK installed. The viewer needs a desktop OpenGL session.
 | `python scripts/custom_simulation.py` | Simulation server for Crazyswarm scripts ([docs](docs/simulation_and_flight.md)). |
 | `python scripts/real_flight.py` | Live OptiTrack viewer with cable tracking and recording. |
 | `python scripts/play_recording.py` | Replay a saved live recording. |
-| `python scripts/take_processing.py` | Browse recorded takes, run calibrations and cable fits. |
-| `python scripts/equivalence_check.py` | Bitwise check that a refactoring changed no numbers. |
+| `python -m aerowhip.ui.fitting` | Model Fit window: run the fitting stages and follow their progress. |
+| `python scripts/label_cable.py <flight folders>` | Label and review the cable markers of calibration flights. |
 | `python -m aerowhip.learning.worker --run <folder>` | Headless training of a prepared run folder. |
 | `python -m aerowhip.evaluation.whip_event_review --manifest <json> --output <folder>` | Offline whip-event measurements on saved motion. |
 
@@ -65,7 +65,7 @@ MSVC and a Windows SDK installed. The viewer needs a desktop OpenGL session.
 - [Architecture](docs/architecture.md): packages, experiment files, data flow, units.
 - [Simulation model](docs/simulation_model.md): physics, parameters, solver, controller.
 - [Strike task](docs/strike_task.md): reward, hit and whip-event definitions, curriculum, randomisation, evaluation.
-- [Flight data and fitting](docs/data_and_fitting.md): takes, checks, clock alignment, fitting stages.
+- [Flight data and fitting](docs/data_and_fitting.md): calibration flights, frame clock, cable labels, fitting stages.
 - [Simulation and flight](docs/simulation_and_flight.md): Crazyswarm simulation server, real-flight viewer, cable tracking and recording.
 
 ## Data

@@ -119,7 +119,7 @@ class BatchEnvironment:
             raise ValueError('The lane slice must lie inside the cohort')
         self.model_config = model
         self.native = native_module()
-        self.model = m = Model(model, load_weights=False)
+        self.model = m = Model(model)
         if abs(m.dt-OBSERVATION_PERIOD_S) > 1e-12 or abs(scene.timestep_s-OBSERVATION_PERIOD_S) > 1e-12:
             raise ValueError('Environments require a 100 Hz observation clock')
         if m.n != 11:
@@ -229,7 +229,7 @@ class BatchEnvironment:
             self.hover_trim[lane, 2] = self._hover_trim(models[self.variants[lane]], self.voltage[lane])
         runtimes, controllers, start = [], [], 0
         for model, size in zip(models, sizes):
-            native_model = self.model.native if model is self.model_config else Model(model, load_weights=False).native
+            native_model = self.model.native if model is self.model_config else Model(model).native
             probe = self.native.FlightController(self.firmware, model, float(self.voltage[start]))
             hold_row = self._command(self.hover_trim[start:start+1])[0]
             actuator = {k: (list(v) if isinstance(v, (list, tuple)) else v) for k, v in model['actuator'].items()}

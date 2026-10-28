@@ -26,8 +26,3 @@ class Actuator:
             raise ValueError('Set the single controller clock in controller settings, not in the motor configuration')
         self.native = native_module().Actuator(self.config)
         self.info = self.native.info()
-
-    def tensor_parameters(self, *, device):
-        import torch
-        return [torch.as_tensor(self.info[name], dtype=torch.float64, device=device)
-                for name in ('mixing', 'inverse', 'minimum', 'maximum', 'response_s')]

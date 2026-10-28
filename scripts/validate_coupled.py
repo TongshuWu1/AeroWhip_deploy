@@ -1,103 +1,77 @@
-"""Validate the coupled model (drone pipeline + cable) on the cable calibration flights.
+"""Stage 5, coupled validation: the configured model (drone driven by the sent commands, carrying the
+cable) on 1 s segments of every cable flight, from the measured drone state and markers. Nothing is
+fitted. Reported per flight and pooled, separately for the fit and the held-out flights: drone
+position (one constant acceleration bias per flight removed), drone tilt (one constant offset per
+flight removed), cable shape (markers relative to the drone) and tip (last marker). Uses
+`aerowhip.fitting.coupled`, the same residuals as the coupled sensitivity and refinement.
 
-The sent acceleration commands (sideways trims removed) drive the full native model open loop
-for 2 s from the measured drone state and measured markers; nothing is fitted here. Scores:
-drone tracking position (raw and debiased RMS) and cable shape (markers relative to the
-drone's tracking origin, seen markers only). Every number is computed twice.
-
-    python scripts/validate_coupled.py --drone-fit runs/.../drone_fit.json --cable-fit runs/.../cable_fit_v2.json --output runs/.../coupled_validation.json
-    python scripts/validate_coupled.py --adopted --output runs/.../coupled_validation_adopted.json   # the configuration files as they are
+    python scripts/validate_coupled.py --output runs/fits/coupled/<time>.json
 """
 import argparse
-from concurrent.futures import ThreadPoolExecutor
 import json
 import math
-import os
 from pathlib import Path
 import sys
-
-import numpy as np
+import time
+import tomllib
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from aerowhip.fitting import flight_drone
+from aerowhip.fitting import coupled
+from aerowhip.fitting.flight_drone import FIRMWARE
 from aerowhip.fitting.progress import Progress
-from aerowhip.fitting.calibration_set import folders, flight_windows, is_held_out
-from aerowhip.fitting.flight_cable import with_cable
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
-from aerowhip.takes.calibration_flights import load
-from fit_drone_flights import DRONE_MASS_KG, configured
 
 
-def coupled_config(base, drone_x, cable_values):
-    config = configured(base, drone_x)
-    full = with_cable(base, **cable_values)
-    config['cable'] = full['cable']          # the real cable back on
-    return config
-
-
-def score(config, firmware, items):
-    replay = flight_drone.DroneReplay(config, firmware)
-
-    def one(item):
-        try:
-            return flight_drone.coupled_errors(replay, *item)
-        except Exception as exc:
-            return repr(exc)
-    with ThreadPoolExecutor(os.cpu_count()) as pool:
-        results = list(pool.map(one, items))
-    failed = [r for r in results if isinstance(r, str)]
-    good = [r for r in results if not isinstance(r, str)]
-    drone = [d for d, _ in good]
-    shape = np.concatenate([s[np.isfinite(s)] for _, s in good]) if good else np.array([np.nan])
-    tip = np.concatenate([s[:, -1][np.isfinite(s[:, -1])] for _, s in good]) if good else np.array([np.nan])
-    return dict(windows=len(items), failed=len(failed), failures=failed[:3],
-                drone_raw_rms_m=flight_drone.rms(drone), drone_debiased_rms_m=flight_drone.rms(drone, debiased=True),
-                cable_shape_rms_m=float(np.sqrt(np.mean(shape**2))), tip_shape_rms_m=float(np.sqrt(np.mean(tip**2))))
+def score(config, firmware, groups, values):
+    """Pooled and per-flight errors of one group of flights (None without flights)."""
+    groups = {n: v for n, v in groups.items() if v}
+    if not groups:
+        return None
+    residuals = coupled.Residuals(config, firmware, groups)
+    passes = [residuals(**values) for _ in range(2)]
+    (r, failures, report), (r2, _, _) = passes
+    residuals.runner.close()
+    return dict(position_m=report['position_m'], tilt_deg=report['tilt_deg'], shape_m=report['shape_m'], tip_m=report['tip_m'],
+                failed_segments=failures, reproduced_twice=bool((r == r2).all()), segments={n: len(v) for n, v in groups.items()},
+                per_flight={n: dict(position_m=report['per_flight_position_m'][n], tilt_deg=report['per_flight_tilt_deg'][n],
+                                    shape_m=report['per_flight_shape_m'][n], tip_m=report['per_flight_tip_m'][n]) for n in groups})
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--drone-fit', type=Path)
-    parser.add_argument('--cable-fit', type=Path)
-    parser.add_argument('--adopted', action='store_true', help='score the configuration files as they are (default flight law)')
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--horizon', type=float, default=1., help='segment length, s')
     args = parser.parse_args()
-    base = load_model_configuration(DEFAULT_MODEL)
-    base['drone']['mass_kg'] = DRONE_MASS_KG
-    firmware = flight_drone.firmware_config()
-    if args.adopted:
-        drone_x, cable_values = None, {k: base['cable'][k] for k in ('EI_n_m2', 'Cb_n_m2_s', 'normal_drag_coefficient', 'external_drag_s_inv')}
-        models = {f'adopted configuration ({firmware.get("law", "identified")} law)': base}
-    else:
-        firmware = flight_drone.firmware_config(flight_drone.ROOT/'configs/controllers/crazyflie_flight.toml')   # identified law
-        drone_x = json.loads(args.drone_fit.read_text())['best']['x']
-        cable_values = json.loads(args.cable_fit.read_text())['best']['values']
-        models = {'fitted (drone pipeline + cable v2)': coupled_config(base, drone_x, cable_values),
-                  'unfitted (previous simulator gains, configured cable)': coupled_config(
-                      base, [20., 1., .015, .03], {k: base['cable'][k] for k in cable_values})}
-    flights, held = {}, {}
-    for motion, folder in folders('cf_2').items():
-        flight = load(folder)
-        flights[motion] = [(w, flight) for w in flight_windows(folder)]
-        held[motion] = is_held_out(folder)
+    t0 = time.time()
+    config = load_model_configuration(DEFAULT_MODEL)
+    firmware = tomllib.loads(FIRMWARE.read_text())
+    values = coupled.current(config)
     progress = Progress(args.output, stage='coupled', parameters=[], x0=[], unit='m')
+    progress.plan(['loading flights', 'fit flights', 'held-out flights'], [3, 2, 2])
+    progress.phase(0)
+    train, held = coupled.segments(args.horizon)
+    progress.phase_done(math.nan)
     results = {}
-    for name, config in models.items():
-        rows = {}
-        for motion, items in flights.items():
-            first, second = score(config, firmware, items), score(config, firmware, items)
-            first['reproduced_twice'] = first == second
-            first['held_out'] = held[motion]
-            rows[motion] = first
-            progress.write(kind='flight', name=motion, model=name, **{k: v for k, v in first.items() if not isinstance(v, (list, dict))})
-            print(f'{name[:28]:28s} {motion:12s} {"HELD" if held[motion] else "    "} drone {first["drone_debiased_rms_m"]*1e3:6.1f} mm debiased '
-                  f'({first["drone_raw_rms_m"]*1e3:5.0f} raw)  cable shape {first["cable_shape_rms_m"]*1e3:5.1f} mm  tip {first["tip_shape_rms_m"]*1e3:5.1f} mm  '
-                  f'failed {first["failed"]}  reproduced {first["reproduced_twice"]}', flush=True)
-        results[name] = rows
+    for index, (role, groups) in enumerate((('fit', train), ('held_out', held)), start=1):
+        progress.phase(index)
+        results[role] = score(config, firmware, groups, values)
+        if results[role] is None:
+            continue
+        for name, v in results[role]['per_flight'].items():
+            progress.write(kind='flight', name=name, role=role, **v)
+            print(f'{role:8s} {name:20s} position {v["position_m"]*1e3:6.1f} mm  tilt {v["tilt_deg"]:5.2f} deg  '
+                  f'shape {v["shape_m"]*1e3:6.1f} mm  tip {v["tip_m"]*1e3:6.1f} mm', flush=True)
+        s = results[role]
+        print(f'{role:8s} pooled               position {s["position_m"]*1e3:6.1f} mm  tilt {s["tilt_deg"]:5.2f} deg  '
+              f'shape {s["shape_m"]*1e3:6.1f} mm  tip {s["tip_m"]*1e3:6.1f} mm  failed {s["failed_segments"]}  '
+              f'reproduced {s["reproduced_twice"]}', flush=True)
+        progress.phase_done(s['shape_m'])
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(dict(drone_x=drone_x, cable=cable_values, firmware=firmware, results=results), indent=1))
-    progress.done([], float('nan'))
+    args.output.write_text(json.dumps(dict(
+        stage='coupled', method='segments', model='configured model, full coupled replay from the sent commands',
+        horizon_s=args.horizon, values=values, firmware=firmware, results=results, seconds=time.time()-t0),
+        indent=1, default=float))
+    progress.done([], math.nan)
 
 
 if __name__ == '__main__':

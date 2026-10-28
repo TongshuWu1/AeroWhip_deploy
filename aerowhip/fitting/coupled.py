@@ -103,13 +103,14 @@ class Residuals:
         return errors, messages
 
     def __call__(self, **values):
-        """(r, failures, report): report has position RMS (m), tilt RMS (deg), shape RMS (m), overall
-        and per flight."""
+        """(r, failures, report): report has position RMS (m), tilt RMS (deg), shape RMS (m) and tip
+        (last marker) RMS (m), overall and per flight."""
         errors, _ = self.errors(**values)
         sp, st, ss = self.scale
         pieces, failures = [], 0
-        report = {k: {} for k in ('per_flight_position_m', 'per_flight_tilt_deg', 'per_flight_shape_m')}
+        report = {k: {} for k in ('per_flight_position_m', 'per_flight_tilt_deg', 'per_flight_shape_m', 'per_flight_tip_m')}
         squares, frames, seen = np.zeros(3), 0, 0
+        tip_squares, tip_seen = 0., 0
         for name in self.names:
             good = [e for e in errors[name] if e is not None]
             profiled, _ = bias_profile([e[:, :3] for e in good])
@@ -120,6 +121,9 @@ class Residuals:
             report['per_flight_position_m'][name] = _rms(profiled)
             report['per_flight_tilt_deg'][name] = math.degrees(_rms(tilts)) if tilts else math.nan
             report['per_flight_shape_m'][name] = math.sqrt(sum(float(np.nansum(s**2)) for s in shapes)/fseen) if fseen else math.nan
+            tsq, tn = sum(float(np.nansum(s[:, -1]**2)) for s in shapes), sum(int(np.isfinite(s[:, -1]).sum()) for s in shapes)
+            report['per_flight_tip_m'][name] = math.sqrt(tsq/tn) if tn else math.nan
+            tip_squares += tsq; tip_seen += tn
             it = iter(zip(profiled, tilts, shapes))
             for e, (w, _) in zip(errors[name], self.groups[name]):
                 n = len(w.time)-1
@@ -137,6 +141,7 @@ class Residuals:
         report['tilt_deg'] = math.degrees(np.sqrt(squares[1]/frames)) if frames else math.nan
         report['shape_m'] = float(np.sqrt(squares[2]/seen)) if seen else math.nan
         report['seen_per_frame'] = seen/frames if frames else math.nan
+        report['tip_m'] = math.sqrt(tip_squares/tip_seen) if tip_seen else math.nan
         return np.concatenate(pieces), failures, report
 
     def value(self, r):

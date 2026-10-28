@@ -180,25 +180,6 @@ Vector impulse(const Parameters& p, const Chain& c, const Vector& lambda) {
     }
     return out;
 }
-Vector network(const std::vector<Layer>& layers, Vector x) {
-    for(size_t layer=0;layer<layers.size();++layer) {
-        const Layer& l=layers[layer]; Vector y=l.bias;
-        for(int i=0;i<l.outputs;++i) {
-            for(int j=0;j<l.inputs;++j) y[i]+=l.weight[i*l.inputs+j]*x[j];
-            if(layer+1<layers.size()) y[i]=std::tanh(y[i]);
-        }
-        x=std::move(y);
-    }
-    return x;
-}
-Vec3 drone_drag_acceleration(const Parameters& p,const Vector& s) {
-    const auto& r=p.residual;if(!r.drone_enabled)return Vec3{};
-    auto R=rotation(s);auto v=mv(transpose(R),at(s,12));Vector features(3);
-    for(int j=0;j<3;++j)features[j]=v[j]*v[j]/(r.velocity_scale*r.velocity_scale);
-    auto y=network(r.drone,features);Vec3 a{};
-    for(int j=0;j<3;++j)a[j]=-r.drone_max_rate*.5*(1.+std::tanh(y[j]/2.))*v[j];
-    return mv(R,a); // external force at vehicle COM, no learned moment
-}
 Vec3 drone_body_drag_acceleration(const Parameters& p,const Vector& s) {
     auto R=rotation(s);auto v=mv(transpose(R),at(s,12));
     return mv(R,Vec3{-p.body_drag[0]*v[0],-p.body_drag[1]*v[1],-p.body_drag[2]*v[2]});
@@ -234,21 +215,7 @@ CableForces cable_forces(const Parameters& p,const Vector& s,const Chain& c,cons
         f[i]=bending+p.gravity*p.node_mass[i];
     }
     for(size_t i=0;i<=m;++i) {
-        Vec3 acceleration=v[i]*(-p.drag);
-        const auto& r=p.residual;
-        if(r.cable_enabled) {
-            // Clamp tangent at node 0; edge bisector inside; last edge at tip.
-            Vec3 tangent= i==0?ta:c.tangent[i-1];
-            if(i>0 && i<m){tangent=tangent+c.tangent[i];tangent=tangent/norm(tangent);}
-            Vec3 parallel=tangent*dot(tangent,v[i]),perpendicular=v[i]-parallel;
-            double scale=r.velocity_scale*r.velocity_scale;
-            auto y=network(r.cable,{dot(parallel,parallel)/scale,dot(perpendicular,perpendicular)/scale});
-            // Correct TOTAL drag, not an additional unrestricted acceleration.
-            double along=p.drag*std::exp(r.cable_log_bound*std::tanh(y[0]));
-            double across=p.drag*std::exp(r.cable_log_bound*std::tanh(y[1]));
-            acceleration=parallel*(-along)+perpendicular*(-across);
-        }
-        f[i]=f[i]+acceleration*p.node_mass[i];
+        f[i]=f[i]+v[i]*(-p.drag*p.node_mass[i]);
         // Quadratic normal drag on the cylinder (independence principle): only the velocity
         // normal to the local tangent loads the cable; tributary length is half of each edge.
         double coefficient=.5*p.air_density*p.normal_drag_coefficient*p.diameter;
@@ -354,22 +321,6 @@ Engine::Engine(Parameters parameters) : p_(std::move(parameters)) {
     root_mass_=p_.mass+p_.node_mass[0]; double reduced=p_.mass*p_.node_mass[0]/root_mass_;
     for(int i=0;i<9;++i) inertia[i]+=reduced*K2[i];
     root_inverse_=inverse(inertia);
-    const auto& r=p_.residual;
-    auto validate_network=[](const std::vector<Layer>& layers,int inputs,int outputs) {
-        require(layers.size()==3, "Expected three aerodynamic coefficient layers");
-        for(const Layer& l:layers) {
-            require(l.inputs==inputs && l.outputs>0 && l.weight.size()==size_t(l.inputs)*l.outputs && l.bias.size()==size_t(l.outputs)
-                    && finite(l.weight) && finite(l.bias), "Invalid residual layer"); inputs=l.outputs;
-        }
-        require(inputs==outputs,"Incorrect aerodynamic coefficient output width");
-    };
-    if(r.cable_enabled || r.drone_enabled) {
-        require(std::isfinite(r.cable_log_bound) && r.cable_log_bound>0. && r.cable_log_bound<=10.
-                && std::isfinite(r.drone_max_rate) && r.drone_max_rate>0.
-                && std::isfinite(r.velocity_scale) && r.velocity_scale>0.,"Invalid aerodynamic specification");
-        if(r.cable_enabled)validate_network(r.cable,2,2);
-        if(r.drone_enabled)validate_network(r.drone,3,3);
-    }
 }
 void Engine::validate_state(const Vector& s, bool constraints) const {
     size_t m=p_.rest.size(); require(s.size()==18+6*m && finite(s), "State shape or values are invalid");
@@ -412,7 +363,7 @@ void Engine::restore(const Vector& saved) {
 Vector Engine::state() const { Guard guard(busy_); require(!state_.empty(),"Reset engine before use"); return state_; }
 Vec3 Engine::drone_air_force() const {
     Guard guard(busy_);require(!state_.empty(),"Reset engine before use");
-    return (drone_drag_acceleration(p_,state_)+drone_body_drag_acceleration(p_,state_))*p_.mass;
+    return drone_body_drag_acceleration(p_,state_)*p_.mass;
 }
 Vector Engine::acceleration(const Wrench& w) const {
     Guard guard(busy_); require(!state_.empty(),"Reset engine before use"); validate_wrench(w); return add_scaled(acceleration_at(state_,w),material::instantaneous(p_,state_),1.);
@@ -436,7 +387,7 @@ Vector Engine::generalized_load(const Vector& s, const Wrench& w) const {
     Vec3 omega=at(s,15), gyro=cross(omega,mv(p_.inertia,omega));
     Vec3 centripetal=mv(R,cross(omega,cross(omega,p_.arm)));
     Vec3 force=p_.gravity*p_.mass+Vec3{R[2],R[5],R[8]}*w[0]+f[0]-centripetal*p_.node_mass[0];
-    force=force+(drone_drag_acceleration(p_,s)+drone_body_drag_acceleration(p_,s))*p_.mass;
+    force=force+drone_body_drag_acceleration(p_,s)*p_.mass;
     Vec3 torque=Vec3{w[1],w[2],w[3]}-gyro+mv(transpose(b.B),f[0])-mv(transpose(b.B),centripetal)*p_.node_mass[0];
     torque=torque+mv(Rt,root_moment);
     Vector out(6+3*m);put(out,0,force);put(out,3,torque);

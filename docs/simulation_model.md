@@ -14,7 +14,7 @@ nodes, including the attachment node 0, are world positions. All quantities are 
 ## Default parameters
 
 Defined in [configs/physics/drone_cable.json](../configs/physics/drone_cable.json),
-[configs/controllers/geometric.toml](../configs/controllers/geometric.toml),
+[configs/controllers/onboard.toml](../configs/controllers/onboard.toml),
 [configs/controllers/crazyflie_flight.toml](../configs/controllers/crazyflie_flight.toml),
 [configs/controllers/crazyflie_firmware.toml](../configs/controllers/crazyflie_firmware.toml) and
 [configs/actuators/drone.json](../configs/actuators/drone.json), combined by
@@ -26,14 +26,14 @@ Defined in [configs/physics/drone_cable.json](../configs/physics/drone_cable.jso
 | Cable and marker mass (total) | 0.016 kg (weighed 2026-10-27; assembly 0.162 kg) |
 | Cable length / mesh | 0.985 m / 10 edges between 11 nodes (the marker intervals: 0.085 m, then 9 × 0.1 m, measured) |
 | Tracking origin → centre of mass / → attachment | (0, 0, −0.018) / (0, 0, −0.055) m (attachment measured 2026-10-27; the hanging-cable fit had placed the first marker within 3 mm of this) |
-| Bending stiffness EI / bending damping Cb | 1.14e−7 N m² (not identifiable) / 3.02e−4 N m² s |
-| Cable diameter / normal drag coefficient Cd / air density | 3.5 mm / 0.69 / 1.2 kg m⁻³ |
-| Linear drag | 0.0526 s⁻¹ (on node velocity, mass proportional) |
-| Drone air drag (body x, y / z) | 0.52 / 0.85 s⁻¹ (linear, mass proportional, on the COM velocity in body axes) |
+| Bending stiffness EI / bending damping Cb | 5.71e−4 N m² / 4.13e−5 N m² s |
+| Cable diameter / normal drag coefficient Cd / air density | 3.5 mm / 0.64 / 1.2 kg m⁻³ |
+| Linear drag | 0.223 s⁻¹ (on node velocity, mass proportional) |
+| Drone air drag (body x, y / z) | 0.59 / 0.48 s⁻¹ (linear, mass proportional, on the COM velocity in body axes) |
 | Maximum physics step | 2 ms (one step per firmware controller period) |
 | Output / controller rate | 100 / 500 Hz (the firmware attitude rate) |
-| Attitude loop / command delay / motor response | firmware law: Mellinger gains of the flight (kR 70000, kw 20000, kd_omega 200, massThrust 17700) / 0 s / 0.0225 s; roll/pitch inertia 1.877e-4 kg m² and motor arm 0.0613 m fitted together on the drone-only flights (correlated until the arm is measured). Identified law (fallback): 20 rad/s, ζ = 1 / 0.03 s / 0.015 s |
-| Thrust map | T = 0.553 (1 + 0.177 (V − 7.2 V)) T_cmd^2.2 N, T_cmd the firmware thrust in N |
+| Attitude loop / command delay / motor response | firmware law: Mellinger gains of the flight (kR 70000, kw 20000, kd_omega 200, massThrust 17700) / 5 ms / 0.0196 s; roll/pitch inertia 1.877e-4 kg m² (the configured value: the drone fit did not identify it). Identified law (fallback): 20 rad/s, ζ = 1 / 0.03 s / 0.015 s |
+| Thrust map | firmware law: per motor T_i = κ/4 (pwm_i/massThrust)^p (1 + β (V − 7.2 V)), κ = 0.553 N^(1−p), p = 2.19, β = 0.249 V⁻¹ ([crazyflie_firmware.toml](../configs/controllers/crazyflie_firmware.toml)); identified law: T = 0.553 (1 + 0.177 (V − 7.2 V)) T_cmd^2.2 N |
 | Motor thrust limit | 0.85 N per motor (peak measured collective thrust 3.39 N) |
 
 The cable and drone values are identified on the 2026-10-27 calibration flights
@@ -61,9 +61,10 @@ edge may bend away from that tangent, and the clamp's bending moment acts on the
 tip is free. There is no self-contact, ground or wall contact, or wind. Collapsed edges and
 antiparallel adjacent edges are rejected as invalid states.
 
-On the identified values the cable is gravity dominated (EI/(m g L²) ≈ 3·10⁻⁷) and its bending
-is strongly damped (Cb/EI of order 10³–10⁴ s): its shape is set by gravity, inertia, bending
-damping and air drag, and EI is not identifiable from flight data (any small value fits).
+On the identified values the cable is gravity dominated (EI/(m g L²) ≈ 4·10⁻³) and its bending
+relaxes in Cb/EI ≈ 0.07 s. The segment fit of the cable flights identifies all four cable
+parameters (standard deviations 0.04–0.08 in log₁₀ EI, log₁₀ Cb, Cd and log₁₀ linear drag;
+`runs/fits/cable/20261027-202726.json`).
 
 ## Drone air drag
 
@@ -122,9 +123,14 @@ Two controllers drive the plant:
 
   In both laws an optional constant world acceleration bias models the slowly varying
   disturbances seen in flight (about 0.1 m/s²) for randomization.
-- **Geometric controller** (`aerowhip.control.geometric_controller`): position/velocity/
-  acceleration tracking with a static weight trim, used by the interactive simulator and the
-  scripted-flight tools.
+- **Host tracking law** (`aerowhip.control.flight_pipeline`): in the interactive simulator,
+  the trajectory editor, the headless runner and the Crazyswarm simulation server, the
+  reference (position, velocity, acceleration, yaw) goes through the host PID of the cf_2
+  flight scripts (k_p = 4 s⁻², k_d = 3 s⁻¹, k_i = 0.6 s⁻³, integral action limited to
+  1.5 m/s² per axis), plus the same vertical hover feed-forward as the training environment;
+  the resulting acceleration is the firmware law's setpoint. When a Crazyswarm script streams
+  acceleration-only commands it runs its own host law, and its acceleration passes straight
+  through.
 
 Motor commands are mixed with per-motor clipping (the firmware law supplies motor forces already
 mixed and capped by the firmware; the allocation reproduces them); a first-order motor response

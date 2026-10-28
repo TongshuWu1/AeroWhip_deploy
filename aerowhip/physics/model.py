@@ -46,30 +46,11 @@ def pack_state(state):
     return np.concatenate([as_array(getattr(state, f.name)).ravel() for f in fields(PlantState)])
 
 
-def aerodynamic_weights(residual):
-    if residual is None:
-        return None
-    return dict(cable_log_bound=residual.cable_log_bound, drone_max_rate=residual.drone_max_rate_s_inv,
-                velocity_scale=residual.velocity_scale_m_s,
-                cable_enabled=residual.specification['cable_enabled'],drone_enabled=residual.specification['drone_enabled'],
-                **{name:[(as_array(branch[i].weight),as_array(branch[i].bias)) for i in (0,2,4)]
-                   for name,branch in (('cable',residual.cable),('drone',residual.drone))})
-
-
 class Model:
-    """Owned model metadata and native mesh/state validation.
-
-    Torch is used only when deserializing an existing .pt residual checkpoint;
-    no Torch physics model, controller or integration runtime is constructed.
-    """
-    def __init__(self, config, *, residual=None, load_weights=True):
+    """Owned model metadata and native mesh/state validation."""
+    def __init__(self, config):
         self.config, self.configuration_sources = load_model_configuration(config, with_sources=True)
-        reference = self.config.get('residual', {})
-        self.residual = residual
-        if self.residual is None and load_weights and reference.get('status') == 'fitted':
-            from aerowhip.fitting.residual_network import load_residual
-            self.residual = load_residual(reference, 'cpu')
-        self.native = native_module().Model(self.config, aerodynamic_weights(self.residual))
+        self.native = native_module().Model(self.config)
         for name, value in self.native.info().items():
             setattr(self, name, value)
         self.marker_indices = np.asarray(self.marker_indices, dtype=np.int64)

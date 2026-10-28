@@ -6,19 +6,19 @@ listed above them:
 
 | Package | Responsibility |
 |---|---|
-| `aerowhip.physics` | Coupled drone–cable plant: C++ engine bindings (`_native`, `_tensor_native`), model files, states, single-flight runtimes and the batched tensor model used for training and fitting. |
-| `aerowhip.control` | Geometric flight controller (NumPy and Torch versions) and gamepad input. |
+| `aerowhip.physics` | Coupled drone–cable plant: C++ engine bindings (`_native`), model files, states and the single-flight runtime of the interactive tools. |
+| `aerowhip.control` | The flight pipeline of the interactive tools (host tracking law, then the native firmware flight controller) and gamepad input. |
 | `aerowhip.trajectories` | Full-state reference trajectories, B-splines and presets. |
 | `aerowhip.envs` | `BatchEnvironment`: batched episodes over the native plant and its flight controller (lanes stepped in parallel on the CPU), command delay, 100 Hz history, validity limits, and the `Task` interface. |
 | `aerowhip.tasks` | Reward definitions behind the `Task` interface, registered by name (`tasks/__init__.py`). |
 | `aerowhip.experiment` | Experiment files: parsing, validation, run snapshots and run identity. |
 | `aerowhip.learning` | PPO, run folders/checkpoints and the training worker. Independent of the task. |
 | `aerowhip.evaluation` | Whip measurements on saved motion, offline event review, and frozen-policy tests. |
-| `aerowhip.takes` | Recorded flight takes: loading, checks, clock alignment, catalog. |
-| `aerowhip.fitting` | Cable, vehicle-response and aerodynamic-residual fitting from takes. |
+| `aerowhip.takes` | Recorded calibration flights: loading on the camera frame clock, cable-marker labels. |
+| `aerowhip.fitting` | The fitting stages (thrust map, drone, cable, coupled validation) on short segments of the calibration flights, with their progress files and results. |
 | `aerowhip.deployment` | ROS 2 / Crazyswarm adapters, OptiTrack relay, cable-marker tracking, and the flight estimator (`observer`: frame clock, drone velocity, live cable filter) shared with the training environment. |
 | `aerowhip.viewer` | 3D rendering of simulated, replayed and live states. |
-| `aerowhip.ui` | Desktop applications: training, policy tester, take processing, controller editor. |
+| `aerowhip.ui` | Desktop applications: training, policy tester, Model Fit, cable-label review, controller editor. |
 
 `aerowhip.paths.ROOT` is the repository root; `configs/`, `data/`, `runs/` and
 `output/` are resolved from it, and file arguments must stay inside it.
@@ -72,10 +72,3 @@ normalized world accelerations (excluding gravity) scaled by
 environment a zero action means hover: a vertical feed-forward acceleration, solved per lane from the
 thrust map at that lane's battery voltage, is added so that the delivered thrust equals the weight of
 drone and cable (in flight the host position controller supplies this trim).
-
-## Equivalence check
-
-`scripts/equivalence_check.py --record` saves the tensors of a fixed open-loop
-rollout (CPU and CUDA) and one seeded PPO update; running it again compares every
-tensor bitwise. It is the check that a refactoring changed no numbers, not a
-physical or learning result.

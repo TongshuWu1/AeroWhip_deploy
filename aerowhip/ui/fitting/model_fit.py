@@ -34,8 +34,6 @@ from aerowhip.ui.style import PALETTE, ROLE
 
 CHECKER = calibration_set.DEFAULT_ROOT.parent/'scripts/check_calibration_data.py'
 ADOPTIONS = stages.FITS/'adoptions.jsonl'
-# Older results have no progress file; their parameter names come from here.
-LEGACY_PARAMETERS = {'cable': ['log10 EI', 'log10 Cb', 'Cd', 'log10 linear drag']}
 GOOD, BAD = PALETTE['green'], PALETTE['vermillion']
 IN_USE = 1e-4            # relative difference below which a fitted value counts as the configured one
 
@@ -62,10 +60,9 @@ def fmt(v, digits=4):
 
 
 def all_results():
-    """[(path, stage)] of every result file, newest first: runs/fits/<stage>/ and the older
-    runs/calibration_*/ folders."""
+    """[(path, stage)] of every result file under runs/fits/<stage>/, newest first."""
     found = []
-    for path in [*stages.FITS.glob('*/*.json'), *ROOT.glob('runs/calibration_*/*.json')]:
+    for path in stages.FITS.glob('*/*.json'):
         stage = stages.stage_of(path)
         if stage is not None:
             found.append((path, stage))
@@ -80,33 +77,6 @@ def adoptions():
 
 def load_result(path):
     return json.loads(Path(path).read_text())
-
-
-def events_for(result_path, result=None):
-    """Progress events of a run: its progress file, or rebuilt from the search record of an older
-    result (evaluations and per-iteration best)."""
-    path = progress_file.progress_path(result_path)
-    if path.exists():
-        return progress_file.read(path)
-    result = result if result is not None else load_result(result_path)
-    stage = stages.stage_of(result_path)
-    search = result.get('search', result)
-    history = search.get('history', [])
-    evaluations = search.get('evaluations', [])
-    if not history and not evaluations:
-        return []
-    x0 = evaluations[0][0] if evaluations else history[0][2]
-    names = result.get('parameters') or LEGACY_PARAMETERS.get(stage.key) or [f'x{i}' for i in range(len(x0))]
-    seconds = result.get('seconds', result.get('search', {}).get('seconds'))
-    events = [dict(kind='start', stage=stage.key, parameters=names, x0=x0, unit=stage.unit, legacy=True)]
-    if seconds is not None:
-        events[0]['time'] = 0.
-    events += [dict(kind='evaluation', n=i+1, x=x, value=v) for i, (x, v) in enumerate(evaluations)]
-    events += [dict(kind='iteration', n=n, best=b, x=x) for n, b, x in history]
-    events.append(dict(kind='done', result=str(result_path)))
-    if seconds is not None:
-        events[-1]['time'] = float(seconds)
-    return events
 
 
 def stage_status(stage, results):
@@ -560,7 +530,7 @@ class ProgressView(QtWidgets.QWidget):
         if signature == self.signature:
             return                                      # only the clock moved
         self.signature = signature
-        self.source.setText(source+('  (rebuilt from the result file)' if start.get('legacy') else ''))
+        self.source.setText(source)
         flights = [e for e in events if e['kind'] == 'flight']
         self.state = state
         if flights:
@@ -716,12 +686,13 @@ class ProgressView(QtWidgets.QWidget):
         with canvas.style():
             ax = canvas.figure.add_subplot(111)
             y = np.arange(len(flights))
-            for k, (key, colour, text) in enumerate((('drone_debiased_rms_m', ROLE['model'], 'drone, debiased'),
-                                                     ('cable_shape_rms_m', ROLE['command'], 'cable shape'))):
-                ax.barh(y+(k-.5)*.38, [(e.get(key) or np.nan)*1e3 for e in flights], height=.36, color=colour, label=text)
-            ax.set_yticks(y, [e['name'] for e in flights])
+            for k, (key, colour, text) in enumerate((('position_m', ROLE['model'], 'drone position'),
+                                                     ('shape_m', ROLE['command'], 'cable shape'),
+                                                     ('tip_m', ROLE['error'], 'cable tip'))):
+                ax.barh(y+(k-1)*.27, [(e.get(key) or np.nan)*1e3 for e in flights], height=.26, color=colour, label=text)
+            ax.set_yticks(y, [e['name']+(' (held out)' if e.get('role') == 'held_out' else '') for e in flights])
             ax.invert_yaxis()
-            ax.set_xlabel('RMS error over 2 s windows (mm)')
+            ax.set_xlabel('RMS error over 1 s segments (mm)')
             ax.set_title('Per flight')
             ax.legend(loc='lower right', frameon=False)
             canvas.figure.tight_layout()
@@ -998,8 +969,7 @@ class RunsView(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(12, 12, 12, 12)
         layout.addWidget(label('Runs', 'heading'))
-        layout.addWidget(label('Every result of the four stages, newest first (runs/fits/ and the older '
-                               'runs/calibration_*/ folders). Double-click to open.', 'note', wrap=True))
+        layout.addWidget(label('Every result of the stages under runs/fits/, newest first. Double-click to open.', 'note', wrap=True))
         self.tree = QtWidgets.QTreeWidget()
         self.tree.setHeaderLabels(['stage / file', 'time', 'result', 'state'])
         for i in range(4):

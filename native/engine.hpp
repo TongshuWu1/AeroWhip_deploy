@@ -14,16 +14,6 @@ using Wrench = std::array<double, 4>; // collective N (body +Z), body XYZ Nm
 using Motors = std::array<double, 4>; // individual thrust N, not PWM or RPM
 class Actuator;
 
-struct Layer {
-    int inputs = 0, outputs = 0;
-    Vector weight, bias; // output-major weights
-};
-struct AerodynamicResidual {
-    std::vector<Layer> cable, drone;
-    // Rates have units s^-1; air is stationary in the world frame.
-    double cable_log_bound = 0., drone_max_rate = 0., velocity_scale = 1.;
-    bool cable_enabled = false, drone_enabled = false;
-};
 struct Parameters {
     double mass = 0., stiffness = 0., drag = 0., maximum_step = 0.;
     double bending_damping = 0.;
@@ -39,7 +29,6 @@ struct Parameters {
     Mat3 inertia{};
     Vec3 arm{}, gravity{}, root_tangent_body{};
     Vector rest, node_mass;
-    AerodynamicResidual residual;
 };
 
 struct ModelInput {

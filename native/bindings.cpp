@@ -45,27 +45,9 @@ Parameters parameters(const py::dict& d) {
     p.root_tangent_body=fixed<3>(d["root_tangent_body"]);
     if(d.contains("body_drag")) p.body_drag=fixed<3>(d["body_drag"]);
     p.rest=vector(d["rest"]); p.node_mass=vector(d["node_mass"]);
-    if(d.contains("residual") && !d["residual"].is_none()) {
-        auto r=d["residual"].cast<py::dict>();
-        p.residual.cable_log_bound=r["cable_log_bound"].cast<double>();
-        p.residual.drone_max_rate=r["drone_max_rate"].cast<double>();
-        p.residual.velocity_scale=r["velocity_scale"].cast<double>();
-        p.residual.cable_enabled=r["cable_enabled"].cast<bool>();
-        p.residual.drone_enabled=r["drone_enabled"].cast<bool>();
-        auto read_layers=[&](const char* key,std::vector<Layer>& layers) {
-        for(auto item:r[key].cast<py::list>()) {
-            auto l=item.cast<py::tuple>();
-            if(l.size()!=2) throw py::value_error("Layer requires weights and bias");
-            auto w=Array::ensure(l[0]);
-            if(!w || w.ndim()!=2) throw py::value_error("Layer weights must be a matrix");
-            layers.push_back(Layer{int(w.shape(1)),int(w.shape(0)),vector(w,2),vector(l[1])});
-        }
-        };
-        read_layers("cable",p.residual.cable);read_layers("drone",p.residual.drone);
-    }
     return p;
 }
-Model model(const py::dict& c,const py::object& residual) {
+Model model(const py::dict& c) {
     auto d=c["drone"].cast<py::dict>(),a=c["attachment"].cast<py::dict>();
     auto cable=c["cable"].cast<py::dict>(),n=c["simulation"].cast<py::dict>();
     if(a["type"].cast<std::string>()!="point_clamp_der_halfcell_v1" || !a["transmit_direct_moment"].cast<bool>())
@@ -107,19 +89,7 @@ Model model(const py::dict& c,const py::object& residual) {
             throw py::value_error("Invalid legacy cable_substeps");
         p.maximum_step=input.output_step/steps;
     }
-    Model result(std::move(input));
-    if(!residual.is_none()) {
-        py::dict raw;
-        const auto& v=result.parameters;
-        raw["mass"]=v.mass;raw["inertia"]=py::array_t<double>({3,3},v.inertia.data());
-        raw["arm"]=v.arm;raw["gravity"]=v.gravity;raw["rest"]=v.rest;raw["node_mass"]=v.node_mass;
-        raw["root_tangent_body"]=v.root_tangent_body;raw["body_drag"]=v.body_drag;
-        raw["bending_damping"]=v.bending_damping;raw["air_density"]=v.air_density;raw["bending_damping_saturation"]=v.bending_damping_saturation;
-        raw["normal_drag_coefficient"]=v.normal_drag_coefficient;raw["diameter"]=v.diameter;
-        raw["stiffness"]=v.stiffness;raw["drag"]=v.drag;raw["maximum_step"]=v.maximum_step;raw["projections"]=v.projections;
-        raw["residual"]=residual;result.parameters=parameters(raw);Engine validate(result.parameters);
-    }
-    return result;
+    return Model(std::move(input));
 }
 py::dict info(const Model& model) {
     auto& p=model.parameters;py::dict d;
@@ -242,7 +212,7 @@ PYBIND11_MODULE(_native, m) {
         .def("wrench",&Actuator::wrench)
         .def("validate",&Actuator::validate);
     py::class_<Model>(m,"Model")
-        .def(py::init(&model),py::arg("config"),py::arg("residual")=py::none())
+        .def(py::init(&model),py::arg("config"))
         .def("info",&info)
         .def("initial_state",[](const Model& m,py::object p,py::object R,py::object v,py::object omega,py::object q,py::object qv){
             return array(m.initial_state(fixed<3>(p),fixed<9>(R,2),fixed<3>(v),fixed<3>(omega),

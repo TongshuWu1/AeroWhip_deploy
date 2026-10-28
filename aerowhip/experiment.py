@@ -53,8 +53,6 @@ def check_model(experiment, model):
     flight rounds it up)."""
     if model['simulation']['segments_per_marker_interval'] != [1]*10:
         raise ValueError('The tasks require the ten-link mesh (one segment per marker interval)')
-    if model['residual']['status'] != 'unfitted':
-        raise ValueError('Learning currently requires the unfitted correction; model promotion requires separate approval')
     mass = model['drone']['mass_kg']
     trim = -(mass+model['cable']['total_mass_kg'])*model['simulation']['gravity_world_m_s2'][2]/mass
     if experiment.environment.acceleration_limit_mps2[2] >= trim:

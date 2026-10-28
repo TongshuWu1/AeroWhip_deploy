@@ -20,7 +20,7 @@ def setup(drag=True):
         config = deepcopy(config)
         config['cable']['external_drag_s_inv'] = 0.
         config['cable']['normal_drag_coefficient'] = 0.
-    model = Model(config, load_weights=False)
+    model = Model(config)
     i = model.native.info()
     engine = native_module().Engine(dict(
         mass=i['mass'], stiffness=i['ei'], drag=i['drag'], bending_damping=i['cb'], air_density=i['air_density'],
@@ -140,4 +140,4 @@ def test_body_drag_is_linear_in_body_frame_velocity():
     root = d[:3]+R@np.cross(d[3:6], i['arm'])
     total = model.mass*d[:3]+model.node_mass[0]*root+(model.node_mass[1:, None]*d[6:].reshape(-1, 3)).sum(0)
     np.testing.assert_allclose(total, force, rtol=0, atol=1e-12)
-    np.testing.assert_allclose(Model(dict(config, drone=dict(config['drone'], body_drag_s_inv=list(k))), load_weights=False).native.info()['body_drag'], k)
+    np.testing.assert_allclose(Model(dict(config, drone=dict(config['drone'], body_drag_s_inv=list(k)))).native.info()['body_drag'], k)

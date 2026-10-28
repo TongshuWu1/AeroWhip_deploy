@@ -50,35 +50,25 @@ def load_model_configuration(source, *, with_sources=False, root=ROOT):
     sources = {}
     value = _read(source, 'model', sources, root)
     if 'physics' in value:
-        if set(value) != {'physics', 'controller', 'actuator', 'residual'}:
-            raise ValueError('Setup requires physics, controller, actuator and residual')
+        if set(value) != {'physics', 'controller', 'actuator'}:
+            raise ValueError('Setup requires physics, controller and actuator')
         physics = _read(value['physics'], 'physics', sources, root)
         if set(physics) != set(PHYSICAL_SECTIONS):
             raise ValueError('Physics contains only drone, attachment, cable and simulation settings')
         controller = _read(value['controller'], 'controller', sources, root)
         result = {**physics, 'controller': controller,
-                  'actuator': _read(value['actuator'], 'actuator', sources, root),
-                  'residual': _read(value['residual'], 'residual_config', sources, root)}
+                  'actuator': _read(value['actuator'], 'actuator', sources, root)}
     else:
-        # Saved experiments are complete snapshots, never overlaid by live defaults.
-        result = value
+        # Saved experiments are complete snapshots, never overlaid by live defaults. Older snapshots
+        # carry the settings of a learned drag correction that no longer exists (never fitted): ignored.
+        result = {k: v for k, v in value.items() if k != 'residual'}
     if not all(isinstance(result.get(key), dict) for key in (*PHYSICAL_SECTIONS, 'controller')):
         raise ValueError('Incomplete physical/controller configuration')
-    if 'residual' in result and not isinstance(result['residual'], dict):
-        raise ValueError('Residual settings must be a mapping')
     if 'command_delay_s' not in result['controller']:
         raise ValueError('Controller settings must retain an explicit command_delay_s')
     if not isinstance(result.get('actuator'), dict) or 'controller_period_s' not in result['controller']:
-        raise ValueError('Historical model is not an active setup: use the geometric controller and motor configuration')
+        raise ValueError('Historical model is not an active setup: use the onboard controller and motor configuration')
     if result["cable"].get("constitutive_model") != "der_twist_free_kelvin_voigt_v2":
         raise ValueError("Historical model is not the twist-free cable setup; no implicit migration")
-    from aerowhip.control.geometric_controller import load_gains
-    load_gains(result['controller'])
-    residual = result.get('residual', {})
-    if residual.get('schema') != 'structured_aerodynamic_residual_v1' or residual.get('status') not in ('unfitted', 'fitted'):
-        raise ValueError('Expected structured aerodynamic residual schema; historical models need explicit reconstruction')
-    required = {'schema','status'} | ({'checkpoint','sha256'} if residual['status'] == 'fitted' else set())
-    if set(residual) != required:
-        raise ValueError('Residual settings must contain schema/status and, only when fitted, checkpoint/sha256')
     verify_configuration_sources(sources)
     return (result, sources) if with_sources else result

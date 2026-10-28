@@ -22,7 +22,7 @@ def main():
     args = parser.parse_args()
     config = load_model_configuration(DEFAULT_MODEL)
     native = native_module()
-    model = Model(config, load_weights=False)
+    model = Model(config)
     state = model.native.initial_state(np.array([0., 0., 1.5]), np.eye(3), np.zeros(3), np.zeros(3), None, None)
     hold = np.zeros(13)
     firmware = firmware_config()

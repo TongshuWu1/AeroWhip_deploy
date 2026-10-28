@@ -1,4 +1,4 @@
-"""Cable replay on calibration flights with the native engine (no tensor engine).
+"""Cable replay on calibration flights with the native engine.
 
 The measured drone pose drives the cable clamp (prescribed boundary); the cable starts from
 the measured markers at the window start and runs open loop. The loss is the RMS distance

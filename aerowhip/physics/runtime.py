@@ -18,11 +18,10 @@ class Simulation:
         Stateful sources can supply command_reset(), called on initialization and
         reset. Without a source, step(command) supplies commands directly; omitted
         commands hold the last command (initially the configured position/yaw).
-        The model supplies the sampled geometric controller and four motors.
+        The drone flies the flight pipeline (host law, onboard firmware, four motors).
         command_delay_s overrides
         transport delay explicitly, e.g. zero for already-delayed recorded events.
-        Native C++ owns simulation state, clocks and physics. The separate tensor
-        binding supports differentiable fitting/batching, not a viewer backend.
+        Native C++ owns simulation state, clocks and physics.
         """
         self.configuration = configuration
         self.timestep_s = configuration.timestep_s
@@ -33,7 +32,7 @@ class Simulation:
         self.force_telemetry_enabled = False
         self.backend = configuration.physics_backend if backend is None else backend
         if self.backend != 'native':
-            raise ValueError('Simulation uses the native engine; differentiable tensors are a separate fitting/batch interface.')
+            raise ValueError('Simulation uses the native engine.')
         self.dynamics = NativeRuntime(configuration, model_config=model_config,
                                        command_delay_s=command_delay_s)
         if hasattr(command_source, 'validate_controller'):
