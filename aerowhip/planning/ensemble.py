@@ -33,6 +33,11 @@ BRACKETS = {
     'drag/2, damping/3': dict(normal_drag_coefficient=.5, external_drag_s_inv=.5, Cb_n_m2_s=1/3),
     'residual x0': dict(residual=0.),
     'residual x2': dict(residual=2.),
+    # The drone side: a slower drone lags the reference more, so the host loop commands harder and
+    # puts more energy into the cable (closed_loop_check 2026-10-28: the real host loop sent
+    # 8.9 m/s^2 where the simulated one sent 7.2 on the flip stroke).
+    'drone slower': dict(drone=dict(motor_response=1.5, delay_add_s=.01, drag=1.3)),
+    'drone slower, damping/3': dict(drone=dict(motor_response=1.5, delay_add_s=.01, drag=1.3), Cb_n_m2_s=1/3),
 }
 
 
@@ -66,11 +71,16 @@ class Ensemble:
                     c['cable'][key] = float(c['cable'][key])*k
         return c
 
-    def drone_config(self, c, x):
-        """x = (inertia scale, motor response s, body drag xy, body drag z); the delay from the fit."""
+    def drone_config(self, c, x, scale=None):
+        """x = (inertia scale, motor response s, body drag xy, body drag z); the delay from the fit;
+        `scale` (a BRACKETS 'drone' entry) multiplies the response and drag and adds to the delay."""
         if self.drone_fit is None:
             return c
-        delay = self.drone_fit['best']['command_delay_s']
+        x = np.asarray(x, float).copy()
+        delay = float(self.drone_fit['best']['command_delay_s'])
+        if scale:
+            x[1] *= scale.get('motor_response', 1.); x[2] *= scale.get('drag', 1.); x[3] *= scale.get('drag', 1.)
+            delay += scale.get('delay_add_s', 0.)
         c = flight_drone.vehicle(c, [x[0], 1., x[1], delay], cable=True)
         c['drone']['body_drag_s_inv'] = [float(x[2]), float(x[2]), float(x[3])]
         return c
@@ -95,8 +105,11 @@ class Ensemble:
 
     def brackets(self):
         """The bracket members around the adopted model."""
-        return [(name, self.drone_config(self.cable_config(self.cable_fit['best']['x'], scale), self.drone_best()))
-                for name, scale in BRACKETS.items()]
+        out = []
+        for name, scale in BRACKETS.items():
+            cable_scale = {k: v for k, v in scale.items() if k != 'drone'}
+            out.append((name, self.drone_config(self.cable_config(self.cable_fit['best']['x'], cable_scale), self.drone_best(), scale.get('drone'))))
+        return out
 
     def member_config(self, x, d):
         return self.drone_config(self.cable_config(x), d)

@@ -2426,3 +2426,27 @@ stroke-window previews showed earlier today. For planning the ensemble must incl
 brackets (`runs/planning/bracket_mix_a_002.json`). The test suite: 100 pass; 11 fail or error, all
 on the archived reset bank (`runs/reset_bank/whip.npz` no longer exists after the fresh start; to be
 rebuilt from cf_6 recordings before training).
+
+## Dated change note — 2026-10-28 planner and closed-loop check
+
+`aerowhip/planning/simulate.py` flies one part closed loop (the model or an ensemble member, the
+firmware law at the flown gains, the flight script's own host PID and reference) and returns per
+step the position error, tilt, cable rise, tip path and speed, smallest motor share and the sent
+command. `scripts/plan_flight.py` scores candidate parts (kind × heading × level) per ensemble
+member in parallel: constraints on every member (cable's highest node below the attachment by
+--rise-margin, tilt, position error, motor floor, engine failure), the envelope rule (at most --step
+above the highest level flown cleanly per kind and heading, else --first-level), score =
+ensemble disagreement of the tip path and tilt × novelty; at most one part per (kind, heading),
+gentlest first, within the motion budget; writes the plan file (`--plan` of the flight script,
+dry-run checked) and a report. First plan for cf_6 (`runs/planning/plan_001.yaml`, 9 members, 35 s
+to plan): circle y 2, whip x 2, whip y 2, 78 s of motion; sharp stops on x allowed up to 4 by the
+envelope; the random parts failed a constraint (report).
+`scripts/closed_loop_check.py` on the flip stroke: the real host loop sent 8.9 m/s² where the
+simulated closed loop sends 7.2 (tilt 38 vs 33°, position error 177 vs 138 mm, cable rise +0.29
+measured vs −0.07 simulated): the real drone lags its reference more than cf_2's drone fit says, so
+the simulated closed loop is optimistic in sharp strokes and the planner's rise constraint cannot
+see the flip from the planned reference. Mitigations in place: 'drone slower' bracket members
+(motor response ×1.5, delay +10 ms, drag ×1.3) in the ensemble, and the envelope step rule as the
+protection near the limit. The fix is the drone refit on cf_6's own flights (delay, response,
+drag), which the first planned flights provide; the rise measure runs from −0.085 (hanging) to 0
+(first link horizontal), so --rise-margin 0.04 keeps every member below ~60°.
