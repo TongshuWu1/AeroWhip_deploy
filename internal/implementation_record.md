@@ -2158,3 +2158,20 @@ master b48aba18) against the flown revision: the Mellinger position-mode path (t
 desired axes, eR, ew, the D term, the integrals, M, output clamps) and powerDistributionLegacy /
 powerDistributionCap are the same computation (the master refactor moved the yaw conversion to
 radians and the idle thrust behind a getter). Nothing changed.
+
+## Dated change note — 2026-10-28 attitude-loop tuning tools; firmware update prepared
+
+Flight stack (crazyswarm2 8061d34, b1a440d, b501581, f73f2c2): `--tune PLAN` in
+`acceleration_circle_cf2.py` flies the gain sets of `config/tuning.yaml` in one ~62 s flight,
+writing each set's firmware parameters asynchronously in the air and restoring the take-off values
+before landing and, verified, on the ground; `tuning_report.py` reports per set (hover trim,
+jitter, estimate error, tilt lag/gain/overshoot, motor minimum, battery, with the battery drift
+between the repeated first and last set removed from the battery-driven numbers);
+`flash_firmware.py` flashes an official release bundle (2026.08 and the 2023.11 rollback kept in
+`calibration_data/firmware/`); every flight records the onboard attitude gains; `--ignore-battery`.
+Here: `scripts/tuning_prescreen.py PLAN` flies a plan's sets in the simulator (drone without cable,
+firmware attitude law with the set's ctrlMel gains, the host PID at 50 Hz). Its default set gives a
+tilt lag of 120 ms and a gain of 0.76, against 100–140 ms and 0.71–0.83 measured in flight; kR/kw
+×1.5 gives 90 ms and 0.85; the integral sets of the `integral` plan are stable. The tuning mode was
+checked for plan parsing and timing and the report on an old flight relabelled as four sets; it has
+not been flown. Nothing in the model changed.
