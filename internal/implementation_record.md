@@ -2100,3 +2100,16 @@ strokes are too small a share of those segments to decide it. Pending the stroke
 of 2026-10-28 (series entries strokes_y and whip_y added, crazyswarm2 ee385f9): a fit whose loss weighs
 the stroke windows together with the 1 s segments, with the saturation term, judged by the
 held-out stroke test.
+
+## Dated change note — 2026-10-28 open-loop error over 5 s (diagnostic, nothing changed)
+
+`scripts/validate_coupled.py --horizon 5` (`runs/diagnostics/coupled_5s_20261028.json`, reproduced
+twice) and a time/speed breakdown of the held-out 5 s windows
+(`runs/diagnostics/error_vs_time_5s_20261028.py`, 38 windows from 6 held-out flights, adopted model,
+open-loop replay of the sent commands, per-flight bias cancelled). RMS over windows at time t:
+drone position 38 / 102 / 298 / 540 / 804 / 1077 mm at 0.5 / 1 / 2 / 3 / 4 / 5 s; cable shape
+relative to the drone 34 / 49 / 68 / 67 / 93 / 93 mm. The drone error grows as t² (0.5·a·t² with
+a ≈ 0.09 m/s², the size of the measured attitude-estimate wander); the cable relative to the drone
+stays below 0.1 m. Shape error by measured tip speed: 40 mm below 0.5 m/s, 76–85 mm above. Held-out
+segment scores at 5 s (constant bias removed per flight): position 479 mm, tilt 1.12°, shape 69 mm,
+tip relative to the drone 118 mm. Open-loop replay only; the policy flies closed loop on OptiTrack.
