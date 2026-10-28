@@ -2537,3 +2537,15 @@ button toggles it against the plain floor. Every cf_6 flight takes off at the Op
 yaw ≈ 0 (parameters.json origin_m ≈ (0.02, 0.01)), so the origin is the take-off spot; **where that
 is in the room is a guess (centre of the mats, +x towards the desks) until the user confirms it**.
 Checked: offscreen renders of the cleaned scan and of the window with it.
+
+## Dated change note — 2026-10-28 trajectory flights reach the manifest and the envelope
+
+Found before the first trajectory flight: a flight flown with `acceleration_circle_cf2.py
+--trajectory` was written to takes.jsonl but not to the manifest (only `collect_series.py` appends
+there), so no fit would have used it; and its phase label (the file name) carried no level, so
+`envelope.py` could not count it. Now `collect_series.py --setup cf_6 --trajectory FILE` flies one
+trajectory as take `trajectory` and records it in the manifest (role fit, or excluded if not
+completed), and `TrajectoryFile` labels the phase `excitation <level>` (parsed as kind excitation,
+level from the file). The Identification Loop's Fly command uses the series runner; the preflight
+check stays the flight script's `--check`. Checked: argument parsing and the runner's plan for
+excitation_001; the flight-stack tests (the same 9 old failures). Not flown.

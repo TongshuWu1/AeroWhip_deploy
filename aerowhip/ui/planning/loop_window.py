@@ -650,8 +650,12 @@ class LoopWindow(QtWidgets.QMainWindow):
         self.run(f'optimise-{name}', command, env='OMP_NUM_THREADS=1')
 
     def flight_command(self, path, check):
-        return (f'python3 {ld.CONTAINER}/scripts/acceleration_circle_cf2.py --trajectory '
-                f'{ld.CONTAINER}/calibration_data/plans/{path.name}' + (' --check' if check else ''))
+        """The read-only preflight check (the flight script itself), or the flight through the series runner,
+        which also records it in the manifest the fits read."""
+        plan = f'{ld.CONTAINER}/calibration_data/plans/{path.name}'
+        if check:
+            return f'python3 {ld.CONTAINER}/scripts/acceleration_circle_cf2.py --setup {self.setup} --trajectory {plan} --check'
+        return f'python3 {ld.CONTAINER}/scripts/collect_series.py --setup {self.setup} --trajectory {plan}'
 
     def copy_command(self, check):
         path = self.selected_path()
