@@ -3,21 +3,25 @@
 namespace material {
 // Forward derivatives with respect to generalized pose increments, not finite differences.
 // Current scalar derivative storage supports up to83edges (84nodes), checked explicitly.
+// The derivative arrays are sized at compile time (N) and the mesh picks the smallest size that
+// holds its 6+3m generalized coordinates: a fixed 256-wide array made every temporary 2 KB to
+// zero and copy for a 36-coordinate ten-link cable. Arithmetic only touches the first `dim`
+// entries, so every size gives bit-identical results.
 constexpr int capacity=256;
 thread_local int dim=0;
-struct D {double v=0.;std::array<double,capacity> g{};D()=default;D(double x):v(x){}};
-D operator+(const D&a,const D&b){D c(a.v+b.v);for(int k=0;k<dim;++k)c.g[k]=a.g[k]+b.g[k];return c;}
-D operator-(const D&a,const D&b){D c(a.v-b.v);for(int k=0;k<dim;++k)c.g[k]=a.g[k]-b.g[k];return c;}
-D operator*(const D&a,const D&b){D c(a.v*b.v);for(int k=0;k<dim;++k)c.g[k]=a.g[k]*b.v+a.v*b.g[k];return c;}
-D operator/(const D&a,const D&b){D c(a.v/b.v);for(int k=0;k<dim;++k)c.g[k]=(a.g[k]-c.v*b.g[k])/b.v;return c;}
-D root(const D&a){D c(std::sqrt(a.v));for(int k=0;k<dim;++k)c.g[k]=a.g[k]/(2*c.v);return c;}
-using V=std::array<D,3>;
-V plus(const V&a,const V&b){return {a[0]+b[0],a[1]+b[1],a[2]+b[2]};}
-V minus(const V&a,const V&b){return {a[0]-b[0],a[1]-b[1],a[2]-b[2]};}
-V times(const V&a,const D&s){return {a[0]*s,a[1]*s,a[2]*s};}
-D dp(const V&a,const V&b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
-V cp(const V&a,const V&b){return {a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]};}
-V transport(const V&x,const V&axis,const D&denom){return plus(plus(x,cp(axis,x)),times(cp(axis,cp(axis,x)),D(1)/denom));}
+template<int N> struct DN {double v=0.;std::array<double,N> g{};DN()=default;DN(double x):v(x){}};
+template<int N> DN<N> operator+(const DN<N>&a,const DN<N>&b){DN<N> c(a.v+b.v);for(int k=0;k<dim;++k)c.g[k]=a.g[k]+b.g[k];return c;}
+template<int N> DN<N> operator-(const DN<N>&a,const DN<N>&b){DN<N> c(a.v-b.v);for(int k=0;k<dim;++k)c.g[k]=a.g[k]-b.g[k];return c;}
+template<int N> DN<N> operator*(const DN<N>&a,const DN<N>&b){DN<N> c(a.v*b.v);for(int k=0;k<dim;++k)c.g[k]=a.g[k]*b.v+a.v*b.g[k];return c;}
+template<int N> DN<N> operator/(const DN<N>&a,const DN<N>&b){DN<N> c(a.v/b.v);for(int k=0;k<dim;++k)c.g[k]=(a.g[k]-c.v*b.g[k])/b.v;return c;}
+template<int N> DN<N> root(const DN<N>&a){DN<N> c(std::sqrt(a.v));for(int k=0;k<dim;++k)c.g[k]=a.g[k]/(2*c.v);return c;}
+template<int N> using VN=std::array<DN<N>,3>;
+template<int N> VN<N> plus(const VN<N>&a,const VN<N>&b){return {a[0]+b[0],a[1]+b[1],a[2]+b[2]};}
+template<int N> VN<N> minus(const VN<N>&a,const VN<N>&b){return {a[0]-b[0],a[1]-b[1],a[2]-b[2]};}
+template<int N> VN<N> times(const VN<N>&a,const DN<N>&s){return {a[0]*s,a[1]*s,a[2]*s};}
+template<int N> DN<N> dp(const VN<N>&a,const VN<N>&b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2];}
+template<int N> VN<N> cp(const VN<N>&a,const VN<N>&b){return {a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]};}
+template<int N> VN<N> transport(const VN<N>&x,const VN<N>&axis,const DN<N>&denom){return plus(plus(x,cp(axis,x)),times(cp(axis,cp(axis,x)),DN<N>(1)/denom));}
 using Matrix=Vector;
 double bilinear(const Vector&a,const Matrix&M,const Vector&b,int n){double z=0.;for(int i=0;i<n;++i)for(int j=0;j<n;++j)z+=a[i]*M[i*n+j]*b[j];return z;}
 Vector product(const Matrix&M,const Vector&v,int rows,int cols){Vector r(rows);for(int i=0;i<rows;++i)for(int j=0;j<cols;++j)r[i]+=M[i*cols+j]*v[j];return r;}
@@ -25,8 +29,9 @@ double maxabs(const Vector&v){double x=0.;for(double y:v)x=std::max(x,std::abs(y
 Matrix factor(Matrix a,int n){for(int i=0;i<n;++i){for(int j=0;j<=i;++j){double x=a[i*n+j];for(int k=0;k<j;++k)x-=a[i*n+k]*a[j*n+k];if(i==j){require(std::isfinite(x)&&x>0.,"Nonpositive implicit-system pivot");a[i*n+j]=std::sqrt(x);}else a[i*n+j]=x/a[j*n+j];}for(int j=i+1;j<n;++j)a[i*n+j]=0.;}return a;}
 Vector cholsolve(const Matrix&l,Vector b,int n){for(int i=0;i<n;++i){for(int k=0;k<i;++k)b[i]-=l[i*n+k]*b[k];b[i]/=l[i*n+i];}for(int i=n-1;i>=0;--i){for(int k=i+1;k<n;++k)b[i]-=l[k*n+i]*b[k];b[i]/=l[i*n+i];}return b;}
 struct Geometry {int m,nv;Vector k,jac,dual;Matrix mass,constraint;};
-Geometry geometry(const Parameters&p,const Vector&s){
-    int m=int(p.rest.size()), nv=6+3*m;require(nv<=capacity,"Scalar material derivatives support at most83edges");dim=nv;
+template<int N> Geometry geometry_sized(const Parameters&p,const Vector&s){
+    using D=DN<N>;using V=VN<N>;
+    int m=int(p.rest.size()), nv=6+3*m;require(nv<=N,"Scalar material derivatives support at most83edges");dim=nv;
     Geometry g{m,nv,Vector(2*m),Vector(2*m*nv),Vector(m),Matrix(nv*nv),Matrix(m*nv)};
     Mat3 R=rotation(s);std::array<D,9> rd;
     for(int i=0;i<9;++i)rd[i]=D(R[i]);
@@ -48,6 +53,12 @@ Geometry geometry(const Parameters&p,const Vector&s){
     // Root node's translational inertia is coupled exactly once to the body.
     for(int i=0;i<3;++i){g.mass[i*nv+i]=p.mass+p.node_mass[0];for(int j=0;j<3;++j){g.mass[i*nv+3+j]=p.node_mass[0]*bound.B[3*i+j];g.mass[(3+j)*nv+i]=g.mass[i*nv+3+j];g.mass[(3+i)*nv+3+j]=p.inertia[3*i+j];for(int k=0;k<3;++k)g.mass[(3+i)*nv+3+j]+=p.node_mass[0]*bound.B[3*k+i]*bound.B[3*k+j];}}
     for(int i=0;i<m;++i)for(int j=0;j<3;++j)g.mass[(6+3*i+j)*nv+6+3*i+j]=p.node_mass[i+1];return g;
+}
+Geometry geometry(const Parameters&p,const Vector&s){
+    int nv=6+3*int(p.rest.size());
+    if(nv<=48)return geometry_sized<48>(p,s);       // up to 14 edges (the ten-link cable: 36)
+    if(nv<=96)return geometry_sized<96>(p,s);       // up to 30 edges
+    return geometry_sized<capacity>(p,s);
 }
 // Kelvin-Voigt bending damping, Rayleigh dissipation sum_i Cb/(2 l_i) |dk_i/dt|^2 on the
 // material curvature (k1, k2) in the frame parallel transported from the clamp. Objective:

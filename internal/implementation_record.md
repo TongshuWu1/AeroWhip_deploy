@@ -1925,3 +1925,22 @@ User's request: one systematic, automated data collection with a single calibrat
   (2.6e-15 at EI 1e-6, 3.3e-13 at 1e-5, 2.2e-11 at 1e-4, 1.1e-10 kg m/s at 5.7e-4; edge error stays
   1e-16), i.e. the implicit solver's stopping rule (velocity change < 2e-11 relative per step), not a
   conservation failure: bound now steps × 2e-11 × |momentum|. 109 tests pass.
+
+## Dated change note — 2026-10-28 training throughput, phase B (engine)
+
+- Instrumented scratch build (not retained; `perf` is blocked by `perf_event_paranoid` = 4): per
+  2 ms step 4.98 solver iterations; per iteration geometry derivatives 43 %, implicit Cholesky solve
+  35 %, damping operator 16 %, projections/controller/loads 6 %.
+- [native/material_frame.inc](../native/material_frame.inc): the forward-derivative type is sized at
+  compile time and `geometry` picks the smallest size for the mesh (48 for up to 14 edges; 96; 256).
+  The fixed 256-wide array made every temporary 2 KB to zero and copy for 36 coordinates.
+  Bit-identical (final states of 4 randomised lanes over 2 s equal to the previous engine);
+  physics 169 → 122 ms per lane-second on one core.
+- Tried and not adopted: an extrapolated starting velocity for the iteration (4.98 → 4.78
+  iterations, 1e-11 differences); compile-time derivative loop bounds and a mirrored damping
+  operator (no gain, 4e-14 differences: the mirror's products round differently). Measured, not
+  adopted (accuracy setting for the user): iteration tolerance 2e-11 → 1e-10 / 1e-9 gives 4.72 / 4.29
+  iterations per step, 5 % / 14 % faster, position differences 7e-11 / 5e-10 m after 2 s.
+- Installed by building aside and renaming into place (processes holding the old library keep it).
+  109 tests pass. Phases A + B, 64 lanes × 2 s: 18.2 (in process) → 50.0 simulated lane-seconds per
+  second with 24 worker processes.
