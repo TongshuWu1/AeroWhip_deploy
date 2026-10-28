@@ -154,9 +154,13 @@ class RosSimulationSource(SimulationSource):
             if type(value) is not bool or not hasattr(self.commands, 'acceleration_only'):
                 raise ValueError('Invalid acceleration-mode request')
             with self.commands.lock:
+                # Settled: disarmed, no queued commands, and the disarm's hold through the transport
+                # delay. (Not requested == applied: the host law recomputes the command every step,
+                # so the delayed applied command never equals the newest request exactly.)
+                disarmed = self.commands.disarmed_s
                 if (self.commands.armed or self.commands.pending or
-                        self.commands.mode != 'disarmed_airborne_hold' or
-                        not np.array_equal(runtime.requested_command, runtime.applied_command)):
+                        self.commands.mode != 'disarmed_airborne_hold' or disarmed is None or
+                        self._simulation.state.time_s < disarmed+runtime.delay_s+runtime.controller_period_s):
                     raise ValueError('Disarm and let pending commands settle before changing controller mode')
                 self.commands.acceleration_only = value
             return dict(receipt_sim_time_s=self._simulation.state.time_s, acceleration_only=value)

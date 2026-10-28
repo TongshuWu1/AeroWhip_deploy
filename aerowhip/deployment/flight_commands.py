@@ -90,6 +90,7 @@ class FlightCommands(StreamingCommands):
         self.group_mask = 0
         self.high_level_enabled = True
         self.mode = 'airborne_hold'
+        self.disarmed_s = None          # simulation time the last disarm took effect
         self.plan = self.future_plan = None
         self.waiting_plan = None
         self.release_s = None
@@ -103,6 +104,7 @@ class FlightCommands(StreamingCommands):
             self.armed, self.emergency_latched = True, False
             self.acceleration_only = False
             self.mode = 'airborne_hold'
+            self.disarmed_s = None
             self.plan = self.future_plan = self.release_s = None
             self.waiting_plan = None
             self.stream_cutoff_s = None
@@ -240,6 +242,7 @@ class FlightCommands(StreamingCommands):
                         self.plan = self.future_plan = self.release_s = None
                         self.waiting_plan = None
                         self.mode = 'disarmed_airborne_hold'
+                        self.disarmed_s = start_s
                         self.pending.clear()
                         events.append((start_s, np.asarray(payload['hold'], dtype=np.float64)))
                 elif action == 'group_mask':

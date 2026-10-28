@@ -2549,3 +2549,21 @@ completed), and `TrajectoryFile` labels the phase `excitation <level>` (parsed a
 level from the file). The Identification Loop's Fly command uses the series runner; the preflight
 check stays the flight script's `--check`. Checked: argument parsing and the runner's plan for
 excitation_001; the flight-stack tests (the same 9 old failures). Not flown.
+
+## Dated change note — 2026-10-28 first trajectory rehearsal (custom simulation)
+
+`collect_series.py --simulation --unattended --setup cf_6 --trajectory excitation_002.json` against
+`./docker/start.sh --custom-sim --headless`: completed (logs/simulation_rehearsal/cf_6/trajectory/002).
+Phases trajectory-move, `excitation 3` (parsed by envelope.py as level 3), trajectory-move, hover;
+in the excitation part tilt ≤ 18.9°, tracking error mean 7.3 cm / max 15.8 cm, the host loop sent up
+to 4.4 m/s² horizontal for a 3.0 m/s² plan (its corrections; the planner's closed-loop simulation
+includes the same loop), no saturation. Two faults found and fixed on the way:
+- The simulator refused the switch to acceleration mode every time ("Disarm and let pending
+  commands settle"): its guard required requested == applied command exactly, which the host law
+  (run every step since 1354cce) makes impossible; the guard now requires disarmed, no queued
+  commands, and the disarm's hold older than the transport delay plus one controller period
+  (`aerowhip/deployment/custom_simulation.py`, `flight_commands.disarmed_s`).
+- The trajectory file was copied into the flight folder only on the real path; now both.
+Not exercised by the rehearsal: the manifest entry (written for real flights only) and the
+viewer: on this computer the system's libLLVM.so.20.1 fails its package checksum and crashes any
+GL window started by the simulator (`dpkg --verify libllvm20`; fix: reinstall the package).
