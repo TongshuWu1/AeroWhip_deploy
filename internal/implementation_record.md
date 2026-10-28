@@ -2282,3 +2282,32 @@ extQuatStdDev 0.05 gives a 1.74° hover offset and 1.60° stroke error, 0.02 0.8
 0.13–0.17° / 0.77–1.13°, 0.005 0.05° / 1.00°, 0.0025 0.02° / 0.80°; jitter (~3,500) and lag
 (115 ms) unchanged: 0.01 kept, as on cf_2. cf_6 baseline (tune_cf6_baseline/001): effective mass
 0.1545 kg, horizontal trim [0.144, 0.443] m/s² (body), now in physical.yaml.
+
+## Dated change note — 2026-10-28 cf_6 tune finished and compared; host battery compensation
+
+cf_6 tuning (calibration_data/cf_6_nocable/tune_cf6_*): kR_xy 157500 (lag 120 → 65 ms, tilt reached
+0.78 → 0.95, least unexplained tilt; tune_cf6_stiffness/001); kw_xy kept 20000 (15000: overshoot 1.00;
+25000 slower) and kd_omega_rp 300 (100 nearly tripled the motor jitter; 300 slightly better than 200;
+tune_cf6_damping/001); attitude integral not adopted: the sideways trim the drone needs (~0.3 m/s²
+each axis) stayed the same with ki_m_xy 16000–48000, so it is a geometric thrust-direction offset
+that the fixed trim handles, and switching the integral on twitched the drone 6–7°
+(tune_cf6_integral/001). In crazyswarm2's crazyflies.yaml: extQuatStdDev 0.01, kR_xy 157500,
+kd_omega_rp 300.
+
+Old against new tune on one identical random 3-D trajectory, alternated old/new/old/new in one
+flight (tune_compare_tune/001; old = extQuatStdDev 0.05, kR_xy 70000, kd_omega_rp 200): position
+tracking 76/70 → 63/61 mm RMS (max 168/144 → 136/119 mm), tilt lag 105 → 65 ms, tilt reached 0.70 →
+0.94, unexplained tilt 3.27/2.82 → 1.40/1.30°, onboard estimate offset in hover 1.76/1.53 → 0.24/0.40°;
+motor jitter 6,700–7,000 → 8,200–8,900 (higher). In that flight the gain switch led its trajectory by
+~3 s (lifted motion; fixed in crazyswarm2 156a78a); the report groups by the gains actually active,
+so each row is one tune, on a window shifted by 3 s into the previous set's fade-out.
+
+Host battery compensation (crazyswarm2 2276211, user's request): the Bolt firmware has none. Fitted
+on 47 cf_6 hover windows (7.28–7.89 V): the vertical acceleration the drone needed was
+9.60 − 1.146·V m/s² (sd 0.08), so the flight script scales the whole thrust command by
+1 + 0.1095·(7.8 − V), V the 30 Hz battery voltage under load low-passed over 0.5 s; the weight trim
+in physical.yaml is now the 7.8 V value (effective mass 0.1536 kg). Logged per row
+(battery_factor). Not yet flown. For AeroWhip: the replays and fits use the logged sent command, so
+they stay consistent; the training environment and the deployment node must apply the same host
+compensation as the flight script (the simulator's thrust map keeps its voltage term), to be added
+with the cf_6 refit.
