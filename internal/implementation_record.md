@@ -2077,3 +2077,26 @@ adopted: it confirms stage 2. Measured the same day from the attitude logs of fi
 flights: the onboard estimate wanders 0.5–0.9° about its flight mean (0.08–0.15 m/s² of thrust
 direction) with a correlation time of 0.5–0.8 s; training does not represent this yet (proposed as a
 randomisation axis, awaiting approval).
+
+## Dated change note — 2026-10-28 stroke-window cable fits (preview, not adopted)
+
+`fit_cable_segments.py --windows strokes` fits on 0.6 s windows from each stroke onset of the decay,
+strokes and whip flights (45 fit, 26 held out); the `saturation` term fits the bending damping's
+saturation rate. Previews on the current data, judged by the held-out stroke test of the full coupled
+model (`runs/diagnostics/stroke_fit_preview_20261028.json`, biases from the adopted validation):
+
+| Cable | Held-out stroke-window error | Tip peak speed (sim/real) | Tip error over the stroke |
+|---|---|---|---|
+| Adopted (1 s segments, `20261028-012011`) | 14.13 mm | 0.904 | 31.7 mm |
+| Strokes, all four physics (`20261028-024903`) | 13.38 mm | 0.953 | 32.6 mm |
+| Strokes, EI and Cb only (`20261028-024954`) | 13.95 mm | 0.966 | 33.2 mm |
+| Saturating damping, 1 s segments (`20261028-025157`) | — | 0.904 | 31.7 mm |
+
+The strokes want a stiffer, less damped cable (EI ≈ 5.5e−4, Cb ≈ 2e−5) than the slow motion of the
+1 s segments (1.4e−4, 4.15e−5): restoring the tip's peak speed costs ~1.5 mm of tip path, and Cd falls
+to its bound when fitted on the strokes alone (traded against the linear drag, −0.98). Saturating
+damping fitted on the 1 s segments goes to its upper bound (linear damping), changing nothing: the
+strokes are too small a share of those segments to decide it. Pending the stroke and whip flights
+of 2026-10-28 (series entries strokes_y and whip_y added, crazyswarm2 ee385f9): a fit whose loss weighs
+the stroke windows together with the 1 s segments, with the saturation term, judged by the
+held-out stroke test.
