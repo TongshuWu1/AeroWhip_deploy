@@ -56,9 +56,6 @@ Then run the flight script inside that shell (the robot is the one enabled in
 python3 /workspace/scripts/acceleration_circle_cf2.py --trajectory /path/to/excitation.json
 ```
 
-The earlier CSV trajectory players are kept in the Crazyswarm checkout's
-`scripts/legacy/`.
-
 Use ordinary spaces in copied multiline commands. The custom shell selects ROS
 domain `142` and enables simulation time; client timing follows the native
 `/clock`. Closing the viewer shuts down the bridge and native owner.
