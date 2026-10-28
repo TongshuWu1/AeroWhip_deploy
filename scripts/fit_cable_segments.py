@@ -7,6 +7,9 @@ residual (`cable.residual`, docs/simulation_model.md):
             monomial coefficients; in the drone's body frame or the world frame (--frame)
     drag    the normal-drag multiplier as its log at the clamp and at the tip, and a tangential
             quadratic drag coefficient at the clamp and at the tip (each linear in between)
+    saturation  the bending damping's saturation rate (`cable.Cb_saturation_rate_rad_s`, log10 rad/s): each
+            joint's Cb divided by sqrt(1 + (bend rate / rate)^2), so fast bending is damped less (a
+            physical parameter, absent = linear damping)
     clamp   the direction in which the clamp holds the cable (`attachment.tangent_body`), as tilts
             about the body x and y axes from straight down, in degrees (a physical parameter: it
             bends the hanging shape without any net force on drone and cable)
@@ -29,8 +32,9 @@ import time
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from aerowhip.fitting import flight_cable
-from aerowhip.fitting.calibration_set import split
+from aerowhip.fitting.calibration_set import is_held_out, split
 from aerowhip.fitting.least_squares import Fit, FAILED_RESIDUAL_M, ProcessRunner, strong_correlations, uncertainty
 from aerowhip.fitting.progress import Progress
 from aerowhip.physics.model import Model
@@ -41,6 +45,7 @@ PHYSICS = ('log10 EI', 'log10 Cb', 'Cd', 'log10 linear drag')
 STATIC = tuple(f'static {axis} P{k} (0.01 N/m)' for axis in 'xyz' for k in range(3))
 DRAG = ('normal drag log, clamp', 'normal drag log, tip', 'tangential drag, clamp', 'tangential drag, tip')
 CLAMP = ('clamp tilt about x (deg)', 'clamp tilt about y (deg)')
+SATURATION = ('log10 Cb saturation rate (rad/s)',)
 STATIC_UNIT = .01                     # N/m per search unit
 # Legendre P0, P1, P2 on [0, 1] in monomials (rows: P_k; columns: 1, s, s^2)
 LEGENDRE = np.array([[1., 0., 0.], [-1., 2., 0.], [1., -6., 6.]])
@@ -54,7 +59,7 @@ class Parameters:
     def __init__(self, terms, frame, fixed=(), vertical='quadratic'):
         self.terms, self.frame = terms, frame
         self.full = (list(PHYSICS)+(list(STATIC) if 'static' in terms else [])+(list(DRAG) if 'drag' in terms else [])
-                     +(list(CLAMP) if 'clamp' in terms else []))
+                     +(list(CLAMP) if 'clamp' in terms else [])+(list(SATURATION) if 'saturation' in terms else []))
         self.zeroed = {'static z P1 (0.01 N/m)', 'static z P2 (0.01 N/m)'} if vertical == 'constant' and 'static' in terms else set()
         unknown = set(fixed)-set(self.full)
         if unknown:
@@ -71,6 +76,8 @@ class Parameters:
             lower += [math.log(.3)]*2+[0.]*2; upper += [math.log(3.)]*2+[3.]*2
         if 'clamp' in self.terms:
             lower += [-15.]*2; upper += [15.]*2
+        if 'saturation' in self.terms:
+            lower += [-1.]; upper += [3.]
         keep = [n in self.names for n in self.full]
         return np.array(lower)[keep], np.array(upper)[keep]
 
@@ -97,6 +104,9 @@ class Parameters:
             t = np.asarray(config['attachment']['tangent_body'], float)
             t = t/np.linalg.norm(t)
             x.update(zip(CLAMP, [math.degrees(math.asin(t[1])), math.degrees(math.atan2(-t[0], -t[2]))]))
+        if 'saturation' in self.terms:
+            rate = cable.get('Cb_saturation_rate_rad_s')
+            x[SATURATION[0]] = math.log10(rate) if rate else 2.
         if previous is not None:
             x.update({n: v for n, v in zip(previous['parameters'], previous['best']['x']) if n in x})
         x.update({n: v for n, v in (override or {}).items() if n in x})
@@ -140,7 +150,12 @@ class Parameters:
         tangent = self.tangent(x)
         if tangent is not None:
             c['attachment'] = dict(c['attachment'], tangent_body=tangent)
+        if 'saturation' in self.terms:
+            c['cable']['Cb_saturation_rate_rad_s'] = 10**self.expand(x)[SATURATION[0]]
         return c
+
+    def saturation(self, x):
+        return 10**self.expand(x)[SATURATION[0]] if 'saturation' in self.terms else None
 
 
 def _replay(config):
@@ -204,6 +219,8 @@ def main():
     parser.add_argument('--terms', default='', help="residual terms fitted with the physics: '', 'static' or 'static,drag'")
     parser.add_argument('--frame', choices=('body', 'world'), default='body', help='frame of the static residual force')
     parser.add_argument('--start', type=Path, help='warm start from a previous result of this stage')
+    parser.add_argument('--windows', choices=('segments', 'strokes'), default='segments',
+                        help='consecutive segments of every flight, or windows from each stroke onset (use --horizon 0.6)')
     parser.add_argument('--fix', nargs='+', default=[], help='parameter names held at their start value, e.g. "log10 EI"')
     parser.add_argument('--set', nargs='+', default=[], metavar='NAME=VALUE', help='start values (search units), applied after --start')
     parser.add_argument('--vertical', choices=('quadratic', 'constant'), default='quadratic',
@@ -212,7 +229,7 @@ def main():
     t0 = time.time()
     config = load_model_configuration(DEFAULT_MODEL)
     terms = tuple(t for t in args.terms.split(',') if t)
-    if set(terms)-{'static', 'drag', 'clamp'}:
+    if set(terms)-{'static', 'drag', 'clamp', 'saturation'}:
         raise SystemExit(f'unknown residual terms {terms}')
     parameters = Parameters(terms, args.frame, args.fix, args.vertical)
     NAMES = parameters.names
@@ -226,7 +243,16 @@ def main():
     progress.plan(['loading flights', 'start point', 'least squares', 'final check'],
                   [3, 2, Fit.budget(len(NAMES), args.evaluations), 3])
     progress.phase(0)
-    train, held = split('cf_2', duration_s=args.horizon, stride_s=args.horizon)
+    if args.windows == 'strokes':
+        # windows from each stroke onset of the decay, strokes and whip flights (stroke_diagnostics),
+        # --horizon long; the role follows the flight
+        import stroke_diagnostics
+        train, held = {}, {}
+        for name, items in stroke_diagnostics.stroke_windows('cf_2', args.horizon).items():
+            if items:
+                (held if is_held_out(items[0][1].folder) else train)[name] = [w for w, _ in items]
+    else:
+        train, held = split('cf_2', duration_s=args.horizon, stride_s=args.horizon)
     progress.phase_done(math.nan)
     progress.phase(1)
     residuals = Residuals(config, train, parameters)
@@ -276,7 +302,7 @@ def main():
         data='manifest flights, setup cf_2 (cable labels)', parameters=list(NAMES), terms=list(terms), frame=args.frame,
         held=parameters.fixed_values, vertical=args.vertical,
         warm_start=str(args.start) if args.start else None,
-        segments=dict(horizon_s=args.horizon, fit={n: len(v) for n, v in residuals.groups.items()},
+        segments=dict(kind=args.windows, horizon_s=args.horizon, fit={n: len(v) for n, v in residuals.groups.items()},
                       held_out={n: len(v) for n, v in held.items()}, dropped_at_start=dropped, seen_marker_frames=seen),
         loss='RMS marker distance over every seen marker of every segment',
         start=start,
@@ -286,7 +312,8 @@ def main():
         uncertainty=u, counts=fit.counts(), status=int(out.status),
         adopt=dict({k: float(v) for k, v in parameters.physics(x).items()},
                    **({'residual': parameters.residual(x)} if parameters.residual(x) is not None else {}),
-                   **({'tangent_body': parameters.tangent(x)} if parameters.tangent(x) is not None else {})),
+                   **({'tangent_body': parameters.tangent(x)} if parameters.tangent(x) is not None else {}),
+                   **({'Cb_saturation_rate_rad_s': parameters.saturation(x)} if parameters.saturation(x) is not None else {})),
         search=dict(optimiser='scipy.optimize.least_squares trf, 2-point Jacobian, bounds', lower=lower.tolist(),
                     upper=upper.tolist()),
         seconds=time.time()-t0), indent=1, default=float))

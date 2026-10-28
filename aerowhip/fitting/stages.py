@@ -240,6 +240,8 @@ class Cable(Stage):
         tangent = r['adopt'].get('tangent_body')
         if tangent is not None:
             physics['attachment']['tangent_body'] = tangent
+        if r['adopt'].get('Cb_saturation_rate_rad_s') is not None:
+            physics['cable']['Cb_saturation_rate_rad_s'] = r['adopt']['Cb_saturation_rate_rad_s']
         _write_json(PHYSICS, physics)
         return dict(values, **({'residual': residual} if residual else {}), **({'tangent_body': tangent} if tangent else {}))
 
