@@ -109,7 +109,8 @@ class DroneReplay:
         an empty delay line and would hold the newest pre-window command from t = 0). Same
         controller-tick timing otherwise; the default keeps the earlier behaviour of retained results.
         centred: start velocities from `centred_state` instead of the causal history.
-        attitude: also return the simulated body rotations (N, 3, 3)."""
+        attitude: also return the simulated body rotations (N, 3, 3) (with markers: positions,
+        rotations, markers, marker velocities)."""
         hp, hR, ht = window.history_position, window.history_rotation, window.history_time
         v, w = centred_state(window) if centred else (endpoint_velocity(ht, hp), body_rate(ht, hR))
         q = qv = None
@@ -170,6 +171,8 @@ class DroneReplay:
             if markers:
                 cable.append(observation[18:18+3*n].reshape(n, 3)[index])
                 rates.append(observation[18+3*n:18+6*n].reshape(n, 3)[index])
+        if attitude and markers:
+            return np.array(positions), np.array(rotations), np.array(cable), np.array(rates)
         if attitude:
             return np.array(positions), np.array(rotations)
         return (np.array(positions), np.array(cable), np.array(rates)) if markers else np.array(positions)
@@ -182,13 +185,27 @@ class DroneReplay:
         """(N, 5): simulated minus measured tracking position (3, m) and the tilt error (2, rad): the
         roll and pitch components of log(R_measured^T R_simulated), in the body frame (yaw left out)."""
         p, R = self.run(window, flight, pipeline=pipeline, attitude=True)
-        tilt = np.empty((len(R), 2))
-        for k, (Rs, Rm) in enumerate(zip(R, window.rotation[1:])):
-            D = Rm.T@Rs
-            angle = math.acos(np.clip((np.trace(D)-1)/2, -1, 1))
-            v = np.array([D[2, 1]-D[1, 2], D[0, 2]-D[2, 0]])/2
-            tilt[k] = v if angle < 1e-9 else v*angle/math.sin(angle)
-        return np.column_stack([p-window.position[1:], tilt])
+        return np.column_stack([p-window.position[1:], tilt_error(R, window.rotation[1:])])
+
+    def coupled_errors(self, window, flight, *, pipeline=False):
+        """The full model from the measured drone state and markers: (N, 15) = position error (3, m),
+        tilt error (2, rad), cable shape error (10, m: each marker relative to the drone's tracking
+        origin, simulated minus measured, NaN where the marker was not seen)."""
+        p, R, markers, _ = self.run(window, flight, pipeline=pipeline, markers=True, attitude=True)
+        shape = np.linalg.norm((markers-p[:, None])-(window.markers[1:]-window.position[1:, None]), axis=2)
+        shape[~window.seen[1:]] = np.nan
+        return np.column_stack([p-window.position[1:], tilt_error(R, window.rotation[1:]), shape])
+
+
+def tilt_error(simulated, measured):
+    """(N, 2) roll/pitch components of log(R_measured^T R_simulated), body frame, yaw left out."""
+    tilt = np.empty((len(simulated), 2))
+    for k, (Rs, Rm) in enumerate(zip(simulated, measured)):
+        D = Rm.T@Rs
+        angle = math.acos(np.clip((np.trace(D)-1)/2, -1, 1))
+        v = np.array([D[2, 1]-D[1, 2], D[0, 2]-D[2, 0]])/2
+        tilt[k] = v if angle < 1e-9 else v*angle/math.sin(angle)
+    return tilt
 
 
 def debias(error, dt=.01):
