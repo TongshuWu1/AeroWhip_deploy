@@ -1,0 +1,16 @@
+241 fitting windows, 46 held out
+start: fit 33.47 mm, held out 51.25 mm
+  iteration  0  best 30.065 mm  x [-6.7092, -3.4901, 0.7259, -1.4115]
+  iteration  1  best 30.065 mm  x [-6.7092, -3.4901, 0.7259, -1.4115]
+  iteration  2  best 30.065 mm  x [-6.7092, -3.4901, 0.7259, -1.4115]
+  iteration  3  best 30.065 mm  x [-6.7092, -3.4901, 0.7259, -1.4115]
+  iteration  4  best 30.065 mm  x [-6.7092, -3.4901, 0.7259, -1.4115]
+  iteration  5  best 30.065 mm  x [-6.7092, -3.4901, 0.7259, -1.4115]
+  iteration  6  best 30.065 mm  x [-6.7092, -3.4901, 0.7259, -1.4115]
+  iteration  7  best 30.065 mm  x [-6.7092, -3.4901, 0.7259, -1.4115]
+  iteration  8  best 30.065 mm  x [-6.7092, -3.4901, 0.7259, -1.4115]
+  iteration  9  best 30.058 mm  x [-6.9419, -3.5204, 0.6894, -1.2794]
+best {'EI_n_m2': np.float64(1.143126926082729e-07), 'Cb_n_m2_s': np.float64(0.000301738720745531), 'normal_drag_coefficient': np.float64(0.689441841506958), 'external_drag_s_inv': np.float64(0.052557924242295904)}
+fit 30.06 mm {'circle': 21.26, 'decay': 43.55, 'figure8': 19.11, 'line_star': 29.06, 'random': 31.9, 'strokes': 48.49, 'vertical': 21.07}
+held out 56.60 mm {'random_high': 34.97, 'whip': 67.95}
+reproduced: True

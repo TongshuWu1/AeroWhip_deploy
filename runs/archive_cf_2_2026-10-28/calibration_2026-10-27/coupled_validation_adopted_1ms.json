@@ -1,0 +1,142 @@
+{
+ "drone_x": null,
+ "cable": {
+  "EI_n_m2": 1.143126926082729e-07,
+  "Cb_n_m2_s": 0.000301738720745531,
+  "normal_drag_coefficient": 0.689441841506958,
+  "external_drag_s_inv": 0.052557924242295904
+ },
+ "firmware": {
+  "law": "firmware",
+  "firmware_mass_kg": 0.144,
+  "thrust_scale": 0.5529,
+  "thrust_exponent": 2.2,
+  "voltage_slope_v_inv": 0.1765,
+  "reference_voltage_v": 7.2,
+  "tilt_gain": 1.0,
+  "ctrlMel": {
+   "mass": 0.144,
+   "massThrust": 17700.0,
+   "kp_xy": 0.0,
+   "kd_xy": 0.0,
+   "ki_xy": 0.0,
+   "i_range_xy": 0.0,
+   "kp_z": 0.0,
+   "kd_z": 0.0,
+   "ki_z": 0.0,
+   "i_range_z": 0.0,
+   "kR_xy": 70000.0,
+   "kw_xy": 20000.0,
+   "ki_m_xy": 0.0,
+   "i_range_m_xy": 1.0,
+   "kR_z": 60000.0,
+   "kw_z": 12000.0,
+   "ki_m_z": 500.0,
+   "i_range_m_z": 1500.0,
+   "kd_omega_rp": 200.0
+  }
+ },
+ "results": {
+  "adopted configuration (firmware law)": {
+   "circle": {
+    "windows": 34,
+    "failed": 0,
+    "failures": [],
+    "drone_raw_rms_m": 0.16172290060911973,
+    "drone_debiased_rms_m": 0.02878145771149196,
+    "cable_shape_rms_m": 0.030534710144451162,
+    "tip_shape_rms_m": 0.049982572729178366,
+    "reproduced_twice": true,
+    "held_out": false
+   },
+   "decay": {
+    "windows": 23,
+    "failed": 0,
+    "failures": [],
+    "drone_raw_rms_m": 0.12655928466983435,
+    "drone_debiased_rms_m": 0.02734307757204194,
+    "cable_shape_rms_m": 0.048444252658871347,
+    "tip_shape_rms_m": 0.08653304528969762,
+    "reproduced_twice": true,
+    "held_out": false
+   },
+   "figure8": {
+    "windows": 48,
+    "failed": 0,
+    "failures": [],
+    "drone_raw_rms_m": 0.1876681599896987,
+    "drone_debiased_rms_m": 0.03295140642062801,
+    "cable_shape_rms_m": 0.024705186428255414,
+    "tip_shape_rms_m": 0.039335022877944194,
+    "reproduced_twice": true,
+    "held_out": false
+   },
+   "line_star": {
+    "windows": 42,
+    "failed": 0,
+    "failures": [],
+    "drone_raw_rms_m": 0.2126896894704183,
+    "drone_debiased_rms_m": 0.044367132752302044,
+    "cable_shape_rms_m": 0.05040158795549288,
+    "tip_shape_rms_m": 0.08395211506658551,
+    "reproduced_twice": true,
+    "held_out": false
+   },
+   "random": {
+    "windows": 32,
+    "failed": 0,
+    "failures": [],
+    "drone_raw_rms_m": 0.1194534195119737,
+    "drone_debiased_rms_m": 0.0296480069718367,
+    "cable_shape_rms_m": 0.036794672299705296,
+    "tip_shape_rms_m": 0.0648335824874604,
+    "reproduced_twice": true,
+    "held_out": false
+   },
+   "random_high": {
+    "windows": 19,
+    "failed": 0,
+    "failures": [],
+    "drone_raw_rms_m": 0.1333302742402456,
+    "drone_debiased_rms_m": 0.041566778817939264,
+    "cable_shape_rms_m": 0.04268049879245699,
+    "tip_shape_rms_m": 0.07758080846966864,
+    "reproduced_twice": true,
+    "held_out": true
+   },
+   "strokes": {
+    "windows": 24,
+    "failed": 0,
+    "failures": [],
+    "drone_raw_rms_m": 0.1820014911683994,
+    "drone_debiased_rms_m": 0.03143629689053198,
+    "cable_shape_rms_m": 0.052331437380344,
+    "tip_shape_rms_m": 0.09740585009683754,
+    "reproduced_twice": true,
+    "held_out": false
+   },
+   "vertical": {
+    "windows": 38,
+    "failed": 0,
+    "failures": [],
+    "drone_raw_rms_m": 0.13676714149467578,
+    "drone_debiased_rms_m": 0.036555972914778447,
+    "cable_shape_rms_m": 0.02579760369405001,
+    "tip_shape_rms_m": 0.040267341412554135,
+    "reproduced_twice": true,
+    "held_out": false
+   },
+   "whip": {
+    "windows": 27,
+    "failed": 0,
+    "failures": [],
+    "drone_raw_rms_m": 0.1740227366129552,
+    "drone_debiased_rms_m": 0.04079112285546163,
+    "cable_shape_rms_m": 0.07382753364491747,
+    "tip_shape_rms_m": 0.13496615046852256,
+    "reproduced_twice": true,
+    "held_out": true
+   }
+  }
+ }
+}

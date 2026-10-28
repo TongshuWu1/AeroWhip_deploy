@@ -1,0 +1,1351 @@
+{
+ "data": "calibration flights 2026-10-27, setup cf_2",
+ "flights": {
+  "circle": {
+   "folder": "/home/tony-lab/Documents/PHD/Crazyflie/crazyswarm2_jazzy_whipping/calibration_data/circle/2026-10-27_cf_2_circle_01",
+   "labels": "cable_labels.npz",
+   "camera": {
+    "frames": 7889,
+    "points_in_reach_mean": 12.19153251362657,
+    "frames_in_reach_lt10": 0.0019013816706806947,
+    "frames_in_reach_gt10": 0.9965775129927747,
+    "by_speed": [
+     {
+      "speed_from_mps": 0.0,
+      "frames": 1436,
+      "missing_per_marker": 0.000766016713091922,
+      "frames_with_missing": 0.004178272980501393
+     },
+     {
+      "speed_from_mps": 0.25,
+      "frames": 600,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 0.5,
+      "frames": 3295,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 1.0,
+      "frames": 1371,
+      "missing_per_marker": 7.293946024799416e-05,
+      "frames_with_missing": 0.0007293946024799417
+     },
+     {
+      "speed_from_mps": 2.0,
+      "frames": 985,
+      "missing_per_marker": 0.00030456852791878173,
+      "frames_with_missing": 0.003045685279187817
+     },
+     {
+      "speed_from_mps": 4.0,
+      "frames": 199,
+      "missing_per_marker": 0.004020100502512563,
+      "frames_with_missing": 0.02512562814070352
+     },
+     {
+      "speed_from_mps": 8.0,
+      "frames": 3,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     }
+    ]
+   },
+   "labels_statistics": {
+    "frames": 7889,
+    "labelled_fraction": [
+     0.991,
+     0.9933,
+     0.9949,
+     0.9938,
+     0.9937,
+     0.9907,
+     0.9906,
+     0.9868,
+     0.9873,
+     0.9811
+    ],
+    "frames_with_gap": 0.031309418177208774,
+    "unlabelled_runs": {
+     "count": 258,
+     "mean_frames": 2.9573643410852712,
+     "histogram_1_to_10_and_over": [
+      140,
+      37,
+      26,
+      14,
+      4,
+      5,
+      9,
+      6,
+      2,
+      3,
+      12
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.01321,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      19524,
+      9459,
+      29083,
+      13177,
+      6138,
+      736,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.3381389252948886,
+     "hidden_frames": 763
+    }
+   },
+   "noise": {
+    "cable_rest_samples": 2713,
+    "cable_std_m": [
+     0.00010820086449662962,
+     0.00010374347493048246,
+     9.124295285448571e-05
+    ],
+    "drone_rest_samples": 1227,
+    "drone_std_m": [
+     2.291600115296351e-05,
+     2.107964102690353e-05,
+     1.3608901514153636e-05
+    ]
+   },
+   "timing": {
+    "stamp_step_ms_1_50_99": [
+     7.56,
+     9.65,
+     11.76
+    ],
+    "receipt_jitter_ms_1_50_99": [
+     -0.07,
+     0.0,
+     0.44
+    ],
+    "note": "absolute capture-to-host latency is not measurable from these files"
+   }
+  },
+  "decay": {
+   "folder": "/home/tony-lab/Documents/PHD/Crazyflie/crazyswarm2_jazzy_whipping/calibration_data/decay/2026-10-27_cf_2_decay_01",
+   "labels": "cable_labels.npz",
+   "camera": {
+    "frames": 10500,
+    "points_in_reach_mean": 12.000190476190475,
+    "frames_in_reach_lt10": 0.001238095238095238,
+    "frames_in_reach_gt10": 0.9926666666666667,
+    "by_speed": [
+     {
+      "speed_from_mps": 0.0,
+      "frames": 2057,
+      "missing_per_marker": 0.00014584346135148275,
+      "frames_with_missing": 0.0014584346135148275
+     },
+     {
+      "speed_from_mps": 0.25,
+      "frames": 2073,
+      "missing_per_marker": 9.64785335262904e-05,
+      "frames_with_missing": 0.000482392667631452
+     },
+     {
+      "speed_from_mps": 0.5,
+      "frames": 2368,
+      "missing_per_marker": 0.00016891891891891893,
+      "frames_with_missing": 0.001266891891891892
+     },
+     {
+      "speed_from_mps": 1.0,
+      "frames": 2171,
+      "missing_per_marker": 0.0001381851681252879,
+      "frames_with_missing": 0.0013818516812528789
+     },
+     {
+      "speed_from_mps": 2.0,
+      "frames": 1690,
+      "missing_per_marker": 0.00023668639053254438,
+      "frames_with_missing": 0.0017751479289940828
+     },
+     {
+      "speed_from_mps": 4.0,
+      "frames": 140,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 8.0,
+      "frames": 1,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     }
+    ]
+   },
+   "labels_statistics": {
+    "frames": 10500,
+    "labelled_fraction": [
+     0.9883,
+     0.997,
+     0.9979,
+     0.9894,
+     0.9958,
+     0.9883,
+     0.9952,
+     0.9888,
+     0.9758,
+     0.9598
+    ],
+    "frames_with_gap": 0.07342857142857143,
+    "unlabelled_runs": {
+     "count": 623,
+     "mean_frames": 2.0834670947030496,
+     "histogram_1_to_10_and_over": [
+      451,
+      96,
+      27,
+      15,
+      1,
+      2,
+      1,
+      0,
+      7,
+      2,
+      21
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.01207,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      51618,
+      17899,
+      15707,
+      13120,
+      5195,
+      153,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.47996918335901384,
+     "hidden_frames": 1298
+    }
+   },
+   "noise": {
+    "cable_rest_samples": 6515,
+    "cable_std_m": [
+     9.307110716584874e-05,
+     0.00010788315253583086,
+     8.784940595583802e-05
+    ],
+    "drone_rest_samples": 3270,
+    "drone_std_m": [
+     2.0255495710983195e-05,
+     1.7390999580721368e-05,
+     1.2718126809121017e-05
+    ]
+   },
+   "timing": {
+    "stamp_step_ms_1_50_99": [
+     6.42,
+     9.68,
+     14.88
+    ],
+    "receipt_jitter_ms_1_50_99": [
+     -0.1,
+     0.0,
+     0.59
+    ],
+    "note": "absolute capture-to-host latency is not measurable from these files"
+   }
+  },
+  "figure8": {
+   "folder": "/home/tony-lab/Documents/PHD/Crazyflie/crazyswarm2_jazzy_whipping/calibration_data/figure8/2026-10-27_cf_2_figure8_01",
+   "labels": "cable_labels.npz",
+   "camera": {
+    "frames": 9211,
+    "points_in_reach_mean": 12.270437520356095,
+    "frames_in_reach_lt10": 0.00010856584518510477,
+    "frames_in_reach_gt10": 0.9996743024644447,
+    "by_speed": [
+     {
+      "speed_from_mps": 0.0,
+      "frames": 3415,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 0.25,
+      "frames": 1754,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 0.5,
+      "frames": 1753,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 1.0,
+      "frames": 1519,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 2.0,
+      "frames": 644,
+      "missing_per_marker": 0.00015527950310559004,
+      "frames_with_missing": 0.0015527950310559005
+     },
+     {
+      "speed_from_mps": 4.0,
+      "frames": 124,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 8.0,
+      "frames": 2,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     }
+    ]
+   },
+   "labels_statistics": {
+    "frames": 9211,
+    "labelled_fraction": [
+     0.9984,
+     0.9989,
+     0.9985,
+     0.9979,
+     0.9973,
+     0.9974,
+     0.9965,
+     0.9939,
+     0.9924,
+     0.9845
+    ],
+    "frames_with_gap": 0.021713169037020953,
+    "unlabelled_runs": {
+     "count": 193,
+     "mean_frames": 2.1139896373056994,
+     "histogram_1_to_10_and_over": [
+      113,
+      40,
+      18,
+      5,
+      7,
+      2,
+      1,
+      2,
+      1,
+      1,
+      3
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00481,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      40118,
+      17684,
+      15493,
+      14674,
+      3535,
+      188,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.4730392156862745,
+     "hidden_frames": 408
+    }
+   },
+   "noise": {
+    "cable_rest_samples": 7210,
+    "cable_std_m": [
+     0.00010409975594854503,
+     9.696119598830518e-05,
+     9.668690951949017e-05
+    ],
+    "drone_rest_samples": 2361,
+    "drone_std_m": [
+     2.2639763996148542e-05,
+     1.9188009373814242e-05,
+     1.2035662973888088e-05
+    ]
+   },
+   "timing": {
+    "stamp_step_ms_1_50_99": [
+     8.46,
+     9.64,
+     11.75
+    ],
+    "receipt_jitter_ms_1_50_99": [
+     -0.07,
+     0.0,
+     0.42
+    ],
+    "note": "absolute capture-to-host latency is not measurable from these files"
+   }
+  },
+  "line_star": {
+   "folder": "/home/tony-lab/Documents/PHD/Crazyflie/crazyswarm2_jazzy_whipping/calibration_data/line/2026-10-27_cf_2_line_star_01",
+   "labels": "cable_labels.npz",
+   "camera": {
+    "frames": 11602,
+    "points_in_reach_mean": 12.223495948974314,
+    "frames_in_reach_lt10": 0.008963971729012239,
+    "frames_in_reach_gt10": 0.9821582485778314,
+    "by_speed": [
+     {
+      "speed_from_mps": 0.0,
+      "frames": 1624,
+      "missing_per_marker": 0.0025246305418719214,
+      "frames_with_missing": 0.01539408866995074
+     },
+     {
+      "speed_from_mps": 0.25,
+      "frames": 1801,
+      "missing_per_marker": 0.0003331482509716824,
+      "frames_with_missing": 0.001665741254858412
+     },
+     {
+      "speed_from_mps": 0.5,
+      "frames": 2252,
+      "missing_per_marker": 0.0008436944937833037,
+      "frames_with_missing": 0.0053285968028419185
+     },
+     {
+      "speed_from_mps": 1.0,
+      "frames": 1760,
+      "missing_per_marker": 0.002556818181818182,
+      "frames_with_missing": 0.014772727272727272
+     },
+     {
+      "speed_from_mps": 2.0,
+      "frames": 2239,
+      "missing_per_marker": 0.001027244305493524,
+      "frames_with_missing": 0.008485931219294328
+     },
+     {
+      "speed_from_mps": 4.0,
+      "frames": 1918,
+      "missing_per_marker": 0.0013555787278415016,
+      "frames_with_missing": 0.008863399374348279
+     },
+     {
+      "speed_from_mps": 8.0,
+      "frames": 8,
+      "missing_per_marker": 0.0625,
+      "frames_with_missing": 0.25
+     }
+    ]
+   },
+   "labels_statistics": {
+    "frames": 11602,
+    "labelled_fraction": [
+     0.9682,
+     0.9901,
+     0.9815,
+     0.9853,
+     0.9794,
+     0.9744,
+     0.9777,
+     0.97,
+     0.9505,
+     0.8961
+    ],
+    "frames_with_gap": 0.1409239786243751,
+    "unlabelled_runs": {
+     "count": 1302,
+     "mean_frames": 2.9116743471582183,
+     "histogram_1_to_10_and_over": [
+      757,
+      211,
+      108,
+      65,
+      42,
+      17,
+      14,
+      5,
+      10,
+      5,
+      68
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.04298,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      30294,
+      14914,
+      19368,
+      16615,
+      24018,
+      7010,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.3434450013189132,
+     "hidden_frames": 3791
+    }
+   },
+   "noise": {
+    "cable_rest_samples": 2469,
+    "cable_std_m": [
+     8.981518821631217e-05,
+     0.000114448211312433,
+     9.528131042407936e-05
+    ],
+    "drone_rest_samples": 1626,
+    "drone_std_m": [
+     1.8967349329656937e-05,
+     1.6947308901086905e-05,
+     1.0690667888285348e-05
+    ]
+   },
+   "timing": {
+    "stamp_step_ms_1_50_99": [
+     7.53,
+     9.65,
+     11.78
+    ],
+    "receipt_jitter_ms_1_50_99": [
+     -0.07,
+     0.0,
+     0.46
+    ],
+    "note": "absolute capture-to-host latency is not measurable from these files"
+   }
+  },
+  "random": {
+   "folder": "/home/tony-lab/Documents/PHD/Crazyflie/crazyswarm2_jazzy_whipping/calibration_data/random/2026-10-27_cf_2_random_01",
+   "labels": "cable_labels.npz",
+   "camera": {
+    "frames": 7990,
+    "points_in_reach_mean": 12.09061326658323,
+    "frames_in_reach_lt10": 0.0,
+    "frames_in_reach_gt10": 0.9996245306633291,
+    "by_speed": [
+     {
+      "speed_from_mps": 0.0,
+      "frames": 1925,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 0.25,
+      "frames": 1266,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 0.5,
+      "frames": 2461,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 1.0,
+      "frames": 1910,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 2.0,
+      "frames": 425,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 4.0,
+      "frames": 3,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 8.0,
+      "frames": 0,
+      "missing_per_marker": null,
+      "frames_with_missing": null
+     }
+    ]
+   },
+   "labels_statistics": {
+    "frames": 7990,
+    "labelled_fraction": [
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     0.9999,
+     0.9997,
+     0.9984,
+     0.9989,
+     0.9977,
+     0.9971
+    ],
+    "frames_with_gap": 0.006132665832290363,
+    "unlabelled_runs": {
+     "count": 49,
+     "mean_frames": 1.346938775510204,
+     "histogram_1_to_10_and_over": [
+      38,
+      8,
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00136,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      36018,
+      20226,
+      16321,
+      6480,
+      775,
+      4,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.7424242424242424,
+     "hidden_frames": 66
+    }
+   },
+   "noise": {
+    "cable_rest_samples": 4495,
+    "cable_std_m": [
+     9.981114087506389e-05,
+     9.646812522316646e-05,
+     8.8600555426788e-05
+    ],
+    "drone_rest_samples": 1804,
+    "drone_std_m": [
+     2.6937597735373184e-05,
+     2.008211285156717e-05,
+     1.3317834148791516e-05
+    ]
+   },
+   "timing": {
+    "stamp_step_ms_1_50_99": [
+     7.55,
+     9.65,
+     11.76
+    ],
+    "receipt_jitter_ms_1_50_99": [
+     -0.07,
+     0.0,
+     0.45
+    ],
+    "note": "absolute capture-to-host latency is not measurable from these files"
+   }
+  },
+  "random_high": {
+   "folder": "/home/tony-lab/Documents/PHD/Crazyflie/crazyswarm2_jazzy_whipping/calibration_data/random/2026-10-27_cf_2_random_high_01",
+   "labels": "cable_labels.npz",
+   "camera": {
+    "frames": 5686,
+    "points_in_reach_mean": 12.205416813225465,
+    "frames_in_reach_lt10": 0.0,
+    "frames_in_reach_gt10": 0.9998241294407316,
+    "by_speed": [
+     {
+      "speed_from_mps": 0.0,
+      "frames": 977,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 0.25,
+      "frames": 547,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 0.5,
+      "frames": 767,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 1.0,
+      "frames": 1661,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 2.0,
+      "frames": 1612,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 4.0,
+      "frames": 122,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 8.0,
+      "frames": 0,
+      "missing_per_marker": null,
+      "frames_with_missing": null
+     }
+    ]
+   },
+   "labels_statistics": {
+    "frames": 5686,
+    "labelled_fraction": [
+     0.9996,
+     1.0,
+     0.9995,
+     0.9993,
+     0.9995,
+     0.9967,
+     0.9975,
+     0.994,
+     0.9949,
+     0.9729
+    ],
+    "frames_with_gap": 0.03869152303904327,
+    "unlabelled_runs": {
+     "count": 116,
+     "mean_frames": 2.2586206896551726,
+     "histogram_1_to_10_and_over": [
+      81,
+      19,
+      5,
+      3,
+      0,
+      0,
+      0,
+      0,
+      1,
+      2,
+      5
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00652,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      17788,
+      6319,
+      12775,
+      14699,
+      4869,
+      138,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.44274809160305345,
+     "hidden_frames": 262
+    }
+   },
+   "noise": {
+    "cable_rest_samples": 2163,
+    "cable_std_m": [
+     0.00012277182703568067,
+     0.00010565737941724127,
+     9.270141009059571e-05
+    ],
+    "drone_rest_samples": 1172,
+    "drone_std_m": [
+     2.682560825159512e-05,
+     1.9684300668027967e-05,
+     1.2883350304215052e-05
+    ]
+   },
+   "timing": {
+    "stamp_step_ms_1_50_99": [
+     8.47,
+     9.65,
+     11.76
+    ],
+    "receipt_jitter_ms_1_50_99": [
+     -0.07,
+     0.0,
+     0.46
+    ],
+    "note": "absolute capture-to-host latency is not measurable from these files"
+   }
+  },
+  "strokes": {
+   "folder": "/home/tony-lab/Documents/PHD/Crazyflie/crazyswarm2_jazzy_whipping/calibration_data/strokes/2026-10-27_cf_2_strokes_01",
+   "labels": "cable_labels.npz",
+   "camera": {
+    "frames": 5317,
+    "points_in_reach_mean": 12.036298664660523,
+    "frames_in_reach_lt10": 0.001316531878879067,
+    "frames_in_reach_gt10": 0.9958623283806658,
+    "by_speed": [
+     {
+      "speed_from_mps": 0.0,
+      "frames": 927,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 0.25,
+      "frames": 777,
+      "missing_per_marker": 0.0003861003861003861,
+      "frames_with_missing": 0.002574002574002574
+     },
+     {
+      "speed_from_mps": 0.5,
+      "frames": 1033,
+      "missing_per_marker": 0.00029041626331074543,
+      "frames_with_missing": 0.002904162633107454
+     },
+     {
+      "speed_from_mps": 1.0,
+      "frames": 1422,
+      "missing_per_marker": 0.00014064697609001407,
+      "frames_with_missing": 0.0014064697609001407
+     },
+     {
+      "speed_from_mps": 2.0,
+      "frames": 1084,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 4.0,
+      "frames": 74,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 8.0,
+      "frames": 0,
+      "missing_per_marker": null,
+      "frames_with_missing": null
+     }
+    ]
+   },
+   "labels_statistics": {
+    "frames": 5317,
+    "labelled_fraction": [
+     1.0,
+     0.9998,
+     0.9996,
+     0.9994,
+     0.9977,
+     0.9951,
+     0.9994,
+     0.9957,
+     0.9859,
+     0.9631
+    ],
+    "frames_with_gap": 0.04814745157043446,
+    "unlabelled_runs": {
+     "count": 87,
+     "mean_frames": 3.9195402298850577,
+     "histogram_1_to_10_and_over": [
+      44,
+      15,
+      6,
+      5,
+      5,
+      2,
+      0,
+      0,
+      0,
+      0,
+      10
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00414,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      20997,
+      8826,
+      10843,
+      8905,
+      3174,
+      74,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.25513196480938416,
+     "hidden_frames": 341
+    }
+   },
+   "noise": {
+    "cable_rest_samples": 3063,
+    "cable_std_m": [
+     0.00011399230528509227,
+     9.957194179561654e-05,
+     9.201175730092044e-05
+    ],
+    "drone_rest_samples": 1460,
+    "drone_std_m": [
+     2.5240510924021717e-05,
+     1.703373099811117e-05,
+     1.1735982277723018e-05
+    ]
+   },
+   "timing": {
+    "stamp_step_ms_1_50_99": [
+     7.5,
+     9.66,
+     12.58
+    ],
+    "receipt_jitter_ms_1_50_99": [
+     -0.08,
+     0.0,
+     0.45
+    ],
+    "note": "absolute capture-to-host latency is not measurable from these files"
+   }
+  },
+  "vertical": {
+   "folder": "/home/tony-lab/Documents/PHD/Crazyflie/crazyswarm2_jazzy_whipping/calibration_data/vertical/2026-10-27_cf_2_vertical_01",
+   "labels": "cable_labels.npz",
+   "camera": {
+    "frames": 6191,
+    "points_in_reach_mean": 12.11274430625101,
+    "frames_in_reach_lt10": 0.044257793571313195,
+    "frames_in_reach_gt10": 0.9365207559360362,
+    "by_speed": [
+     {
+      "speed_from_mps": 0.0,
+      "frames": 1710,
+      "missing_per_marker": 0.01760233918128655,
+      "frames_with_missing": 0.10175438596491228
+     },
+     {
+      "speed_from_mps": 0.25,
+      "frames": 2007,
+      "missing_per_marker": 0.002242152466367713,
+      "frames_with_missing": 0.008968609865470852
+     },
+     {
+      "speed_from_mps": 0.5,
+      "frames": 1424,
+      "missing_per_marker": 0.006671348314606741,
+      "frames_with_missing": 0.03932584269662921
+     },
+     {
+      "speed_from_mps": 1.0,
+      "frames": 1027,
+      "missing_per_marker": 0.0006815968841285297,
+      "frames_with_missing": 0.004868549172346641
+     },
+     {
+      "speed_from_mps": 2.0,
+      "frames": 7,
+      "missing_per_marker": 0.1285714285714286,
+      "frames_with_missing": 0.7142857142857143
+     },
+     {
+      "speed_from_mps": 4.0,
+      "frames": 10,
+      "missing_per_marker": 0.24,
+      "frames_with_missing": 1.0
+     },
+     {
+      "speed_from_mps": 8.0,
+      "frames": 6,
+      "missing_per_marker": 0.25,
+      "frames_with_missing": 1.0
+     }
+    ]
+   },
+   "labels_statistics": {
+    "frames": 6191,
+    "labelled_fraction": [
+     0.9483,
+     0.9859,
+     0.9793,
+     0.9574,
+     0.9701,
+     0.9559,
+     0.954,
+     0.9546,
+     0.9562,
+     0.9536
+    ],
+    "frames_with_gap": 0.06800193829752867,
+    "unlabelled_runs": {
+     "count": 370,
+     "mean_frames": 6.435135135135135,
+     "histogram_1_to_10_and_over": [
+      207,
+      44,
+      16,
+      21,
+      17,
+      6,
+      4,
+      5,
+      0,
+      4,
+      46
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.01822,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      20310,
+      18103,
+      11879,
+      9224,
+      8,
+      0,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.15361952861952863,
+     "hidden_frames": 2376
+    }
+   },
+   "noise": {
+    "cable_rest_samples": 1172,
+    "cable_std_m": [
+     7.671765949875277e-05,
+     7.19822044465989e-05,
+     7.714814304679755e-05
+    ],
+    "drone_rest_samples": 670,
+    "drone_std_m": [
+     2.2008233770734273e-05,
+     1.917403097529533e-05,
+     1.8360856252262077e-05
+    ]
+   },
+   "timing": {
+    "stamp_step_ms_1_50_99": [
+     8.5,
+     9.64,
+     11.73
+    ],
+    "receipt_jitter_ms_1_50_99": [
+     -0.07,
+     0.0,
+     0.43
+    ],
+    "note": "absolute capture-to-host latency is not measurable from these files"
+   }
+  },
+  "whip": {
+   "folder": "/home/tony-lab/Documents/PHD/Crazyflie/crazyswarm2_jazzy_whipping/calibration_data/whip/2026-10-27_cf_2_whip_01",
+   "labels": "cable_labels.npz",
+   "camera": {
+    "frames": 8629,
+    "points_in_reach_mean": 12.069417081933016,
+    "frames_in_reach_lt10": 0.004171978213002666,
+    "frames_in_reach_gt10": 0.9875999536446866,
+    "by_speed": [
+     {
+      "speed_from_mps": 0.0,
+      "frames": 1306,
+      "missing_per_marker": 0.0018376722817764167,
+      "frames_with_missing": 0.007656967840735069
+     },
+     {
+      "speed_from_mps": 0.25,
+      "frames": 1358,
+      "missing_per_marker": 0.0008836524300441826,
+      "frames_with_missing": 0.005891016200294551
+     },
+     {
+      "speed_from_mps": 0.5,
+      "frames": 1902,
+      "missing_per_marker": 0.0007360672975814932,
+      "frames_with_missing": 0.004206098843322818
+     },
+     {
+      "speed_from_mps": 1.0,
+      "frames": 2150,
+      "missing_per_marker": 0.000372093023255814,
+      "frames_with_missing": 0.0032558139534883722
+     },
+     {
+      "speed_from_mps": 2.0,
+      "frames": 1697,
+      "missing_per_marker": 5.8927519151443724e-05,
+      "frames_with_missing": 0.0005892751915144372
+     },
+     {
+      "speed_from_mps": 4.0,
+      "frames": 214,
+      "missing_per_marker": 0.0,
+      "frames_with_missing": 0.0
+     },
+     {
+      "speed_from_mps": 8.0,
+      "frames": 2,
+      "missing_per_marker": 0.1,
+      "frames_with_missing": 1.0
+     }
+    ]
+   },
+   "labels_statistics": {
+    "frames": 8629,
+    "labelled_fraction": [
+     0.9957,
+     0.9897,
+     0.9908,
+     0.9875,
+     0.9883,
+     0.9817,
+     0.9871,
+     0.9774,
+     0.9635,
+     0.9374
+    ],
+    "frames_with_gap": 0.09178352068605863,
+    "unlabelled_runs": {
+     "count": 490,
+     "mean_frames": 3.536734693877551,
+     "histogram_1_to_10_and_over": [
+      252,
+      78,
+      39,
+      30,
+      13,
+      16,
+      5,
+      6,
+      5,
+      3,
+      43
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.01527,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      32092,
+      15151,
+      17919,
+      13123,
+      5970,
+      292,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.2827466820542412,
+     "hidden_frames": 1733
+    }
+   },
+   "noise": {
+    "cable_rest_samples": 2961,
+    "cable_std_m": [
+     0.00010796290654712264,
+     9.691439468181463e-05,
+     9.470086471705681e-05
+    ],
+    "drone_rest_samples": 1839,
+    "drone_std_m": [
+     2.482929775219246e-05,
+     1.8007197104115184e-05,
+     1.1513067155258422e-05
+    ]
+   },
+   "timing": {
+    "stamp_step_ms_1_50_99": [
+     5.44,
+     9.65,
+     15.93
+    ],
+    "receipt_jitter_ms_1_50_99": [
+     -0.07,
+     0.0,
+     0.41
+    ],
+    "note": "absolute capture-to-host latency is not measurable from these files"
+   }
+  }
+ },
+ "pooled": {
+  "speed_bins_mps": [
+   0.0,
+   0.25,
+   0.5,
+   1.0,
+   2.0,
+   4.0,
+   8.0
+  ],
+  "frames": [
+   15377,
+   12183,
+   17255,
+   14991,
+   10383,
+   2804,
+   22
+  ],
+  "missing_per_marker": [
+   0.002471,
+   0.000558,
+   0.000782,
+   0.00044,
+   0.000395,
+   0.002068,
+   0.1
+  ],
+  "label_reappear_per_frame": 0.31554629461859035,
+  "hazard_per_frame": [
+   0.000782,
+   0.000176,
+   0.000247,
+   0.000139,
+   0.000125,
+   0.000654,
+   0.035061
+  ],
+  "cable_noise_std_m": 9.727022758283663e-05,
+  "drone_noise_std_m": 1.8373023682481847e-05
+ }
+}

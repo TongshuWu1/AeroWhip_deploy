@@ -1,0 +1,198 @@
+{
+ "method": "least_squares",
+ "stage": "cable",
+ "model": "der_twist_free_kelvin_voigt_v2, measured drone pose drives the clamp",
+ "data": "manifest flights, setup cf_2 (cable labels)",
+ "parameters": [
+  "log10 EI",
+  "log10 Cb",
+  "Cd",
+  "log10 linear drag"
+ ],
+ "segments": {
+  "horizon_s": 1.0,
+  "fit": {
+   "decay": 71,
+   "line_star": 88,
+   "vertical": 56,
+   "circle": 67,
+   "figure8": 83,
+   "strokes/001": 47,
+   "random": 72,
+   "random_high/001": 36,
+   "whip/001": 58,
+   "decay_x/001": 50,
+   "line_star_xy/001": 16,
+   "decay_y/001": 42,
+   "line_star_diag": 41,
+   "figure8_xy": 45,
+   "figure8_xz": 48
+  },
+  "held_out": {
+   "strokes/002": 47,
+   "random_high/002": 39,
+   "whip/002": 72,
+   "decay_y/002": 43,
+   "decay_x/002": 20,
+   "line_star_xy/002": 28
+  },
+  "dropped_at_start": {},
+  "seen_marker_frames": 815456
+ },
+ "loss": "RMS marker distance over every seen marker of every segment",
+ "start": {
+  "x": [
+   -3.2431776080731947,
+   -4.383775356985822,
+   0.6424020563318297,
+   -0.6516599244514508
+  ],
+  "values": {
+   "EI_n_m2": 0.000571244973864383,
+   "Cb_n_m2_s": 4.132612100653426e-05,
+   "normal_drag_coefficient": 0.6424020563318297,
+   "external_drag_s_inv": 0.22301808152361446
+  },
+  "rms_m": 0.025730270681778532,
+  "per_flight_rms_m": {
+   "decay": 0.032350441991042526,
+   "line_star": 0.023286857140502142,
+   "vertical": 0.02379419188432954,
+   "circle": 0.01889197329548667,
+   "figure8": 0.017331969669777184,
+   "strokes/001": 0.025763689883508797,
+   "random": 0.018872875411645642,
+   "random_high/001": 0.02225963587533323,
+   "whip/001": 0.025715461216525057,
+   "decay_x/001": 0.03481232799183552,
+   "line_star_xy/001": 0.02718002306124481,
+   "decay_y/001": 0.028647317440829077,
+   "line_star_diag": 0.028654323610919706,
+   "figure8_xy": 0.034803357041774605,
+   "figure8_xz": 0.026078333564801732
+  }
+ },
+ "best": {
+  "x": [
+   -3.241183919928239,
+   -4.374305353210459,
+   0.6958061677192684,
+   -0.6857815038070376
+  ],
+  "values": {
+   "EI_n_m2": 0.0005738733803641231,
+   "Cb_n_m2_s": 4.2237153967210294e-05,
+   "normal_drag_coefficient": 0.6958061677192684,
+   "external_drag_s_inv": 0.2061666889534041
+  },
+  "rms_m": 0.025723053561912793,
+  "per_flight_rms_m": {
+   "decay": 0.03235439611516019,
+   "line_star": 0.023180728530595357,
+   "vertical": 0.023848285028964623,
+   "circle": 0.0188643627620933,
+   "figure8": 0.017324935709876848,
+   "strokes/001": 0.025726870045299697,
+   "random": 0.018909095089557515,
+   "random_high/001": 0.02232418015474319,
+   "whip/001": 0.02572051975126148,
+   "decay_x/001": 0.034850411017626565,
+   "line_star_xy/001": 0.02718887882382768,
+   "decay_y/001": 0.028752020160758007,
+   "line_star_diag": 0.028466123083332198,
+   "figure8_xy": 0.034799033300291486,
+   "figure8_xz": 0.02607236082923463
+  },
+  "failed_segments": 0,
+  "reproduced_twice": true,
+  "held_out": {
+   "rms_m": 0.03353342205741998,
+   "failed": 0,
+   "per_flight_rms_m": {
+    "strokes/002": 0.03236103855911546,
+    "random_high/002": 0.034467941524581915,
+    "whip/002": 0.03660305076716174,
+    "decay_y/002": 0.03164304254982497,
+    "decay_x/002": 0.033596646937258036,
+    "line_star_xy/002": 0.028216870807233754
+   }
+  }
+ },
+ "uncertainty": {
+  "parameters": [
+   "log10 EI",
+   "log10 Cb",
+   "Cd",
+   "log10 linear drag"
+  ],
+  "standard_deviation": [
+   0.042306015274216326,
+   0.06601238409157845,
+   0.06800042482155146,
+   0.04864956927959305
+  ],
+  "standard_deviation_independent": [
+   0.0007269248259006158,
+   0.0013721750701524654,
+   0.0015758278171498306,
+   0.0010943412605267581
+  ],
+  "correlation": [
+   [
+    1.0,
+    -0.7146,
+    -0.4285,
+    0.4138
+   ],
+   [
+    -0.7146,
+    1.0,
+    0.1264,
+    -0.2009
+   ],
+   [
+    -0.4285,
+    0.1264,
+    1.0,
+    -0.9209
+   ],
+   [
+    0.4138,
+    -0.2009,
+    -0.9209,
+    1.0
+   ]
+  ],
+  "flights": 15,
+  "condition_number": 4.362430349325504,
+  "note": "clustered by flight (sandwich), linearised at the optimum; 95 % interval \u00b11.96 sd"
+ },
+ "counts": {
+  "evaluations": 20,
+  "evaluations_with_failed_segments": 0,
+  "failed_segment_replays": 0
+ },
+ "status": 2,
+ "adopt": {
+  "EI_n_m2": 0.0005738733803641231,
+  "Cb_n_m2_s": 4.2237153967210294e-05,
+  "normal_drag_coefficient": 0.6958061677192684,
+  "external_drag_s_inv": 0.2061666889534041
+ },
+ "search": {
+  "optimiser": "scipy.optimize.least_squares trf, 2-point Jacobian, bounds",
+  "lower": [
+   -9.0,
+   -7.0,
+   0.0,
+   -4.0
+  ],
+  "upper": [
+   -3.0,
+   -1.0,
+   6.0,
+   0.5
+  ]
+ },
+ "seconds": 178.98385667800903
+}

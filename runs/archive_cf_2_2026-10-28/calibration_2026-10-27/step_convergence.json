@@ -1,0 +1,2320 @@
+{
+ "model": "/home/tony-lab/Documents/PHD/AeroWhip_deploy/configs/simulation.json",
+ "steps_s": [
+  0.002,
+  0.001,
+  0.0005
+ ],
+ "reference_step_s": 0.0005,
+ "results": {
+  "whip x1": {
+   "held_out": true,
+   "windows": 27,
+   "seconds": {
+    "0.002": 0.6832042932510376,
+    "0.001": 1.179998517036438,
+    "0.0005": 2.1893311738967896
+   },
+   "steps": {
+    "0.002": {
+     "summary": {
+      "windows": 27,
+      "failed": 0,
+      "drone_max_m": 0.0013164002639340922,
+      "marker_max_m": 0.001529791938909619,
+      "marker_median_m": 0.00025972161851149563,
+      "peak_tip_speed_relative_max": 0.0006382501192530032,
+      "peak_time_shift_frames_max": 1,
+      "tip_speed_max_difference_mps": 0.0038636060014640705,
+      "fastest_reference_peaks_mps": [
+       6.1305907764009255,
+       6.053435612336355,
+       5.826448149039185,
+       5.274790210532933,
+       5.26236575017928
+      ],
+      "fastest_peak_relative": [
+       -0.00024504818758097624,
+       -0.0006382501192530032,
+       -0.00038314328361699346,
+       -0.0006328867012460604,
+       -0.00030425829490821066
+      ]
+     },
+     "windows": [
+      {
+       "drone_max_m": 0.000665923417075609,
+       "marker_max_m": 0.0007398580634895121,
+       "marker_median_m": 0.0004970800160538988,
+       "peak_tip_speed_mps": 0.28952248228517374,
+       "reference_peak_tip_speed_mps": 0.2895472665746893,
+       "peak_tip_speed_relative": -8.559669655583413e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0006185129805459377
+      },
+      {
+       "drone_max_m": 0.00019029762992817112,
+       "marker_max_m": 0.0002728350581234408,
+       "marker_median_m": 0.0001760509981760141,
+       "peak_tip_speed_mps": 0.9925738135755892,
+       "reference_peak_tip_speed_mps": 0.9927009487912369,
+       "peak_tip_speed_relative": -0.000128070005173897,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00039666966911933166
+      },
+      {
+       "drone_max_m": 0.00018906920746963873,
+       "marker_max_m": 0.0002770237485690987,
+       "marker_median_m": 0.00013934573302115495,
+       "peak_tip_speed_mps": 2.155964632247649,
+       "reference_peak_tip_speed_mps": 2.156061111895572,
+       "peak_tip_speed_relative": -4.474810449062172e-05,
+       "peak_time_shift_frames": 1,
+       "tip_speed_max_difference_mps": 0.00019586732724685696
+      },
+      {
+       "drone_max_m": 0.0008985298483863424,
+       "marker_max_m": 0.0009390392629127011,
+       "marker_median_m": 0.00041016323708465655,
+       "peak_tip_speed_mps": 4.461090990555583,
+       "reference_peak_tip_speed_mps": 4.461894114664813,
+       "peak_tip_speed_relative": -0.0001799962277433398,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0008031241092298913
+      },
+      {
+       "drone_max_m": 0.0002121131966059675,
+       "marker_max_m": 0.00025599835996469576,
+       "marker_median_m": 0.00016155636482936597,
+       "peak_tip_speed_mps": 0.5738035914260585,
+       "reference_peak_tip_speed_mps": 0.5739254566995273,
+       "peak_tip_speed_relative": -0.00021233641415663307,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0002998685156540004
+      },
+      {
+       "drone_max_m": 0.0007146593401924362,
+       "marker_max_m": 0.0009789519084341877,
+       "marker_median_m": 0.0004952370809895509,
+       "peak_tip_speed_mps": 6.129088486242368,
+       "reference_peak_tip_speed_mps": 6.1305907764009255,
+       "peak_tip_speed_relative": -0.00024504818758097624,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0019532251927847355
+      },
+      {
+       "drone_max_m": 0.0002565101760092503,
+       "marker_max_m": 0.00041913070346433944,
+       "marker_median_m": 0.00016276221419969162,
+       "peak_tip_speed_mps": 3.3967507385972824,
+       "reference_peak_tip_speed_mps": 3.3970045763327765,
+       "peak_tip_speed_relative": -7.472398985353124e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.002331690993851776
+      },
+      {
+       "drone_max_m": 0.00036574320119403536,
+       "marker_max_m": 0.000476043320302093,
+       "marker_median_m": 0.0003073447976500275,
+       "peak_tip_speed_mps": 1.798689302573531,
+       "reference_peak_tip_speed_mps": 1.7986825152064165,
+       "peak_tip_speed_relative": 3.773521484395914e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0006576515763260238
+      },
+      {
+       "drone_max_m": 9.925398288213039e-05,
+       "marker_max_m": 0.00016093322763834666,
+       "marker_median_m": 7.61498487131396e-05,
+       "peak_tip_speed_mps": 2.221432499191079,
+       "reference_peak_tip_speed_mps": 2.221535678752117,
+       "peak_tip_speed_relative": -4.644515144391903e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0002762852103310731
+      },
+      {
+       "drone_max_m": 0.0006867307791833532,
+       "marker_max_m": 0.0007299034444860133,
+       "marker_median_m": 0.0003981947010294319,
+       "peak_tip_speed_mps": 1.739775030690211,
+       "reference_peak_tip_speed_mps": 1.7400607095391203,
+       "peak_tip_speed_relative": -0.00016417751825725801,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.000461968187535744
+      },
+      {
+       "drone_max_m": 0.0008988156180014251,
+       "marker_max_m": 0.0010234836367456143,
+       "marker_median_m": 0.00030072266901586057,
+       "peak_tip_speed_mps": 4.497976049616949,
+       "reference_peak_tip_speed_mps": 4.499344401753863,
+       "peak_tip_speed_relative": -0.0003041225598068298,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0013783166509337974
+      },
+      {
+       "drone_max_m": 0.0006400202219541684,
+       "marker_max_m": 0.0009727771532093835,
+       "marker_median_m": 0.0003668415720425337,
+       "peak_tip_speed_mps": 5.260764631748947,
+       "reference_peak_tip_speed_mps": 5.26236575017928,
+       "peak_tip_speed_relative": -0.00030425829490821066,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0018702215383847864
+      },
+      {
+       "drone_max_m": 0.0003033980387636692,
+       "marker_max_m": 0.00042932785024037465,
+       "marker_median_m": 0.00024227655585870757,
+       "peak_tip_speed_mps": 2.8628535162553184,
+       "reference_peak_tip_speed_mps": 2.862902629186585,
+       "peak_tip_speed_relative": -1.7154942947072982e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0006375066463153445
+      },
+      {
+       "drone_max_m": 0.00021569213577128654,
+       "marker_max_m": 0.00028412296042618383,
+       "marker_median_m": 0.00017849651459008787,
+       "peak_tip_speed_mps": 0.7585974831187844,
+       "reference_peak_tip_speed_mps": 0.7586841602330636,
+       "peak_tip_speed_relative": -0.00011424663756343101,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00025595598727123914
+      },
+      {
+       "drone_max_m": 0.0002798310730980358,
+       "marker_max_m": 0.00034296777711791885,
+       "marker_median_m": 0.00021773521043328073,
+       "peak_tip_speed_mps": 0.43114649487361034,
+       "reference_peak_tip_speed_mps": 0.431054911271753,
+       "peak_tip_speed_relative": 0.00021246388676354755,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00021389801144633402
+      },
+      {
+       "drone_max_m": 0.0009440889546727949,
+       "marker_max_m": 0.001197930655710629,
+       "marker_median_m": 0.00025972161851149563,
+       "peak_tip_speed_mps": 5.824215784563537,
+       "reference_peak_tip_speed_mps": 5.826448149039185,
+       "peak_tip_speed_relative": -0.00038314328361699346,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0022323644756472305
+      },
+      {
+       "drone_max_m": 0.0011227983066690594,
+       "marker_max_m": 0.0013990888183601348,
+       "marker_median_m": 0.0007415479685137008,
+       "peak_tip_speed_mps": 6.049572006334891,
+       "reference_peak_tip_speed_mps": 6.053435612336355,
+       "peak_tip_speed_relative": -0.0006382501192530032,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0038636060014640705
+      },
+      {
+       "drone_max_m": 0.00022044645145347097,
+       "marker_max_m": 0.00025601188608505423,
+       "marker_median_m": 0.0001553956974378659,
+       "peak_tip_speed_mps": 2.479794529795415,
+       "reference_peak_tip_speed_mps": 2.479906221196433,
+       "peak_tip_speed_relative": -4.503855833870585e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0006970341721357354
+      },
+      {
+       "drone_max_m": 0.00026736761113466123,
+       "marker_max_m": 0.00036237511644187205,
+       "marker_median_m": 0.00020087254826998426,
+       "peak_tip_speed_mps": 1.827082825771858,
+       "reference_peak_tip_speed_mps": 1.826762227140439,
+       "peak_tip_speed_relative": 0.00017550101849939104,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0004680689491509682
+      },
+      {
+       "drone_max_m": 0.00018091164955236216,
+       "marker_max_m": 0.00021141007296894418,
+       "marker_median_m": 0.00013881690601486046,
+       "peak_tip_speed_mps": 1.46565800363325,
+       "reference_peak_tip_speed_mps": 1.4657468523998833,
+       "peak_tip_speed_relative": -6.061672006174579e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00023136189171324428
+      },
+      {
+       "drone_max_m": 0.0005478646853140923,
+       "marker_max_m": 0.0005934143531826817,
+       "marker_median_m": 0.00019581447967416404,
+       "peak_tip_speed_mps": 4.852015971413019,
+       "reference_peak_tip_speed_mps": 4.853330852231881,
+       "peak_tip_speed_relative": -0.0002709233841450276,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0013148808188621075
+      },
+      {
+       "drone_max_m": 0.0013164002639340922,
+       "marker_max_m": 0.001529791938909619,
+       "marker_median_m": 0.0008376678195952908,
+       "peak_tip_speed_mps": 5.2714518659568235,
+       "reference_peak_tip_speed_mps": 5.274790210532933,
+       "peak_tip_speed_relative": -0.0006328867012460604,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.003417469740308654
+      },
+      {
+       "drone_max_m": 0.00044379730029656117,
+       "marker_max_m": 0.0004670334809135589,
+       "marker_median_m": 0.00027350112335731535,
+       "peak_tip_speed_mps": 1.7295805324150624,
+       "reference_peak_tip_speed_mps": 1.729467827828824,
+       "peak_tip_speed_relative": 6.516720601834614e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0007507187611872634
+      },
+      {
+       "drone_max_m": 0.00029777552798537776,
+       "marker_max_m": 0.00042133783182907956,
+       "marker_median_m": 0.0002776831394676358,
+       "peak_tip_speed_mps": 0.6344355946693084,
+       "reference_peak_tip_speed_mps": 0.6344166586209796,
+       "peak_tip_speed_relative": 2.9847968320950713e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0005050620418515367
+      },
+      {
+       "drone_max_m": 0.00034016680590620574,
+       "marker_max_m": 0.0004600336087569243,
+       "marker_median_m": 0.0003012212369800159,
+       "peak_tip_speed_mps": 0.9055397593959643,
+       "reference_peak_tip_speed_mps": 0.9054987195062861,
+       "peak_tip_speed_relative": 4.5322968209804415e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00020308424966231087
+      },
+      {
+       "drone_max_m": 0.00010871431052716929,
+       "marker_max_m": 0.00014885028632612875,
+       "marker_median_m": 9.816879526467234e-05,
+       "peak_tip_speed_mps": 0.4154249185460693,
+       "reference_peak_tip_speed_mps": 0.4154508596733594,
+       "peak_tip_speed_relative": -6.244090410711944e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00010029464979113834
+      },
+      {
+       "drone_max_m": 0.00032332347175656473,
+       "marker_max_m": 0.00040319854621893,
+       "marker_median_m": 0.0002682037712561502,
+       "peak_tip_speed_mps": 0.3108786976011658,
+       "reference_peak_tip_speed_mps": 0.31090731454893006,
+       "peak_tip_speed_relative": -9.204334033041661e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0003346887987763225
+      }
+     ]
+    },
+    "0.001": {
+     "summary": {
+      "windows": 27,
+      "failed": 0,
+      "drone_max_m": 0.00029321285208627756,
+      "marker_max_m": 0.00033289725997008286,
+      "marker_median_m": 6.178487165095067e-05,
+      "peak_tip_speed_relative_max": 0.00012908521023591302,
+      "peak_time_shift_frames_max": 1,
+      "tip_speed_max_difference_mps": 0.0007814090086677439,
+      "fastest_reference_peaks_mps": [
+       6.1305907764009255,
+       6.053435612336355,
+       5.826448149039185,
+       5.274790210532933,
+       5.26236575017928
+      ],
+      "fastest_peak_relative": [
+       -4.976864007721904e-05,
+       -0.00012908521023591302,
+       -7.814382930093622e-05,
+       -0.00012797923015062107,
+       -6.238882815823299e-05
+      ]
+     },
+     "windows": [
+      {
+       "drone_max_m": 0.0001974781899303224,
+       "marker_max_m": 0.00020688698175008022,
+       "marker_median_m": 0.00013973292100227,
+       "peak_tip_speed_mps": 0.28955017235255526,
+       "reference_peak_tip_speed_mps": 0.2895472665746893,
+       "peak_tip_speed_relative": 1.0035590735535393e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00018131151380007537
+      },
+      {
+       "drone_max_m": 6.733864677110901e-05,
+       "marker_max_m": 8.204490438307684e-05,
+       "marker_median_m": 5.403416176884237e-05,
+       "peak_tip_speed_mps": 0.992673022105388,
+       "reference_peak_tip_speed_mps": 0.9927009487912369,
+       "peak_tip_speed_relative": -2.8132022924842737e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 6.583648240765516e-05
+      },
+      {
+       "drone_max_m": 7.143440345047658e-05,
+       "marker_max_m": 8.693663286688667e-05,
+       "marker_median_m": 4.87767685121725e-05,
+       "peak_tip_speed_mps": 2.1560321528896185,
+       "reference_peak_tip_speed_mps": 2.156061111895572,
+       "peak_tip_speed_relative": -1.3431440228584002e-05,
+       "peak_time_shift_frames": 1,
+       "tip_speed_max_difference_mps": 6.370043813208603e-05
+      },
+      {
+       "drone_max_m": 0.00021459331620476974,
+       "marker_max_m": 0.00022041903211202307,
+       "marker_median_m": 0.00010157919402926746,
+       "peak_tip_speed_mps": 4.461731128317835,
+       "reference_peak_tip_speed_mps": 4.461894114664813,
+       "peak_tip_speed_relative": -3.6528510715228e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00016298634697786696
+      },
+      {
+       "drone_max_m": 5.100586752093683e-05,
+       "marker_max_m": 6.653643342965541e-05,
+       "marker_median_m": 4.328339284629006e-05,
+       "peak_tip_speed_mps": 0.5739067822751388,
+       "reference_peak_tip_speed_mps": 0.5739254566995273,
+       "peak_tip_speed_relative": -3.253806599889941e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 4.765982264209878e-05
+      },
+      {
+       "drone_max_m": 0.0001294525608507291,
+       "marker_max_m": 0.00017155324312249646,
+       "marker_median_m": 8.040878951207904e-05,
+       "peak_tip_speed_mps": 6.130285665235114,
+       "reference_peak_tip_speed_mps": 6.1305907764009255,
+       "peak_tip_speed_relative": -4.976864007721904e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0003777296457920798
+      },
+      {
+       "drone_max_m": 4.380795522707093e-05,
+       "marker_max_m": 7.582820759560125e-05,
+       "marker_median_m": 2.80877220419233e-05,
+       "peak_tip_speed_mps": 3.3969475362611656,
+       "reference_peak_tip_speed_mps": 3.3970045763327765,
+       "peak_tip_speed_relative": -1.67912848891838e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0003883870465846151
+      },
+      {
+       "drone_max_m": 9.16489104345608e-05,
+       "marker_max_m": 0.00014430246181969806,
+       "marker_median_m": 9.316994938671516e-05,
+       "peak_tip_speed_mps": 1.7986863308595271,
+       "reference_peak_tip_speed_mps": 1.7986825152064165,
+       "peak_tip_speed_relative": 2.12135998345353e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00016981047406694483
+      },
+      {
+       "drone_max_m": 1.9826122581223515e-05,
+       "marker_max_m": 3.475091606121821e-05,
+       "marker_median_m": 1.915456935009956e-05,
+       "peak_tip_speed_mps": 2.2215141421723263,
+       "reference_peak_tip_speed_mps": 2.221535678752117,
+       "peak_tip_speed_relative": -9.694455955222558e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 5.1049120477042464e-05
+      },
+      {
+       "drone_max_m": 0.00018919957501806195,
+       "marker_max_m": 0.00019472162182458333,
+       "marker_median_m": 0.00010908933378571247,
+       "peak_tip_speed_mps": 1.7399820319310413,
+       "reference_peak_tip_speed_mps": 1.7400607095391203,
+       "peak_tip_speed_relative": -4.5215438546297726e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00011098674524956387
+      },
+      {
+       "drone_max_m": 0.00020863343334553974,
+       "marker_max_m": 0.00023398348289848118,
+       "marker_median_m": 7.316865424969519e-05,
+       "peak_tip_speed_mps": 4.49906499521413,
+       "reference_peak_tip_speed_mps": 4.499344401753863,
+       "peak_tip_speed_relative": -6.209938932955072e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00028288545562293876
+      },
+      {
+       "drone_max_m": 0.00012210714436150516,
+       "marker_max_m": 0.00019714482205650447,
+       "marker_median_m": 7.928626183445653e-05,
+       "peak_tip_speed_mps": 5.262037437346787,
+       "reference_peak_tip_speed_mps": 5.26236575017928,
+       "peak_tip_speed_relative": -6.238882815823299e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00037343189998928494
+      },
+      {
+       "drone_max_m": 8.56625329892502e-05,
+       "marker_max_m": 0.0001038955357372604,
+       "marker_median_m": 6.178487165095067e-05,
+       "peak_tip_speed_mps": 2.8629511254601168,
+       "reference_peak_tip_speed_mps": 2.862902629186585,
+       "peak_tip_speed_relative": 1.6939546960914598e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00012588947772362857
+      },
+      {
+       "drone_max_m": 4.7209955748028776e-05,
+       "marker_max_m": 7.106465550423407e-05,
+       "marker_median_m": 4.5065364034049056e-05,
+       "peak_tip_speed_mps": 0.7586661668858362,
+       "reference_peak_tip_speed_mps": 0.7586841602330636,
+       "peak_tip_speed_relative": -2.3716518902761052e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 5.1702831705413566e-05
+      },
+      {
+       "drone_max_m": 7.311168315560224e-05,
+       "marker_max_m": 8.21377933429775e-05,
+       "marker_median_m": 5.300471083754651e-05,
+       "peak_tip_speed_mps": 0.4310757959494037,
+       "reference_peak_tip_speed_mps": 0.431054911271753,
+       "peak_tip_speed_relative": 4.845015589571844e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 3.692954881628907e-05
+      },
+      {
+       "drone_max_m": 0.0002291082789125376,
+       "marker_max_m": 0.00028157933190090634,
+       "marker_median_m": 6.895151274488031e-05,
+       "peak_tip_speed_mps": 5.825992848069595,
+       "reference_peak_tip_speed_mps": 5.826448149039185,
+       "peak_tip_speed_relative": -7.814382930093622e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00045530096958934507
+      },
+      {
+       "drone_max_m": 0.0002657082444719183,
+       "marker_max_m": 0.000315725277810278,
+       "marker_median_m": 0.00016620431825466186,
+       "peak_tip_speed_mps": 6.0526542033276876,
+       "reference_peak_tip_speed_mps": 6.053435612336355,
+       "peak_tip_speed_relative": -0.00012908521023591302,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0007814090086677439
+      },
+      {
+       "drone_max_m": 3.943814241141874e-05,
+       "marker_max_m": 5.022669496682979e-05,
+       "marker_median_m": 3.0273891286194368e-05,
+       "peak_tip_speed_mps": 2.479888643255404,
+       "reference_peak_tip_speed_mps": 2.479906221196433,
+       "peak_tip_speed_relative": -7.088147478628848e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00014517509412725893
+      },
+      {
+       "drone_max_m": 4.657634293497859e-05,
+       "marker_max_m": 6.271950183965702e-05,
+       "marker_median_m": 3.286249220322913e-05,
+       "peak_tip_speed_mps": 1.8268178089366682,
+       "reference_peak_tip_speed_mps": 1.826762227140439,
+       "peak_tip_speed_relative": 3.0426398905936125e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 8.39440893976029e-05
+      },
+      {
+       "drone_max_m": 5.158269974581131e-05,
+       "marker_max_m": 5.5342321573581436e-05,
+       "marker_median_m": 3.631879839654835e-05,
+       "peak_tip_speed_mps": 1.4657360302439646,
+       "reference_peak_tip_speed_mps": 1.4657468523998833,
+       "peak_tip_speed_relative": -7.3833731254469015e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 3.890410118889687e-05
+      },
+      {
+       "drone_max_m": 0.00013937966970578586,
+       "marker_max_m": 0.00014622376446289938,
+       "marker_median_m": 4.835187329309676e-05,
+       "peak_tip_speed_mps": 4.853067466595819,
+       "reference_peak_tip_speed_mps": 4.853330852231881,
+       "peak_tip_speed_relative": -5.4269046162569445e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00026338563606209675
+      },
+      {
+       "drone_max_m": 0.00029321285208627756,
+       "marker_max_m": 0.00033289725997008286,
+       "marker_median_m": 0.00018075797120148323,
+       "peak_tip_speed_mps": 5.274115146942583,
+       "reference_peak_tip_speed_mps": 5.274790210532933,
+       "peak_tip_speed_relative": -0.00012797923015062107,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0006908190070715747
+      },
+      {
+       "drone_max_m": 9.280419930809969e-05,
+       "marker_max_m": 9.731836493909983e-05,
+       "marker_median_m": 5.7585869383902215e-05,
+       "peak_tip_speed_mps": 1.7294831143671154,
+       "reference_peak_tip_speed_mps": 1.729467827828824,
+       "peak_tip_speed_relative": 8.838868260863109e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00015282564614016447
+      },
+      {
+       "drone_max_m": 9.42127619205646e-05,
+       "marker_max_m": 0.00010714229255177852,
+       "marker_median_m": 7.312180116018732e-05,
+       "peak_tip_speed_mps": 0.6344243895290012,
+       "reference_peak_tip_speed_mps": 0.6344166586209796,
+       "peak_tip_speed_relative": 1.2185852809043496e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00010419319536822402
+      },
+      {
+       "drone_max_m": 0.00011379718252846338,
+       "marker_max_m": 0.0001274850580737052,
+       "marker_median_m": 8.55774776941268e-05,
+       "peak_tip_speed_mps": 0.9055077521300872,
+       "reference_peak_tip_speed_mps": 0.9054987195062861,
+       "peak_tip_speed_relative": 9.975302677434073e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 5.420590081289811e-05
+      },
+      {
+       "drone_max_m": 2.6562305362354266e-05,
+       "marker_max_m": 3.484803443706806e-05,
+       "marker_median_m": 2.2246710492650113e-05,
+       "peak_tip_speed_mps": 0.4154454714955628,
+       "reference_peak_tip_speed_mps": 0.4154508596733594,
+       "peak_tip_speed_relative": -1.2969470807644434e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 2.272456600277417e-05
+      },
+      {
+       "drone_max_m": 9.431275869453692e-05,
+       "marker_max_m": 0.00010459243767790442,
+       "marker_median_m": 7.025686121021576e-05,
+       "peak_tip_speed_mps": 0.31090891971248596,
+       "reference_peak_tip_speed_mps": 0.31090731454893006,
+       "peak_tip_speed_relative": 5.162836256289438e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 5.619664393996526e-05
+      }
+     ]
+    }
+   }
+  },
+  "whip x1.5": {
+   "held_out": true,
+   "windows": 27,
+   "seconds": {
+    "0.002": 0.6818118095397949,
+    "0.001": 1.1759650707244873,
+    "0.0005": 2.190091609954834
+   },
+   "steps": {
+    "0.002": {
+     "summary": {
+      "windows": 27,
+      "failed": 0,
+      "drone_max_m": 0.0021092068069271663,
+      "marker_max_m": 0.002767248488002036,
+      "marker_median_m": 0.00026477368588767483,
+      "peak_tip_speed_relative_max": 0.0008577268450579156,
+      "peak_time_shift_frames_max": 0,
+      "tip_speed_max_difference_mps": 0.007659372090651928,
+      "fastest_reference_peaks_mps": [
+       7.5242283871470965,
+       7.297064099137924,
+       7.288764824706839,
+       7.247979282903873,
+       6.935941984733762
+      ],
+      "fastest_peak_relative": [
+       -0.0005898951377359962,
+       -0.0005576260818502821,
+       -0.0004594253062568665,
+       -0.0008577268450579156,
+       -0.00023163499034872803
+      ]
+     },
+     "windows": [
+      {
+       "drone_max_m": 0.0007200550965031915,
+       "marker_max_m": 0.0007878867127981973,
+       "marker_median_m": 0.0005292179546397989,
+       "peak_tip_speed_mps": 0.8166133226281712,
+       "reference_peak_tip_speed_mps": 0.8164857731475827,
+       "peak_tip_speed_relative": 0.00015621764001694238,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0006675210917967411
+      },
+      {
+       "drone_max_m": 0.0001774091605223349,
+       "marker_max_m": 0.00024911696070016657,
+       "marker_median_m": 0.0001531793618613186,
+       "peak_tip_speed_mps": 1.1059684932611422,
+       "reference_peak_tip_speed_mps": 1.106211054553291,
+       "peak_tip_speed_relative": -0.00021927216434014518,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00031037569327563297
+      },
+      {
+       "drone_max_m": 0.0001784448218440371,
+       "marker_max_m": 0.0002811606183638054,
+       "marker_median_m": 0.00014311712285468845,
+       "peak_tip_speed_mps": 2.690506604616675,
+       "reference_peak_tip_speed_mps": 2.690600014486777,
+       "peak_tip_speed_relative": -3.471711499258845e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00015554129783268422
+      },
+      {
+       "drone_max_m": 0.001204906499791658,
+       "marker_max_m": 0.0014623865809684088,
+       "marker_median_m": 0.0004823739045553867,
+       "peak_tip_speed_mps": 7.292995065875312,
+       "reference_peak_tip_speed_mps": 7.297064099137924,
+       "peak_tip_speed_relative": -0.0005576260818502821,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.004643559160571797
+      },
+      {
+       "drone_max_m": 0.00019841267255049644,
+       "marker_max_m": 0.0002523177978123258,
+       "marker_median_m": 0.00015800329795881163,
+       "peak_tip_speed_mps": 0.6022055394636405,
+       "reference_peak_tip_speed_mps": 0.6023300247792976,
+       "peak_tip_speed_relative": -0.00020667293765197492,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00021348738901927344
+      },
+      {
+       "drone_max_m": 0.0010402260081998627,
+       "marker_max_m": 0.0016883604667811837,
+       "marker_median_m": 0.0006442283075369221,
+       "peak_tip_speed_mps": 7.285416181695014,
+       "reference_peak_tip_speed_mps": 7.288764824706839,
+       "peak_tip_speed_relative": -0.0004594253062568665,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.005226798356626539
+      },
+      {
+       "drone_max_m": 0.00022643103019359678,
+       "marker_max_m": 0.0003904138241180368,
+       "marker_median_m": 0.0001568812284066025,
+       "peak_tip_speed_mps": 3.375766687159366,
+       "reference_peak_tip_speed_mps": 3.3760160085509554,
+       "peak_tip_speed_relative": -7.385077291044428e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0023256546127234934
+      },
+      {
+       "drone_max_m": 0.0006503584820601038,
+       "marker_max_m": 0.0009353362722548769,
+       "marker_median_m": 0.0005760672851756727,
+       "peak_tip_speed_mps": 2.2981020122625706,
+       "reference_peak_tip_speed_mps": 2.2977489721824114,
+       "peak_tip_speed_relative": 0.00015364606161649697,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0010551466830928113
+      },
+      {
+       "drone_max_m": 6.664644146202325e-05,
+       "marker_max_m": 0.00011183285528678665,
+       "marker_median_m": 5.163802029853622e-05,
+       "peak_tip_speed_mps": 2.434888235263728,
+       "reference_peak_tip_speed_mps": 2.4349384873188313,
+       "peak_tip_speed_relative": -2.06379156455494e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0001667121329009813
+      },
+      {
+       "drone_max_m": 0.0007455381309195985,
+       "marker_max_m": 0.0007870365115513157,
+       "marker_median_m": 0.00041469546343941225,
+       "peak_tip_speed_mps": 2.53483074249857,
+       "reference_peak_tip_speed_mps": 2.534993956723666,
+       "peak_tip_speed_relative": -6.438446319101399e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0005096488189799686
+      },
+      {
+       "drone_max_m": 0.0010024946142106472,
+       "marker_max_m": 0.0014576087118068953,
+       "marker_median_m": 0.0003741493325688919,
+       "peak_tip_speed_mps": 7.2417624965005025,
+       "reference_peak_tip_speed_mps": 7.247979282903873,
+       "peak_tip_speed_relative": -0.0008577268450579156,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0067023655728446485
+      },
+      {
+       "drone_max_m": 0.0011648772492707238,
+       "marker_max_m": 0.0016716085525702595,
+       "marker_median_m": 0.0007834001361346709,
+       "peak_tip_speed_mps": 6.880715313130521,
+       "reference_peak_tip_speed_mps": 6.883560419983848,
+       "peak_tip_speed_relative": -0.000413319079043295,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0057343348086158485
+      },
+      {
+       "drone_max_m": 0.00036028747799510263,
+       "marker_max_m": 0.00046822262627152587,
+       "marker_median_m": 0.00026477368588767483,
+       "peak_tip_speed_mps": 2.8636877828403255,
+       "reference_peak_tip_speed_mps": 2.863737013231759,
+       "peak_tip_speed_relative": -1.7190961043578312e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0006375232968598432
+      },
+      {
+       "drone_max_m": 0.00020378619939002973,
+       "marker_max_m": 0.00026292273226619865,
+       "marker_median_m": 0.00015797912368885244,
+       "peak_tip_speed_mps": 0.7583683733473998,
+       "reference_peak_tip_speed_mps": 0.7584452078620781,
+       "peak_tip_speed_relative": -0.00010130529388530096,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0002058259658933581
+      },
+      {
+       "drone_max_m": 0.00035353889636069447,
+       "marker_max_m": 0.00041062676414232893,
+       "marker_median_m": 0.0002499246719371749,
+       "peak_tip_speed_mps": 0.7109348055439688,
+       "reference_peak_tip_speed_mps": 0.7108323817921263,
+       "peak_tip_speed_relative": 0.00014408987894487524,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00041987603365167825
+      },
+      {
+       "drone_max_m": 0.0012695522806065451,
+       "marker_max_m": 0.001318116487996186,
+       "marker_median_m": 0.00029085978956953505,
+       "peak_tip_speed_mps": 7.519789881406303,
+       "reference_peak_tip_speed_mps": 7.5242283871470965,
+       "peak_tip_speed_relative": -0.0005898951377359962,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.005251813188839272
+      },
+      {
+       "drone_max_m": 0.0021092068069271663,
+       "marker_max_m": 0.0025946710230641545,
+       "marker_median_m": 0.00161362008688518,
+       "peak_tip_speed_mps": 6.934335377879068,
+       "reference_peak_tip_speed_mps": 6.935941984733762,
+       "peak_tip_speed_relative": -0.00023163499034872803,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.007659372090651928
+      },
+      {
+       "drone_max_m": 0.00018828114789126715,
+       "marker_max_m": 0.000246029634276514,
+       "marker_median_m": 0.0001445565507453718,
+       "peak_tip_speed_mps": 2.4384722733414423,
+       "reference_peak_tip_speed_mps": 2.438562531985677,
+       "peak_tip_speed_relative": -3.7013052997747486e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0007085407032716429
+      },
+      {
+       "drone_max_m": 0.0002949788835479722,
+       "marker_max_m": 0.0003921419514709345,
+       "marker_median_m": 0.00021048254201994922,
+       "peak_tip_speed_mps": 2.3815812688664315,
+       "reference_peak_tip_speed_mps": 2.3814766766255655,
+       "peak_tip_speed_relative": 4.391907000078632e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0004892657090864727
+      },
+      {
+       "drone_max_m": 0.0002667147978463458,
+       "marker_max_m": 0.0002676461018443636,
+       "marker_median_m": 0.00017293785152355887,
+       "peak_tip_speed_mps": 1.6314285129913477,
+       "reference_peak_tip_speed_mps": 1.6313672129439534,
+       "peak_tip_speed_relative": 3.757587311303823e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00024409066619129893
+      },
+      {
+       "drone_max_m": 0.0005133635281229232,
+       "marker_max_m": 0.0006071303607704599,
+       "marker_median_m": 0.0001908393881352145,
+       "peak_tip_speed_mps": 5.591364287313276,
+       "reference_peak_tip_speed_mps": 5.592851001195739,
+       "peak_tip_speed_relative": -0.00026582397459640195,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.001486713882463242
+      },
+      {
+       "drone_max_m": 0.0018454101131453737,
+       "marker_max_m": 0.002767248488002036,
+       "marker_median_m": 0.0015036613253407685,
+       "peak_tip_speed_mps": 5.921044790454251,
+       "reference_peak_tip_speed_mps": 5.922942710460816,
+       "peak_tip_speed_relative": -0.0003204353138877014,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.006735220385779783
+      },
+      {
+       "drone_max_m": 0.00043645661218739973,
+       "marker_max_m": 0.0004632105139453783,
+       "marker_median_m": 0.0002709614752543254,
+       "peak_tip_speed_mps": 2.3605546615432083,
+       "reference_peak_tip_speed_mps": 2.3604817797719435,
+       "peak_tip_speed_relative": 3.0875803358920706e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0007153428061543732
+      },
+      {
+       "drone_max_m": 0.0002755721605244288,
+       "marker_max_m": 0.00039153391633887864,
+       "marker_median_m": 0.00025797716528544684,
+       "peak_tip_speed_mps": 0.7784652383393454,
+       "reference_peak_tip_speed_mps": 0.7783992818929295,
+       "peak_tip_speed_relative": 8.473343687520618e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0002812324145811118
+      },
+      {
+       "drone_max_m": 0.0003583431890938904,
+       "marker_max_m": 0.0004783203144225255,
+       "marker_median_m": 0.00031302849861534685,
+       "peak_tip_speed_mps": 1.3216353939132603,
+       "reference_peak_tip_speed_mps": 1.3215787504563805,
+       "peak_tip_speed_relative": 4.2860447673209734e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00020656546193797976
+      },
+      {
+       "drone_max_m": 9.988297172058846e-05,
+       "marker_max_m": 0.00014007062168367742,
+       "marker_median_m": 9.319557942979756e-05,
+       "peak_tip_speed_mps": 0.5276831418501634,
+       "reference_peak_tip_speed_mps": 0.5276538368098153,
+       "peak_tip_speed_relative": 5.553838199179317e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 8.549768005451652e-05
+      },
+      {
+       "drone_max_m": 0.0003365501488674649,
+       "marker_max_m": 0.00041306954767545453,
+       "marker_median_m": 0.00027517230851080806,
+       "peak_tip_speed_mps": 0.519321363171008,
+       "reference_peak_tip_speed_mps": 0.5193010218207584,
+       "peak_tip_speed_relative": 3.917063397684828e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00020759188893618163
+      }
+     ]
+    },
+    "0.001": {
+     "summary": {
+      "windows": 27,
+      "failed": 0,
+      "drone_max_m": 0.0004322649355725794,
+      "marker_max_m": 0.0006148884962710138,
+      "marker_median_m": 6.621429536893194e-05,
+      "peak_tip_speed_relative_max": 0.00017192103856500385,
+      "peak_time_shift_frames_max": 0,
+      "tip_speed_max_difference_mps": 0.0015345908067754266,
+      "fastest_reference_peaks_mps": [
+       7.5242283871470965,
+       7.297064099137924,
+       7.288764824706839,
+       7.247979282903873,
+       6.935941984733762
+      ],
+      "fastest_peak_relative": [
+       -0.00011595005882181209,
+       -0.00011295167474190126,
+       -8.94314304163979e-05,
+       -0.00017192103856500385,
+       -4.725082204792841e-05
+      ]
+     },
+     "windows": [
+      {
+       "drone_max_m": 0.00020854150328686316,
+       "marker_max_m": 0.00021844598206271183,
+       "marker_median_m": 0.0001469960097850778,
+       "peak_tip_speed_mps": 0.816529057669774,
+       "reference_peak_tip_speed_mps": 0.8164857731475827,
+       "peak_tip_speed_relative": 5.3013198288098806e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00019048220712947206
+      },
+      {
+       "drone_max_m": 5.4683545024025726e-05,
+       "marker_max_m": 7.026568597296282e-05,
+       "marker_median_m": 4.580424444074877e-05,
+       "peak_tip_speed_mps": 1.1061777664691779,
+       "reference_peak_tip_speed_mps": 1.106211054553291,
+       "peak_tip_speed_relative": -3.009198287806658e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 4.349596626540553e-05
+      },
+      {
+       "drone_max_m": 7.240156064025616e-05,
+       "marker_max_m": 8.577788935776947e-05,
+       "marker_median_m": 4.910809451582332e-05,
+       "peak_tip_speed_mps": 2.690567361067341,
+       "reference_peak_tip_speed_mps": 2.690600014486777,
+       "peak_tip_speed_relative": -1.2136110629668018e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 5.007878265850252e-05
+      },
+      {
+       "drone_max_m": 0.00028756975852317623,
+       "marker_max_m": 0.00032678902986807174,
+       "marker_median_m": 0.00012219115115272484,
+       "peak_tip_speed_mps": 7.296239883527227,
+       "reference_peak_tip_speed_mps": 7.297064099137924,
+       "peak_tip_speed_relative": -0.00011295167474190126,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0009400053695705068
+      },
+      {
+       "drone_max_m": 5.3679230436420866e-05,
+       "marker_max_m": 6.737642773137274e-05,
+       "marker_median_m": 4.325830724941937e-05,
+       "peak_tip_speed_mps": 0.6023192214331504,
+       "reference_peak_tip_speed_mps": 0.6023300247792976,
+       "peak_tip_speed_relative": -1.7935924995882147e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 3.0476713730548388e-05
+      },
+      {
+       "drone_max_m": 0.00020256030287946203,
+       "marker_max_m": 0.0003338701064734269,
+       "marker_median_m": 0.0001226005926273884,
+       "peak_tip_speed_mps": 7.288112980042597,
+       "reference_peak_tip_speed_mps": 7.288764824706839,
+       "peak_tip_speed_relative": -8.94314304163979e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.001065552492545585
+      },
+      {
+       "drone_max_m": 3.805692998282151e-05,
+       "marker_max_m": 7.038545650994024e-05,
+       "marker_median_m": 2.644778465812319e-05,
+       "peak_tip_speed_mps": 3.375961025650226,
+       "reference_peak_tip_speed_mps": 3.3760160085509554,
+       "peak_tip_speed_relative": -1.6286327016779012e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00038675978053825943
+      },
+      {
+       "drone_max_m": 0.00014245583968833242,
+       "marker_max_m": 0.00020091940992381322,
+       "marker_median_m": 0.00012407762183053758,
+       "peak_tip_speed_mps": 2.297824908593153,
+       "reference_peak_tip_speed_mps": 2.2977489721824114,
+       "peak_tip_speed_relative": 3.3048175262395674e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00022698504809726128
+      },
+      {
+       "drone_max_m": 1.7316436418668424e-05,
+       "marker_max_m": 2.5530700683821048e-05,
+       "marker_median_m": 1.3245857513662372e-05,
+       "peak_tip_speed_mps": 2.4349323854366816,
+       "reference_peak_tip_speed_mps": 2.4349384873188313,
+       "peak_tip_speed_relative": -2.5059697325025e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 3.770334050767765e-05
+      },
+      {
+       "drone_max_m": 0.00019983027746794946,
+       "marker_max_m": 0.000203899150922019,
+       "marker_median_m": 0.0001113230187140444,
+       "peak_tip_speed_mps": 2.5349400642059314,
+       "reference_peak_tip_speed_mps": 2.534993956723666,
+       "peak_tip_speed_relative": -2.1259426513320356e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00012044277437617268
+      },
+      {
+       "drone_max_m": 0.00021427212702063159,
+       "marker_max_m": 0.00030903683365723477,
+       "marker_median_m": 8.653308872969782e-05,
+       "peak_tip_speed_mps": 7.246733202778058,
+       "reference_peak_tip_speed_mps": 7.247979282903873,
+       "peak_tip_speed_relative": -0.00017192103856500385,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0013235731557292851
+      },
+      {
+       "drone_max_m": 0.00025312536351629333,
+       "marker_max_m": 0.00034633503182095367,
+       "marker_median_m": 0.00016914841111865907,
+       "peak_tip_speed_mps": 6.882987705266542,
+       "reference_peak_tip_speed_mps": 6.883560419983848,
+       "peak_tip_speed_relative": -8.320036178410817e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0011715256135254037
+      },
+      {
+       "drone_max_m": 9.654944533887821e-05,
+       "marker_max_m": 0.00011415474454261919,
+       "marker_median_m": 6.621429536893194e-05,
+       "peak_tip_speed_mps": 2.8637857231786215,
+       "reference_peak_tip_speed_mps": 2.863737013231759,
+       "peak_tip_speed_relative": 1.700922488234724e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0001255189131699197
+      },
+      {
+       "drone_max_m": 3.819840936390706e-05,
+       "marker_max_m": 5.9883614793881625e-05,
+       "marker_median_m": 3.788717227615973e-05,
+       "peak_tip_speed_mps": 0.7584294388570263,
+       "reference_peak_tip_speed_mps": 0.7584452078620781,
+       "peak_tip_speed_relative": -2.079122511211562e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 4.46426680243972e-05
+      },
+      {
+       "drone_max_m": 9.484106172608087e-05,
+       "marker_max_m": 0.0001024871660170658,
+       "marker_median_m": 6.291593823308013e-05,
+       "peak_tip_speed_mps": 0.710857353733427,
+       "reference_peak_tip_speed_mps": 0.7108323817921263,
+       "peak_tip_speed_relative": 3.513056233828138e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 9.621790767899707e-05
+      },
+      {
+       "drone_max_m": 0.0002972734876396377,
+       "marker_max_m": 0.00030730912350107874,
+       "marker_median_m": 7.60719560766401e-05,
+       "peak_tip_speed_mps": 7.523355952423018,
+       "reference_peak_tip_speed_mps": 7.5242283871470965,
+       "peak_tip_speed_relative": -0.00011595005882181209,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.001034544578421226
+      },
+      {
+       "drone_max_m": 0.0004322649355725794,
+       "marker_max_m": 0.0005524990847324679,
+       "marker_median_m": 0.0003441148536745491,
+       "peak_tip_speed_mps": 6.935614255773307,
+       "reference_peak_tip_speed_mps": 6.935941984733762,
+       "peak_tip_speed_relative": -4.725082204792841e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0015345908067754266
+      },
+      {
+       "drone_max_m": 3.704491369993512e-05,
+       "marker_max_m": 5.544639833232249e-05,
+       "marker_median_m": 3.1537572394541954e-05,
+       "peak_tip_speed_mps": 2.438550702307437,
+       "reference_peak_tip_speed_mps": 2.438562531985677,
+       "peak_tip_speed_relative": -4.8510866893503035e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00014765261091542747
+      },
+      {
+       "drone_max_m": 4.968241036003296e-05,
+       "marker_max_m": 6.915558732053593e-05,
+       "marker_median_m": 3.554065748519761e-05,
+       "peak_tip_speed_mps": 2.381496624238882,
+       "reference_peak_tip_speed_mps": 2.3814766766255655,
+       "peak_tip_speed_relative": 8.37615312909712e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 8.907431339855165e-05
+      },
+      {
+       "drone_max_m": 6.275543529676852e-05,
+       "marker_max_m": 6.38026127558144e-05,
+       "marker_median_m": 4.086732386328081e-05,
+       "peak_tip_speed_mps": 1.6313813077067794,
+       "reference_peak_tip_speed_mps": 1.6313672129439534,
+       "peak_tip_speed_relative": 8.639846819313846e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 5.572098629952338e-05
+      },
+      {
+       "drone_max_m": 0.00012585498253514515,
+       "marker_max_m": 0.00014818751277046667,
+       "marker_median_m": 4.547301034640614e-05,
+       "peak_tip_speed_mps": 5.592553162584878,
+       "reference_peak_tip_speed_mps": 5.592851001195739,
+       "peak_tip_speed_relative": -5.325344994844272e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0002978386108614117
+      },
+      {
+       "drone_max_m": 0.0004069708353077184,
+       "marker_max_m": 0.0006148884962710138,
+       "marker_median_m": 0.0003326494045303252,
+       "peak_tip_speed_mps": 5.9225967770231644,
+       "reference_peak_tip_speed_mps": 5.922942710460816,
+       "peak_tip_speed_relative": -5.840567004655739e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.001492019969179026
+      },
+      {
+       "drone_max_m": 9.232535045672341e-05,
+       "marker_max_m": 9.990033753443816e-05,
+       "marker_median_m": 5.9596623461170294e-05,
+       "peak_tip_speed_mps": 2.36048814976461,
+       "reference_peak_tip_speed_mps": 2.3604817797719435,
+       "peak_tip_speed_relative": 2.6985985324134987e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00014996406067568913
+      },
+      {
+       "drone_max_m": 8.630449582835986e-05,
+       "marker_max_m": 0.00010122098913219855,
+       "marker_median_m": 6.805689621709633e-05,
+       "peak_tip_speed_mps": 0.7784200877395496,
+       "reference_peak_tip_speed_mps": 0.7783992818929295,
+       "peak_tip_speed_relative": 2.6729015691673297e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 7.154920300658785e-05
+      },
+      {
+       "drone_max_m": 0.00011965582208295356,
+       "marker_max_m": 0.00013441679395743622,
+       "marker_median_m": 8.981240277846514e-05,
+       "peak_tip_speed_mps": 1.3215963920002256,
+       "reference_peak_tip_speed_mps": 1.3215787504563805,
+       "peak_tip_speed_relative": 1.3348840422144903e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 5.3045070492085955e-05
+      },
+      {
+       "drone_max_m": 2.639650117075565e-05,
+       "marker_max_m": 3.254899957922856e-05,
+       "marker_median_m": 2.1926095450096072e-05,
+       "peak_tip_speed_mps": 0.5276622704202741,
+       "reference_peak_tip_speed_mps": 0.5276538368098153,
+       "peak_tip_speed_relative": 1.5983225877480578e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 2.2959603578107113e-05
+      },
+      {
+       "drone_max_m": 0.00010204015532166988,
+       "marker_max_m": 0.0001096966916513878,
+       "marker_median_m": 7.428076987152038e-05,
+       "peak_tip_speed_mps": 0.5193126675747091,
+       "reference_peak_tip_speed_mps": 0.5193010218207584,
+       "peak_tip_speed_relative": 2.242582521749803e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 6.112830970134153e-05
+      }
+     ]
+    }
+   }
+  },
+  "strokes x1": {
+   "held_out": false,
+   "windows": 24,
+   "seconds": {
+    "0.002": 0.5685900449752808,
+    "0.001": 1.0929547548294067,
+    "0.0005": 1.9006233215332031
+   },
+   "steps": {
+    "0.002": {
+     "summary": {
+      "windows": 24,
+      "failed": 0,
+      "drone_max_m": 0.0010300107988745477,
+      "marker_max_m": 0.001271205678720698,
+      "marker_median_m": 0.00022650593158940512,
+      "peak_tip_speed_relative_max": 0.0006208670919876091,
+      "peak_time_shift_frames_max": 0,
+      "tip_speed_max_difference_mps": 0.002276733375899731,
+      "fastest_reference_peaks_mps": [
+       5.722004383421995,
+       3.4294282147759327,
+       3.360966881888537,
+       3.3156839742755673,
+       3.2877306617946913
+      ],
+      "fastest_peak_relative": [
+       -0.0003529914358677555,
+       4.7227168409103015e-05,
+       -0.00013369292984377612,
+       7.65012460923753e-05,
+       -0.00013015336185040471
+      ]
+     },
+     "windows": [
+      {
+       "drone_max_m": 0.0002864105439268627,
+       "marker_max_m": 0.00033497412008228535,
+       "marker_median_m": 0.0002214470697045544,
+       "peak_tip_speed_mps": 1.3373029079408418,
+       "reference_peak_tip_speed_mps": 1.3373007344857284,
+       "peak_tip_speed_relative": 1.6252553052265029e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00017408405966801155
+      },
+      {
+       "drone_max_m": 0.0002575664633839292,
+       "marker_max_m": 0.00034747930165754035,
+       "marker_median_m": 0.00022529186357316328,
+       "peak_tip_speed_mps": 1.3540233163991209,
+       "reference_peak_tip_speed_mps": 1.3541126079957597,
+       "peak_tip_speed_relative": -6.594104220847274e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00033122812955821423
+      },
+      {
+       "drone_max_m": 0.00029836919633197123,
+       "marker_max_m": 0.0003223916274907917,
+       "marker_median_m": 0.00019899938215194962,
+       "peak_tip_speed_mps": 1.0702597431211123,
+       "reference_peak_tip_speed_mps": 1.0704364403392739,
+       "peak_tip_speed_relative": -0.0001650702568622986,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0005463352185288706
+      },
+      {
+       "drone_max_m": 0.00039020317614646416,
+       "marker_max_m": 0.0004539448582359776,
+       "marker_median_m": 0.0003042324129475842,
+       "peak_tip_speed_mps": 0.8130250656200951,
+       "reference_peak_tip_speed_mps": 0.8129308880454484,
+       "peak_tip_speed_relative": 0.0001158494234032581,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00021653040957070324
+      },
+      {
+       "drone_max_m": 0.0003329280824222458,
+       "marker_max_m": 0.00042564479195828533,
+       "marker_median_m": 0.00025648448287268115,
+       "peak_tip_speed_mps": 1.7518981645391345,
+       "reference_peak_tip_speed_mps": 1.7519462365429912,
+       "peak_tip_speed_relative": -2.743920038983383e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00023543113802906857
+      },
+      {
+       "drone_max_m": 0.0003571099324009286,
+       "marker_max_m": 0.0004321334277613691,
+       "marker_median_m": 0.00023103782324219717,
+       "peak_tip_speed_mps": 2.981333884712231,
+       "reference_peak_tip_speed_mps": 2.9815853026252257,
+       "peak_tip_speed_relative": -8.432356866450164e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0005913831561177307
+      },
+      {
+       "drone_max_m": 0.0002806699414132016,
+       "marker_max_m": 0.0003330284510736243,
+       "marker_median_m": 0.00020726085117395902,
+       "peak_tip_speed_mps": 3.2215523204360785,
+       "reference_peak_tip_speed_mps": 3.22192227745902,
+       "peak_tip_speed_relative": -0.00011482493712822173,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0006524442485038584
+      },
+      {
+       "drone_max_m": 0.0003417306009105836,
+       "marker_max_m": 0.00045347310278006855,
+       "marker_median_m": 0.00030176913519835096,
+       "peak_tip_speed_mps": 3.2873027525962,
+       "reference_peak_tip_speed_mps": 3.2877306617946913,
+       "peak_tip_speed_relative": -0.00013015336185040471,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0004660942760317255
+      },
+      {
+       "drone_max_m": 0.00025949548013826096,
+       "marker_max_m": 0.0003904260160536225,
+       "marker_median_m": 0.00019801345031844906,
+       "peak_tip_speed_mps": 3.315937628231248,
+       "reference_peak_tip_speed_mps": 3.3156839742755673,
+       "peak_tip_speed_relative": 7.65012460923753e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0004552606969205897
+      },
+      {
+       "drone_max_m": 0.00015971360943156654,
+       "marker_max_m": 0.00023003110386694435,
+       "marker_median_m": 0.00014871892035751695,
+       "peak_tip_speed_mps": 1.8360045705538177,
+       "reference_peak_tip_speed_mps": 1.8361581027208576,
+       "peak_tip_speed_relative": -8.361598427297778e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0001630453152157152
+      },
+      {
+       "drone_max_m": 0.00025599349972105223,
+       "marker_max_m": 0.00034461919781416625,
+       "marker_median_m": 0.00019880740029911832,
+       "peak_tip_speed_mps": 1.2678621273060142,
+       "reference_peak_tip_speed_mps": 1.2678912572681569,
+       "peak_tip_speed_relative": -2.297512659354961e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0002304511963599487
+      },
+      {
+       "drone_max_m": 0.00033999543924234654,
+       "marker_max_m": 0.00040205504302598464,
+       "marker_median_m": 0.0002253005189658556,
+       "peak_tip_speed_mps": 2.7949994325108287,
+       "reference_peak_tip_speed_mps": 2.7951458945381185,
+       "peak_tip_speed_relative": -5.239870576201344e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0003902330542581711
+      },
+      {
+       "drone_max_m": 0.0005159806070661049,
+       "marker_max_m": 0.0006241274757445239,
+       "marker_median_m": 0.0003303076519126522,
+       "peak_tip_speed_mps": 3.3605175443789896,
+       "reference_peak_tip_speed_mps": 3.360966881888537,
+       "peak_tip_speed_relative": -0.00013369292984377612,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.000940611065888497
+      },
+      {
+       "drone_max_m": 0.00038123700098169344,
+       "marker_max_m": 0.00041062616679324456,
+       "marker_median_m": 0.0002719276854922086,
+       "peak_tip_speed_mps": 1.7947301938594402,
+       "reference_peak_tip_speed_mps": 1.7946455670199655,
+       "peak_tip_speed_relative": 4.7155182633318304e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0002906112413209039
+      },
+      {
+       "drone_max_m": 0.0002734794102196014,
+       "marker_max_m": 0.0003703657621218835,
+       "marker_median_m": 0.00024402865530119203,
+       "peak_tip_speed_mps": 1.2000134631179034,
+       "reference_peak_tip_speed_mps": 1.2000492672541196,
+       "peak_tip_speed_relative": -2.9835555250379286e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0003370960772714482
+      },
+      {
+       "drone_max_m": 0.00016589767239549857,
+       "marker_max_m": 0.00019431091827100213,
+       "marker_median_m": 0.0001297232754155874,
+       "peak_tip_speed_mps": 0.7950976862056958,
+       "reference_peak_tip_speed_mps": 0.7951555205288005,
+       "peak_tip_speed_relative": -7.273334789426045e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 8.448807316430162e-05
+      },
+      {
+       "drone_max_m": 0.0002540241759279027,
+       "marker_max_m": 0.0003980573283003488,
+       "marker_median_m": 0.0001805166750497411,
+       "peak_tip_speed_mps": 3.4295901769597785,
+       "reference_peak_tip_speed_mps": 3.4294282147759327,
+       "peak_tip_speed_relative": 4.7227168409103015e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0005155604885306864
+      },
+      {
+       "drone_max_m": 0.00039652124638411834,
+       "marker_max_m": 0.0004626687422647598,
+       "marker_median_m": 0.00028032893397929835,
+       "peak_tip_speed_mps": 2.3375601208476917,
+       "reference_peak_tip_speed_mps": 2.3375802358432685,
+       "peak_tip_speed_relative": -8.605050328625019e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00040975879444526964
+      },
+      {
+       "drone_max_m": 0.00024250035857084629,
+       "marker_max_m": 0.0003531613387796426,
+       "marker_median_m": 0.00022771134421295465,
+       "peak_tip_speed_mps": 2.6939381970446417,
+       "reference_peak_tip_speed_mps": 2.6940659720846547,
+       "peak_tip_speed_relative": -4.742832630566518e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00023306867775702012
+      },
+      {
+       "drone_max_m": 0.00041126948704373056,
+       "marker_max_m": 0.0004993984637786077,
+       "marker_median_m": 0.0003312373724025723,
+       "peak_tip_speed_mps": 1.1304016132365033,
+       "reference_peak_tip_speed_mps": 1.1303596527833357,
+       "peak_tip_speed_relative": 3.712132953825886e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0003503015553288358
+      },
+      {
+       "drone_max_m": 0.00023716869876255764,
+       "marker_max_m": 0.0003204932634097283,
+       "marker_median_m": 0.00021110532812357004,
+       "peak_tip_speed_mps": 0.9697506551396916,
+       "reference_peak_tip_speed_mps": 0.9697841243952998,
+       "peak_tip_speed_relative": -3.451206796056816e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00026584547538197056
+      },
+      {
+       "drone_max_m": 0.0010300107988745477,
+       "marker_max_m": 0.001271205678720698,
+       "marker_median_m": 0.0007431605720496796,
+       "peak_tip_speed_mps": 5.719984564878649,
+       "reference_peak_tip_speed_mps": 5.722004383421995,
+       "peak_tip_speed_relative": -0.0003529914358677555,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.002276733375899731
+      },
+      {
+       "drone_max_m": 0.0002912406570996229,
+       "marker_max_m": 0.000373519384288643,
+       "marker_median_m": 0.0002487305704531917,
+       "peak_tip_speed_mps": 0.29298060815928745,
+       "reference_peak_tip_speed_mps": 0.29290885918006687,
+       "peak_tip_speed_relative": 0.0002449532575472535,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0002593283351372544
+      },
+      {
+       "drone_max_m": 0.00023637485944560943,
+       "marker_max_m": 0.00029163847367892826,
+       "marker_median_m": 0.00019522971427377549,
+       "peak_tip_speed_mps": 0.37821801666047944,
+       "reference_peak_tip_speed_mps": 0.3784529856651434,
+       "peak_tip_speed_relative": -0.0006208670919876091,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0002441598754946983
+      }
+     ]
+    },
+    "0.001": {
+     "summary": {
+      "windows": 24,
+      "failed": 0,
+      "drone_max_m": 0.00019558408476527678,
+      "marker_max_m": 0.0002408707926635267,
+      "marker_median_m": 5.738713092680043e-05,
+      "peak_tip_speed_relative_max": 0.0001026648626114568,
+      "peak_time_shift_frames_max": 0,
+      "tip_speed_max_difference_mps": 0.0004414445702733971,
+      "fastest_reference_peaks_mps": [
+       5.722004383421995,
+       3.4294282147759327,
+       3.360966881888537,
+       3.3156839742755673,
+       3.2877306617946913
+      ],
+      "fastest_peak_relative": [
+       -6.861422369508485e-05,
+       1.40531653369802e-05,
+       -2.475831286075092e-05,
+       1.6361047297852593e-05,
+       -3.0333813274219246e-05
+      ]
+     },
+     "windows": [
+      {
+       "drone_max_m": 7.34196764529127e-05,
+       "marker_max_m": 7.961629769173009e-05,
+       "marker_median_m": 5.315529012427105e-05,
+       "peak_tip_speed_mps": 1.3372974250839367,
+       "reference_peak_tip_speed_mps": 1.3373007344857284,
+       "peak_tip_speed_relative": -2.4746877843595527e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 2.9449508897494425e-05
+      },
+      {
+       "drone_max_m": 9.422940800374313e-05,
+       "marker_max_m": 0.00010420580626979607,
+       "marker_median_m": 6.883122723033384e-05,
+       "peak_tip_speed_mps": 1.3540936764758031,
+       "reference_peak_tip_speed_mps": 1.3541126079957597,
+       "peak_tip_speed_relative": -1.3980757467835225e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 5.3741565812337466e-05
+      },
+      {
+       "drone_max_m": 6.696770466163571e-05,
+       "marker_max_m": 8.686448979461102e-05,
+       "marker_median_m": 5.690481075037983e-05,
+       "peak_tip_speed_mps": 1.070398401971153,
+       "reference_peak_tip_speed_mps": 1.0704364403392739,
+       "peak_tip_speed_relative": -3.553538228651121e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 9.831863092801818e-05
+      },
+      {
+       "drone_max_m": 0.00011612960999518585,
+       "marker_max_m": 0.00012508593361902585,
+       "marker_median_m": 8.379423089158849e-05,
+       "peak_tip_speed_mps": 0.8129379677180011,
+       "reference_peak_tip_speed_mps": 0.8129308880454484,
+       "peak_tip_speed_relative": 8.70882464520939e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 3.226136998718543e-05
+      },
+      {
+       "drone_max_m": 0.00010077835812216662,
+       "marker_max_m": 0.00011177961064488396,
+       "marker_median_m": 6.910487975032246e-05,
+       "peak_tip_speed_mps": 1.7519378773328356,
+       "reference_peak_tip_speed_mps": 1.7519462365429912,
+       "peak_tip_speed_relative": -4.771385092361413e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 4.215377393013142e-05
+      },
+      {
+       "drone_max_m": 5.5523572545707056e-05,
+       "marker_max_m": 7.143457727955244e-05,
+       "marker_median_m": 3.68580786776162e-05,
+       "peak_tip_speed_mps": 2.981540714382595,
+       "reference_peak_tip_speed_mps": 2.9815853026252257,
+       "peak_tip_speed_relative": -1.4954541998624116e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 9.529337191693799e-05
+      },
+      {
+       "drone_max_m": 5.207000946571422e-05,
+       "marker_max_m": 6.380307938474427e-05,
+       "marker_median_m": 3.245698820973175e-05,
+       "peak_tip_speed_mps": 3.221851825972167,
+       "reference_peak_tip_speed_mps": 3.22192227745902,
+       "peak_tip_speed_relative": -2.1866289992678034e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00012243820734214594
+      },
+      {
+       "drone_max_m": 0.0001070378347600709,
+       "marker_max_m": 0.00012341363885716078,
+       "marker_median_m": 8.084236585188863e-05,
+       "peak_tip_speed_mps": 3.2876309323867003,
+       "reference_peak_tip_speed_mps": 3.2877306617946913,
+       "peak_tip_speed_relative": -3.0333813274219246e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0001058360853747331
+      },
+      {
+       "drone_max_m": 4.37020519257203e-05,
+       "marker_max_m": 7.754889392919924e-05,
+       "marker_median_m": 4.360761948202934e-05,
+       "peak_tip_speed_mps": 3.3157382223378953,
+       "reference_peak_tip_speed_mps": 3.3156839742755673,
+       "peak_tip_speed_relative": 1.6361047297852593e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 8.810794586455728e-05
+      },
+      {
+       "drone_max_m": 5.0779572222325875e-05,
+       "marker_max_m": 6.29762825121677e-05,
+       "marker_median_m": 4.10362068629623e-05,
+       "peak_tip_speed_mps": 1.8361458768254328,
+       "reference_peak_tip_speed_mps": 1.8361581027208576,
+       "peak_tip_speed_relative": -6.658411063065195e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 4.7371120176387116e-05
+      },
+      {
+       "drone_max_m": 7.880665232207207e-05,
+       "marker_max_m": 9.213992041576065e-05,
+       "marker_median_m": 5.382671866032444e-05,
+       "peak_tip_speed_mps": 1.2678845018630294,
+       "reference_peak_tip_speed_mps": 1.2678912572681569,
+       "peak_tip_speed_relative": -5.328063498177826e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 4.1329931254843744e-05
+      },
+      {
+       "drone_max_m": 9.140633469251203e-05,
+       "marker_max_m": 9.877429103849159e-05,
+       "marker_median_m": 5.695344001503892e-05,
+       "peak_tip_speed_mps": 2.7951140727776034,
+       "reference_peak_tip_speed_mps": 2.7951458945381185,
+       "peak_tip_speed_relative": -1.1384651004142654e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 7.528139989521065e-05
+      },
+      {
+       "drone_max_m": 9.266755269842636e-05,
+       "marker_max_m": 0.00012317581088964615,
+       "marker_median_m": 6.590605078164445e-05,
+       "peak_tip_speed_mps": 3.3608836700189606,
+       "reference_peak_tip_speed_mps": 3.360966881888537,
+       "peak_tip_speed_relative": -2.475831286075092e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.000176857068581171
+      },
+      {
+       "drone_max_m": 0.00012410676631069428,
+       "marker_max_m": 0.00012794513199840518,
+       "marker_median_m": 8.429033592690264e-05,
+       "peak_tip_speed_mps": 1.7946950323227862,
+       "reference_peak_tip_speed_mps": 1.7946455670199655,
+       "peak_tip_speed_relative": 2.7562714181472714e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 8.907693825205287e-05
+      },
+      {
+       "drone_max_m": 7.826443124958615e-05,
+       "marker_max_m": 9.359456252899787e-05,
+       "marker_median_m": 6.24822544914128e-05,
+       "peak_tip_speed_mps": 1.200047987385237,
+       "reference_peak_tip_speed_mps": 1.2000492672541196,
+       "peak_tip_speed_relative": -1.0665136154219823e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 5.8301625626144826e-05
+      },
+      {
+       "drone_max_m": 4.223679151493798e-05,
+       "marker_max_m": 4.5561174448939655e-05,
+       "marker_median_m": 3.085318799849196e-05,
+       "peak_tip_speed_mps": 0.7951436196009116,
+       "reference_peak_tip_speed_mps": 0.7951555205288005,
+       "peak_tip_speed_relative": -1.4966792761361702e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 1.621137628571301e-05
+      },
+      {
+       "drone_max_m": 5.141219404924957e-05,
+       "marker_max_m": 8.72456547490281e-05,
+       "marker_median_m": 4.692151762602811e-05,
+       "peak_tip_speed_mps": 3.4294764090976466,
+       "reference_peak_tip_speed_mps": 3.4294282147759327,
+       "peak_tip_speed_relative": 1.40531653369802e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00010955056424188925
+      },
+      {
+       "drone_max_m": 0.00011462985545063198,
+       "marker_max_m": 0.0001234450057135487,
+       "marker_median_m": 7.497307395837213e-05,
+       "peak_tip_speed_mps": 2.337581447421583,
+       "reference_peak_tip_speed_mps": 2.3375802358432685,
+       "peak_tip_speed_relative": 5.183044824441652e-07,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 8.998236476931432e-05
+      },
+      {
+       "drone_max_m": 7.172308757597001e-05,
+       "marker_max_m": 8.835664716165407e-05,
+       "marker_median_m": 5.782082183856195e-05,
+       "peak_tip_speed_mps": 2.694041742277722,
+       "reference_peak_tip_speed_mps": 2.6940659720846547,
+       "peak_tip_speed_relative": -8.993768966236715e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 5.200691162948745e-05
+      },
+      {
+       "drone_max_m": 0.00012658554798816724,
+       "marker_max_m": 0.0001384880538443145,
+       "marker_median_m": 9.236092608087029e-05,
+       "peak_tip_speed_mps": 1.1303851937625626,
+       "reference_peak_tip_speed_mps": 1.1303596527833357,
+       "peak_tip_speed_relative": 2.259544487803744e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 6.520331225173814e-05
+      },
+      {
+       "drone_max_m": 6.958107502064159e-05,
+       "marker_max_m": 8.023086641267107e-05,
+       "marker_median_m": 5.365442647930811e-05,
+       "peak_tip_speed_mps": 0.9697751766294526,
+       "reference_peak_tip_speed_mps": 0.9697841243952998,
+       "peak_tip_speed_relative": -9.22655426316421e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 4.592233956760006e-05
+      },
+      {
+       "drone_max_m": 0.00019558408476527678,
+       "marker_max_m": 0.0002408707926635267,
+       "marker_median_m": 0.00013974109742578725,
+       "peak_tip_speed_mps": 5.7216117725332465,
+       "reference_peak_tip_speed_mps": 5.722004383421995,
+       "peak_tip_speed_relative": -6.861422369508485e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0004414445702733971
+      },
+      {
+       "drone_max_m": 8.722747004963338e-05,
+       "marker_max_m": 9.731070776027452e-05,
+       "marker_median_m": 6.603561279999255e-05,
+       "peak_tip_speed_mps": 0.29292486370423326,
+       "reference_peak_tip_speed_mps": 0.29290885918006687,
+       "peak_tip_speed_relative": 5.4639945719525684e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 4.331070138872961e-05
+      },
+      {
+       "drone_max_m": 6.511573318035424e-05,
+       "marker_max_m": 7.014297762273202e-05,
+       "marker_median_m": 4.7981425744424605e-05,
+       "peak_tip_speed_mps": 0.3784141318413652,
+       "reference_peak_tip_speed_mps": 0.3784529856651434,
+       "peak_tip_speed_relative": -0.0001026648626114568,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 3.9865492055923824e-05
+      }
+     ]
+    }
+   }
+  },
+  "strokes x1.5": {
+   "held_out": false,
+   "windows": 24,
+   "seconds": {
+    "0.002": 0.5786635875701904,
+    "0.001": 1.1056914329528809,
+    "0.0005": 1.925455927848816
+   },
+   "steps": {
+    "0.002": {
+     "summary": {
+      "windows": 24,
+      "failed": 0,
+      "drone_max_m": 0.0012324585097858165,
+      "marker_max_m": 0.0018767837361756104,
+      "marker_median_m": 0.0002441977214949773,
+      "peak_tip_speed_relative_max": 0.0004371622817083143,
+      "peak_time_shift_frames_max": 0,
+      "tip_speed_max_difference_mps": 0.0037965861670006262,
+      "fastest_reference_peaks_mps": [
+       6.673275803407818,
+       4.681496439571967,
+       4.429654194483688,
+       4.164469519404794,
+       4.125226439205826
+      ],
+      "fastest_peak_relative": [
+       -0.00039425499510981066,
+       -9.893816467110295e-05,
+       -0.00015210190518633038,
+       -6.0084306850560765e-05,
+       -0.00017188950125279767
+      ]
+     },
+     "windows": [
+      {
+       "drone_max_m": 0.0004263217445836798,
+       "marker_max_m": 0.0004736468029686864,
+       "marker_median_m": 0.0003106531933404099,
+       "peak_tip_speed_mps": 2.0288190202100296,
+       "reference_peak_tip_speed_mps": 2.0287880497193154,
+       "peak_tip_speed_relative": 1.5265513180873214e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.000270900778370442
+      },
+      {
+       "drone_max_m": 0.0003069055574125845,
+       "marker_max_m": 0.00038362707532271903,
+       "marker_median_m": 0.00024656020328177417,
+       "peak_tip_speed_mps": 1.7699230843611262,
+       "reference_peak_tip_speed_mps": 1.7699610408537987,
+       "peak_tip_speed_relative": -2.1444818160576418e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0002406271310144703
+      },
+      {
+       "drone_max_m": 0.0002924421223341467,
+       "marker_max_m": 0.00031220859648130534,
+       "marker_median_m": 0.00018830732625527152,
+       "peak_tip_speed_mps": 1.066376179367808,
+       "reference_peak_tip_speed_mps": 1.0665429598461402,
+       "peak_tip_speed_relative": -0.00015637483403041497,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00048346361708229146
+      },
+      {
+       "drone_max_m": 0.0004437593012298624,
+       "marker_max_m": 0.0005025727200739218,
+       "marker_median_m": 0.0003350852204384943,
+       "peak_tip_speed_mps": 0.8665648516858578,
+       "reference_peak_tip_speed_mps": 0.8665190865497411,
+       "peak_tip_speed_relative": 5.281491986397491e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00027990182412518383
+      },
+      {
+       "drone_max_m": 0.00040404505621693954,
+       "marker_max_m": 0.00048145017978744445,
+       "marker_median_m": 0.0002576876049765103,
+       "peak_tip_speed_mps": 2.7480669559189885,
+       "reference_peak_tip_speed_mps": 2.7481174818918244,
+       "peak_tip_speed_relative": -1.8385666976983295e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00021529407082510055
+      },
+      {
+       "drone_max_m": 0.00040557608828761804,
+       "marker_max_m": 0.0005139545473350225,
+       "marker_median_m": 0.0002558201086656191,
+       "peak_tip_speed_mps": 4.124517356090636,
+       "reference_peak_tip_speed_mps": 4.125226439205826,
+       "peak_tip_speed_relative": -0.00017188950125279767,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0007129347007324149
+      },
+      {
+       "drone_max_m": 0.0005009528429835708,
+       "marker_max_m": 0.0005414211736021168,
+       "marker_median_m": 0.00029606167046159176,
+       "peak_tip_speed_mps": 4.428980435641391,
+       "reference_peak_tip_speed_mps": 4.429654194483688,
+       "peak_tip_speed_relative": -0.00015210190518633038,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0010123126001495564
+      },
+      {
+       "drone_max_m": 0.00036117935379742505,
+       "marker_max_m": 0.00047242647956927965,
+       "marker_median_m": 0.00030744466837422606,
+       "peak_tip_speed_mps": 3.9146175557096545,
+       "reference_peak_tip_speed_mps": 3.914749540129378,
+       "peak_tip_speed_relative": -3.371465233492632e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0004533754832758419
+      },
+      {
+       "drone_max_m": 0.00029321834163417715,
+       "marker_max_m": 0.00040518057478480216,
+       "marker_median_m": 0.0001956368900878337,
+       "peak_tip_speed_mps": 3.388099294975061,
+       "reference_peak_tip_speed_mps": 3.3877840836836564,
+       "peak_tip_speed_relative": 9.304350088967794e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0005104706273244553
+      },
+      {
+       "drone_max_m": 0.00014826985721894115,
+       "marker_max_m": 0.0001771482827985621,
+       "marker_median_m": 0.00011335831474136175,
+       "peak_tip_speed_mps": 1.8952490266532158,
+       "reference_peak_tip_speed_mps": 1.8954201690747552,
+       "peak_tip_speed_relative": -9.029260336668177e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0001757904952128797
+      },
+      {
+       "drone_max_m": 0.0002985206566910037,
+       "marker_max_m": 0.0003756702026146444,
+       "marker_median_m": 0.00018661617829002512,
+       "peak_tip_speed_mps": 1.8336677321655552,
+       "reference_peak_tip_speed_mps": 1.833736605494196,
+       "peak_tip_speed_relative": -3.755900843904758e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00021566598478856003
+      },
+      {
+       "drone_max_m": 0.0004769496861236622,
+       "marker_max_m": 0.0005164250093578518,
+       "marker_median_m": 0.0002582546533924794,
+       "peak_tip_speed_mps": 4.164219300140321,
+       "reference_peak_tip_speed_mps": 4.164469519404794,
+       "peak_tip_speed_relative": -6.0084306850560765e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.000400091771279254
+      },
+      {
+       "drone_max_m": 0.0005027849058510947,
+       "marker_max_m": 0.0006024728776498697,
+       "marker_median_m": 0.00030359820906350514,
+       "peak_tip_speed_mps": 4.681033260906322,
+       "reference_peak_tip_speed_mps": 4.681496439571967,
+       "peak_tip_speed_relative": -9.893816467110295e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0010259114928121704
+      },
+      {
+       "drone_max_m": 0.00016365903240678215,
+       "marker_max_m": 0.00020619000136957728,
+       "marker_median_m": 0.00013104318507349474,
+       "peak_tip_speed_mps": 1.9340436136784382,
+       "reference_peak_tip_speed_mps": 1.9339718312095957,
+       "peak_tip_speed_relative": 3.711660515626214e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00015456641385669379
+      },
+      {
+       "drone_max_m": 0.0002712890380939803,
+       "marker_max_m": 0.0003405550069051271,
+       "marker_median_m": 0.0002226465319730312,
+       "peak_tip_speed_mps": 1.1878350253173042,
+       "reference_peak_tip_speed_mps": 1.1878461451811124,
+       "peak_tip_speed_relative": -9.361367087179495e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00017442777523862807
+      },
+      {
+       "drone_max_m": 0.00016187026019087725,
+       "marker_max_m": 0.00018717633800974655,
+       "marker_median_m": 0.00012573916112410607,
+       "peak_tip_speed_mps": 0.7948338875010702,
+       "reference_peak_tip_speed_mps": 0.7948833145525095,
+       "peak_tip_speed_relative": -6.218151838688346e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 8.804020745820096e-05
+      },
+      {
+       "drone_max_m": 0.000252407473665367,
+       "marker_max_m": 0.0003947931506844765,
+       "marker_median_m": 0.00017221619885790805,
+       "peak_tip_speed_mps": 3.398120188580339,
+       "reference_peak_tip_speed_mps": 3.3979922716638566,
+       "peak_tip_speed_relative": 3.764485209378776e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0005009875639025441
+      },
+      {
+       "drone_max_m": 0.0005395082263341955,
+       "marker_max_m": 0.0005835491916738269,
+       "marker_median_m": 0.00033117570784613366,
+       "peak_tip_speed_mps": 2.309166352383229,
+       "reference_peak_tip_speed_mps": 2.3091113440060393,
+       "peak_tip_speed_relative": 2.382231473263552e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0004347903504665629
+      },
+      {
+       "drone_max_m": 0.00022413419960684577,
+       "marker_max_m": 0.0003192365766733064,
+       "marker_median_m": 0.00020549981777785243,
+       "peak_tip_speed_mps": 2.6939748476791032,
+       "reference_peak_tip_speed_mps": 2.6941007452388352,
+       "peak_tip_speed_relative": -4.673082844230958e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00020613633313626423
+      },
+      {
+       "drone_max_m": 0.00045422964100017005,
+       "marker_max_m": 0.0005322986637508274,
+       "marker_median_m": 0.0003541900257011146,
+       "peak_tip_speed_mps": 1.1289552298265932,
+       "reference_peak_tip_speed_mps": 1.1288737058330933,
+       "peak_tip_speed_relative": 7.221710726246222e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00021938733788040565
+      },
+      {
+       "drone_max_m": 0.00023254898643265687,
+       "marker_max_m": 0.0003097968798105113,
+       "marker_median_m": 0.00020384136220659156,
+       "peak_tip_speed_mps": 0.9631018924717023,
+       "reference_peak_tip_speed_mps": 0.9631235865756725,
+       "peak_tip_speed_relative": -2.2524735426077136e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0001674784286820885
+      },
+      {
+       "drone_max_m": 0.0012324585097858165,
+       "marker_max_m": 0.0018767837361756104,
+       "marker_median_m": 0.0010952919866917797,
+       "peak_tip_speed_mps": 6.670644831088579,
+       "reference_peak_tip_speed_mps": 6.673275803407818,
+       "peak_tip_speed_relative": -0.00039425499510981066,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0037965861670006262
+      },
+      {
+       "drone_max_m": 0.0002887123671938552,
+       "marker_max_m": 0.00036485291003932556,
+       "marker_median_m": 0.00024183523970818045,
+       "peak_tip_speed_mps": 0.4486574554131554,
+       "reference_peak_tip_speed_mps": 0.44858892163471437,
+       "peak_tip_speed_relative": 0.00015277635076516027,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00011971310225100673
+      },
+      {
+       "drone_max_m": 0.00023098142569166757,
+       "marker_max_m": 0.00028333811185532557,
+       "marker_median_m": 0.0001898314619275495,
+       "peak_tip_speed_mps": 0.40922419283366923,
+       "reference_peak_tip_speed_mps": 0.4094031684569305,
+       "peak_tip_speed_relative": -0.0004371622817083143,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00017927739203277282
+      }
+     ]
+    },
+    "0.001": {
+     "summary": {
+      "windows": 24,
+      "failed": 0,
+      "drone_max_m": 0.00026104544968097443,
+      "marker_max_m": 0.0003930328348627015,
+      "marker_median_m": 5.300020943816664e-05,
+      "peak_tip_speed_relative_max": 7.515297501048401e-05,
+      "peak_time_shift_frames_max": 0,
+      "tip_speed_max_difference_mps": 0.000787622949477651,
+      "fastest_reference_peaks_mps": [
+       6.673275803407818,
+       4.681496439571967,
+       4.429654194483688,
+       4.164469519404794,
+       4.125226439205826
+      ],
+      "fastest_peak_relative": [
+       -7.515297501048401e-05,
+       -1.759965842862421e-05,
+       -2.620796250574209e-05,
+       -1.0522865549145166e-05,
+       -3.30831835826384e-05
+      ]
+     },
+     "windows": [
+      {
+       "drone_max_m": 0.00011158140429445851,
+       "marker_max_m": 0.00011829399652263847,
+       "marker_median_m": 7.754791133301843e-05,
+       "peak_tip_speed_mps": 2.0287993216065696,
+       "reference_peak_tip_speed_mps": 2.0287880497193154,
+       "peak_tip_speed_relative": 5.555970844728364e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 5.7334343389447984e-05
+      },
+      {
+       "drone_max_m": 0.00010079366783344312,
+       "marker_max_m": 0.00010814176020491027,
+       "marker_median_m": 7.222192877442895e-05,
+       "peak_tip_speed_mps": 1.7699582383799384,
+       "reference_peak_tip_speed_mps": 1.7699610408537987,
+       "peak_tip_speed_relative": -1.583353416045874e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 5.1589033970733666e-05
+      },
+      {
+       "drone_max_m": 5.9393430812293424e-05,
+       "marker_max_m": 7.910689968721692e-05,
+       "marker_median_m": 5.215161034432137e-05,
+       "peak_tip_speed_mps": 1.0665096382832828,
+       "reference_peak_tip_speed_mps": 1.0665429598461402,
+       "peak_tip_speed_relative": -3.124258854247941e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 7.908858713523426e-05
+      },
+      {
+       "drone_max_m": 0.00012855195471173086,
+       "marker_max_m": 0.00013662659980192955,
+       "marker_median_m": 9.169658953188494e-05,
+       "peak_tip_speed_mps": 0.8665370521516044,
+       "reference_peak_tip_speed_mps": 0.8665190865497411,
+       "peak_tip_speed_relative": 2.0733071137257753e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 7.992533096715104e-05
+      },
+      {
+       "drone_max_m": 0.00011754933587304617,
+       "marker_max_m": 0.00012921549495950095,
+       "marker_median_m": 7.205059406065665e-05,
+       "peak_tip_speed_mps": 2.748114253646342,
+       "reference_peak_tip_speed_mps": 2.7481174818918244,
+       "peak_tip_speed_relative": -1.1747115994387158e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 5.7192231343095035e-05
+      },
+      {
+       "drone_max_m": 7.423798152855765e-05,
+       "marker_max_m": 9.983254647309678e-05,
+       "marker_median_m": 4.74431302594053e-05,
+       "peak_tip_speed_mps": 4.125089963582218,
+       "reference_peak_tip_speed_mps": 4.125226439205826,
+       "peak_tip_speed_relative": -3.30831835826384e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.0001365435197451248
+      },
+      {
+       "drone_max_m": 8.781497335497157e-05,
+       "marker_max_m": 0.00010016713127108765,
+       "marker_median_m": 5.222019546862288e-05,
+       "peak_tip_speed_mps": 4.429538102272645,
+       "reference_peak_tip_speed_mps": 4.429654194483688,
+       "peak_tip_speed_relative": -2.620796250574209e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00018628062754588726
+      },
+      {
+       "drone_max_m": 0.0001129667017436553,
+       "marker_max_m": 0.0001299628221632199,
+       "marker_median_m": 8.384888092154592e-05,
+       "peak_tip_speed_mps": 3.914722711910314,
+       "reference_peak_tip_speed_mps": 3.914749540129378,
+       "peak_tip_speed_relative": -6.853112514360049e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00010291586765287519
+      },
+      {
+       "drone_max_m": 4.95200779407623e-05,
+       "marker_max_m": 8.099007809470324e-05,
+       "marker_median_m": 4.421464787630506e-05,
+       "peak_tip_speed_mps": 3.3878503613711355,
+       "reference_peak_tip_speed_mps": 3.3877840836836564,
+       "peak_tip_speed_relative": 1.956372833755715e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 9.971749776349625e-05
+      },
+      {
+       "drone_max_m": 2.7971504214380216e-05,
+       "marker_max_m": 3.973224554314805e-05,
+       "marker_median_m": 2.4961033869203127e-05,
+       "peak_tip_speed_mps": 1.8954024596884453,
+       "reference_peak_tip_speed_mps": 1.8954201690747552,
+       "peak_tip_speed_relative": -9.34325095769406e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 2.5847965321013078e-05
+      },
+      {
+       "drone_max_m": 7.979354232379166e-05,
+       "marker_max_m": 9.272064715355773e-05,
+       "marker_median_m": 4.705028778345999e-05,
+       "peak_tip_speed_mps": 1.8337269488838803,
+       "reference_peak_tip_speed_mps": 1.833736605494196,
+       "peak_tip_speed_relative": -5.266083627608609e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 4.799984765369025e-05
+      },
+      {
+       "drone_max_m": 0.00011966053162792978,
+       "marker_max_m": 0.00012460888215949593,
+       "marker_median_m": 6.33771861167211e-05,
+       "peak_tip_speed_mps": 4.164425697251958,
+       "reference_peak_tip_speed_mps": 4.164469519404794,
+       "peak_tip_speed_relative": -1.0522865549145166e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 8.413996299899695e-05
+      },
+      {
+       "drone_max_m": 8.567273738013803e-05,
+       "marker_max_m": 0.00010946000854648006,
+       "marker_median_m": 5.37802234077104e-05,
+       "peak_tip_speed_mps": 4.681414046833696,
+       "reference_peak_tip_speed_mps": 4.681496439571967,
+       "peak_tip_speed_relative": -1.759965842862421e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00019034838042397695
+      },
+      {
+       "drone_max_m": 6.209948399582554e-05,
+       "marker_max_m": 6.823859765622852e-05,
+       "marker_median_m": 4.32315421722383e-05,
+       "peak_tip_speed_mps": 1.934012101509528,
+       "reference_peak_tip_speed_mps": 1.9339718312095957,
+       "peak_tip_speed_relative": 2.08225886657587e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 4.4718292280032657e-05
+      },
+      {
+       "drone_max_m": 7.040842596495178e-05,
+       "marker_max_m": 8.61512183476106e-05,
+       "marker_median_m": 5.829905422738528e-05,
+       "peak_tip_speed_mps": 1.1878526456534282,
+       "reference_peak_tip_speed_mps": 1.1878461451811124,
+       "peak_tip_speed_relative": 5.472486771296303e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 4.394149952739734e-05
+      },
+      {
+       "drone_max_m": 4.2264795092172847e-05,
+       "marker_max_m": 4.555970883095916e-05,
+       "marker_median_m": 3.0617509378232324e-05,
+       "peak_tip_speed_mps": 0.7948733435681432,
+       "reference_peak_tip_speed_mps": 0.7948833145525095,
+       "peak_tip_speed_relative": -1.2543959828748008e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 2.2376890183750664e-05
+      },
+      {
+       "drone_max_m": 5.230912981743496e-05,
+       "marker_max_m": 8.983624715004451e-05,
+       "marker_median_m": 4.545486890324096e-05,
+       "peak_tip_speed_mps": 3.398036017571417,
+       "reference_peak_tip_speed_mps": 3.3979922716638566,
+       "peak_tip_speed_relative": 1.2874045631328102e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00011265554282591239
+      },
+      {
+       "drone_max_m": 0.00014868550494351318,
+       "marker_max_m": 0.00015428732953443053,
+       "marker_median_m": 8.857264802195029e-05,
+       "peak_tip_speed_mps": 2.309130638431511,
+       "reference_peak_tip_speed_mps": 2.3091113440060393,
+       "peak_tip_speed_relative": 8.355779604007907e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.00010735289613050814
+      },
+      {
+       "drone_max_m": 6.179627822389122e-05,
+       "marker_max_m": 7.438488665865905e-05,
+       "marker_median_m": 4.955079209456478e-05,
+       "peak_tip_speed_mps": 2.694076866961677,
+       "reference_peak_tip_speed_mps": 2.6941007452388352,
+       "peak_tip_speed_relative": -8.863171579776008e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 4.160392325047724e-05
+      },
+      {
+       "drone_max_m": 0.00013520927707133534,
+       "marker_max_m": 0.00014535734965760561,
+       "marker_median_m": 9.674871120473024e-05,
+       "peak_tip_speed_mps": 1.1289107926145838,
+       "reference_peak_tip_speed_mps": 1.1288737058330933,
+       "peak_tip_speed_relative": 3.2852905775815344e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 6.139907623181617e-05
+      },
+      {
+       "drone_max_m": 6.451442084842718e-05,
+       "marker_max_m": 7.564329002121383e-05,
+       "marker_median_m": 5.02112462302051e-05,
+       "peak_tip_speed_mps": 0.9631181554904799,
+       "reference_peak_tip_speed_mps": 0.9631235865756725,
+       "peak_tip_speed_relative": -5.639032485960094e-06,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 2.4646356283630766e-05
+      },
+      {
+       "drone_max_m": 0.00026104544968097443,
+       "marker_max_m": 0.0003930328348627015,
+       "marker_median_m": 0.0002309656097975404,
+       "peak_tip_speed_mps": 6.672774286878126,
+       "reference_peak_tip_speed_mps": 6.673275803407818,
+       "peak_tip_speed_relative": -7.515297501048401e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 0.000787622949477651
+      },
+      {
+       "drone_max_m": 8.44424353685369e-05,
+       "marker_max_m": 9.477212987659045e-05,
+       "marker_median_m": 6.334370223108972e-05,
+       "peak_tip_speed_mps": 0.448605708212889,
+       "reference_peak_tip_speed_mps": 0.44858892163471437,
+       "peak_tip_speed_relative": 3.7420848721492206e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 2.739820401451154e-05
+      },
+      {
+       "drone_max_m": 6.359334195371602e-05,
+       "marker_max_m": 6.95601581966327e-05,
+       "marker_median_m": 4.680331998992199e-05,
+       "peak_tip_speed_mps": 0.4093742282714641,
+       "reference_peak_tip_speed_mps": 0.4094031684569305,
+       "peak_tip_speed_relative": -7.068871883786354e-05,
+       "peak_time_shift_frames": 0,
+       "tip_speed_max_difference_mps": 2.8986652515494704e-05
+      }
+     ]
+    }
+   }
+  }
+ },
+ "seconds": 30.827014446258545
+}

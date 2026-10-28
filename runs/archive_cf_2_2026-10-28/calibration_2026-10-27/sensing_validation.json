@@ -1,0 +1,1277 @@
+{
+ "experiment": "/home/tony-lab/Documents/PHD/AeroWhip_deploy/configs/experiments/stage1_fold_x_v6.json",
+ "seed": 0,
+ "sensing": {
+  "latency_frames": [
+   0,
+   2
+  ],
+  "position_noise_m": 0.0001,
+  "dropout_hazard": [
+   [
+    0.0,
+    0.00078
+   ],
+   [
+    0.25,
+    0.00018
+   ],
+   [
+    0.5,
+    0.00025
+   ],
+   [
+    1.0,
+    0.00014
+   ],
+   [
+    2.0,
+    0.000125
+   ],
+   [
+    4.0,
+    0.00065
+   ],
+   [
+    8.0,
+    0.035
+   ]
+  ],
+  "reappear_probability": 0.3155
+ },
+ "flights": {
+  "circle": {
+   "synthetic": {
+    "frames": 7656,
+    "labelled_fraction": [
+     0.9986,
+     0.9987,
+     1.0,
+     0.9991,
+     1.0,
+     0.9997,
+     0.9996,
+     0.9992,
+     0.9992,
+     0.9983
+    ],
+    "frames_with_gap": 0.007575757575757576,
+    "unlabelled_runs": {
+     "count": 20,
+     "mean_frames": 2.9,
+     "histogram_1_to_10_and_over": [
+      5,
+      5,
+      3,
+      3,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00042,
+      0.00032,
+      0.00028,
+      0.0,
+      0.00018,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      19065,
+      9453,
+      29066,
+      13351,
+      5535,
+      22,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.3448275862068966,
+     "hidden_frames": 58
+    },
+    "frames_range": [
+     0,
+     7656
+    ],
+    "mean_confidence": 0.9999634273772207,
+    "latency_frames": 1
+   },
+   "real": {
+    "frames": 7656,
+    "labelled_fraction": [
+     0.9941,
+     0.9969,
+     0.9997,
+     0.9996,
+     0.9991,
+     0.9971,
+     0.9984,
+     0.9952,
+     0.9961,
+     0.9991
+    ],
+    "frames_with_gap": 0.015020898641588296,
+    "unlabelled_runs": {
+     "count": 130,
+     "mean_frames": 1.4538461538461538,
+     "histogram_1_to_10_and_over": [
+      100,
+      14,
+      10,
+      2,
+      1,
+      3,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00627,
+      0.0,
+      0.0,
+      8e-05,
+      0.00097,
+      0.07407,
+      0.0
+     ],
+     "visible_frames": [
+      19449,
+      9459,
+      29083,
+      13176,
+      5170,
+      27,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.6827956989247311,
+     "hidden_frames": 186
+    },
+    "mean_confidence": 0.9999216300940439
+   }
+  },
+  "decay": {
+   "synthetic": {
+    "frames": 9151,
+    "labelled_fraction": [
+     0.9975,
+     0.9989,
+     0.9987,
+     0.9991,
+     0.9978,
+     0.9996,
+     0.9986,
+     0.9993,
+     0.9988,
+     0.9977
+    ],
+    "frames_with_gap": 0.013987542345098896,
+    "unlabelled_runs": {
+     "count": 38,
+     "mean_frames": 3.3684210526315788,
+     "histogram_1_to_10_and_over": [
+      10,
+      6,
+      7,
+      6,
+      3,
+      3,
+      1,
+      1,
+      0,
+      0,
+      1
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00064,
+      0.00018,
+      0.00027,
+      0.00024,
+      0.0,
+      0.0,
+      0.11111
+     ],
+     "visible_frames": [
+      42240,
+      16266,
+      15034,
+      12490,
+      4836,
+      497,
+      9
+     ],
+     "hidden_to_visible_per_frame": 0.296875,
+     "hidden_frames": 128
+    },
+    "frames_range": [
+     0,
+     9151
+    ],
+    "mean_confidence": 0.9999141077477873,
+    "latency_frames": 1
+   },
+   "real": {
+    "frames": 9151,
+    "labelled_fraction": [
+     0.9892,
+     0.9974,
+     0.999,
+     0.9905,
+     0.9981,
+     0.9895,
+     0.9981,
+     0.9899,
+     0.9855,
+     0.9986
+    ],
+    "frames_with_gap": 0.043383236804720796,
+    "unlabelled_runs": {
+     "count": 426,
+     "mean_frames": 1.3779342723004695,
+     "histogram_1_to_10_and_over": [
+      325,
+      63,
+      21,
+      14,
+      1,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00978,
+      6e-05,
+      0.0,
+      0.0,
+      0.00021,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      43352,
+      15944,
+      14634,
+      12155,
+      4688,
+      142,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.7247863247863248,
+     "hidden_frames": 585
+    },
+    "mean_confidence": 0.9998170691727681
+   }
+  },
+  "figure8": {
+   "synthetic": {
+    "frames": 5947,
+    "labelled_fraction": [
+     0.9983,
+     0.9983,
+     0.9997,
+     0.9998,
+     1.0,
+     1.0,
+     0.9988,
+     0.9958,
+     0.9951,
+     0.9923
+    ],
+    "frames_with_gap": 0.016310744913401714,
+    "unlabelled_runs": {
+     "count": 38,
+     "mean_frames": 3.4210526315789473,
+     "histogram_1_to_10_and_over": [
+      13,
+      9,
+      5,
+      5,
+      1,
+      1,
+      1,
+      0,
+      1,
+      0,
+      2
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00059,
+      0.00018,
+      0.00043,
+      0.00051,
+      0.0008,
+      0.03704,
+      0.29412
+     ],
+     "visible_frames": [
+      23890,
+      11385,
+      11576,
+      9825,
+      2502,
+      135,
+      17
+     ],
+     "hidden_to_visible_per_frame": 0.2923076923076923,
+     "hidden_frames": 130
+    },
+    "frames_range": [
+     0,
+     5947
+    ],
+    "mean_confidence": 0.9997995628047756,
+    "latency_frames": 1
+   },
+   "real": {
+    "frames": 5947,
+    "labelled_fraction": [
+     0.9995,
+     0.9998,
+     0.9997,
+     0.9993,
+     0.9985,
+     0.9993,
+     0.9992,
+     0.9961,
+     0.9943,
+     0.9904
+    ],
+    "frames_with_gap": 0.0174878089793173,
+    "unlabelled_runs": {
+     "count": 101,
+     "mean_frames": 1.4059405940594059,
+     "histogram_1_to_10_and_over": [
+      75,
+      19,
+      1,
+      4,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00412,
+      0.0,
+      0.0,
+      0.0001,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      24246,
+      11389,
+      11517,
+      9635,
+      2456,
+      77,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.7071428571428572,
+     "hidden_frames": 140
+    },
+    "mean_confidence": 0.9999300487640826
+   }
+  },
+  "line_star": {
+   "synthetic": {
+    "frames": 4340,
+    "labelled_fraction": [
+     0.997,
+     0.9963,
+     0.9982,
+     0.9979,
+     0.9982,
+     0.9982,
+     0.9965,
+     0.9968,
+     0.9963,
+     0.9938
+    ],
+    "frames_with_gap": 0.013594470046082949,
+    "unlabelled_runs": {
+     "count": 26,
+     "mean_frames": 5.153846153846154,
+     "histogram_1_to_10_and_over": [
+      3,
+      5,
+      2,
+      3,
+      1,
+      1,
+      0,
+      7,
+      4,
+      0,
+      0
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00046,
+      0.00018,
+      0.00031,
+      0.00017,
+      0.00022,
+      0.00118,
+      0.0
+     ],
+     "visible_frames": [
+      12953,
+      5526,
+      6444,
+      5813,
+      9043,
+      3400,
+      77
+     ],
+     "hidden_to_visible_per_frame": 0.19402985074626866,
+     "hidden_frames": 134
+    },
+    "frames_range": [
+     7262,
+     11602
+    ],
+    "mean_confidence": 0.9980036866359447,
+    "latency_frames": 1
+   },
+   "real": {
+    "frames": 4340,
+    "labelled_fraction": [
+     0.9776,
+     0.9965,
+     0.9942,
+     0.9915,
+     0.9945,
+     0.9846,
+     0.9894,
+     0.9869,
+     0.9788,
+     0.9783
+    ],
+    "frames_with_gap": 0.059907834101382486,
+    "unlabelled_runs": {
+     "count": 262,
+     "mean_frames": 2.114503816793893,
+     "histogram_1_to_10_and_over": [
+      180,
+      35,
+      7,
+      9,
+      12,
+      4,
+      7,
+      3,
+      0,
+      0,
+      5
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.01712,
+      0.00037,
+      0.00047,
+      0.0009,
+      0.00114,
+      0.00109,
+      0.0
+     ],
+     "visible_frames": [
+      13962,
+      5458,
+      6322,
+      5547,
+      8804,
+      2743,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.4729241877256318,
+     "hidden_frames": 554
+    },
+    "mean_confidence": 0.9991110599078342
+   }
+  },
+  "random": {
+   "synthetic": {
+    "frames": 6978,
+    "labelled_fraction": [
+     0.9984,
+     0.998,
+     0.999,
+     0.9987,
+     0.999,
+     0.9989,
+     0.999,
+     0.998,
+     0.9993,
+     0.9981
+    ],
+    "frames_with_gap": 0.01361421610776727,
+    "unlabelled_runs": {
+     "count": 28,
+     "mean_frames": 3.392857142857143,
+     "histogram_1_to_10_and_over": [
+      7,
+      2,
+      5,
+      7,
+      3,
+      3,
+      0,
+      1,
+      0,
+      0,
+      0
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00066,
+      0.00031,
+      0.00025,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      27397,
+      19522,
+      15702,
+      6268,
+      776,
+      10,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.29473684210526313,
+     "hidden_frames": 95
+    },
+    "frames_range": [
+     0,
+     6978
+    ],
+    "mean_confidence": 0.9999263399254801,
+    "latency_frames": 1
+   },
+   "real": {
+    "frames": 6978,
+    "labelled_fraction": [
+     1.0,
+     1.0,
+     1.0,
+     1.0,
+     0.9999,
+     0.9999,
+     0.9983,
+     0.999,
+     0.9979,
+     0.999
+    ],
+    "frames_with_gap": 0.005159071367153913,
+    "unlabelled_runs": {
+     "count": 32,
+     "mean_frames": 1.34375,
+     "histogram_1_to_10_and_over": [
+      24,
+      6,
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00116,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      27523,
+      19536,
+      15681,
+      6211,
+      771,
+      5,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.7441860465116279,
+     "hidden_frames": 43
+    },
+    "mean_confidence": 0.9999833763255946
+   }
+  },
+  "random_high": {
+   "synthetic": {
+    "frames": 5686,
+    "labelled_fraction": [
+     0.9981,
+     0.9988,
+     1.0,
+     0.9981,
+     0.9996,
+     1.0,
+     0.9981,
+     0.9989,
+     0.9993,
+     0.9981
+    ],
+    "frames_with_gap": 0.009848751319029195,
+    "unlabelled_runs": {
+     "count": 20,
+     "mean_frames": 3.15,
+     "histogram_1_to_10_and_over": [
+      6,
+      3,
+      3,
+      4,
+      2,
+      1,
+      0,
+      0,
+      0,
+      1,
+      0
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00046,
+      0.0,
+      0.00031,
+      0.0004,
+      0.0004,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      17558,
+      6324,
+      12796,
+      14818,
+      5018,
+      273,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.31746031746031744,
+     "hidden_frames": 63
+    },
+    "frames_range": [
+     0,
+     5686
+    ],
+    "mean_confidence": 0.9999370383397819,
+    "latency_frames": 1
+   },
+   "real": {
+    "frames": 5686,
+    "labelled_fraction": [
+     0.9996,
+     1.0,
+     0.9995,
+     0.9995,
+     0.9996,
+     0.9967,
+     0.9975,
+     0.9942,
+     0.9949,
+     0.9989
+    ],
+    "frames_with_gap": 0.015476609215617306,
+    "unlabelled_runs": {
+     "count": 85,
+     "mean_frames": 1.3058823529411765,
+     "histogram_1_to_10_and_over": [
+      64,
+      17,
+      3,
+      1,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00458,
+      0.0,
+      0.0,
+      0.0002,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      17919,
+      6319,
+      12775,
+      14703,
+      4879,
+      144,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.7657657657657657,
+     "hidden_frames": 111
+    },
+    "mean_confidence": 0.9999497010200492
+   }
+  },
+  "strokes": {
+   "synthetic": {
+    "frames": 5317,
+    "labelled_fraction": [
+     0.9979,
+     0.9989,
+     0.9996,
+     0.9979,
+     0.9989,
+     1.0,
+     0.9977,
+     0.9991,
+     0.9961,
+     0.997
+    ],
+    "frames_with_gap": 0.015986458529245816,
+    "unlabelled_runs": {
+     "count": 26,
+     "mean_frames": 3.4615384615384617,
+     "histogram_1_to_10_and_over": [
+      6,
+      4,
+      5,
+      4,
+      3,
+      1,
+      2,
+      0,
+      0,
+      1,
+      0
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00077,
+      0.00011,
+      0.00046,
+      0.00033,
+      0.0,
+      0.0,
+      0.14286
+     ],
+     "visible_frames": [
+      20796,
+      8873,
+      10924,
+      8967,
+      3235,
+      268,
+      7
+     ],
+     "hidden_to_visible_per_frame": 0.28888888888888886,
+     "hidden_frames": 90
+    },
+    "frames_range": [
+     0,
+     5317
+    ],
+    "mean_confidence": 0.9999003197291705,
+    "latency_frames": 1
+   },
+   "real": {
+    "frames": 5317,
+    "labelled_fraction": [
+     1.0,
+     0.9998,
+     0.9998,
+     0.9996,
+     0.9987,
+     0.9959,
+     1.0,
+     0.9957,
+     0.9912,
+     0.9994
+    ],
+    "frames_with_gap": 0.0137295467368817,
+    "unlabelled_runs": {
+     "count": 56,
+     "mean_frames": 1.8928571428571428,
+     "histogram_1_to_10_and_over": [
+      35,
+      10,
+      5,
+      2,
+      3,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00264,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      21220,
+      8826,
+      10849,
+      8906,
+      3176,
+      77,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.5283018867924528,
+     "hidden_frames": 106
+    },
+    "mean_confidence": 0.9999037050968591
+   }
+  },
+  "vertical": {
+   "synthetic": {
+    "frames": 5819,
+    "labelled_fraction": [
+     0.999,
+     0.9988,
+     1.0,
+     0.9986,
+     0.9993,
+     0.9998,
+     0.9993,
+     0.9959,
+     0.9959,
+     0.9945
+    ],
+    "frames_with_gap": 0.012201409176834507,
+    "unlabelled_runs": {
+     "count": 22,
+     "mean_frames": 5.0,
+     "histogram_1_to_10_and_over": [
+      8,
+      1,
+      2,
+      5,
+      1,
+      2,
+      0,
+      0,
+      0,
+      0,
+      3
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00058,
+      0.00011,
+      0.00025,
+      0.00032,
+      0.0,
+      0.5,
+      1.0
+     ],
+     "visible_frames": [
+      18875,
+      18078,
+      11802,
+      9296,
+      18,
+      2,
+      2
+     ],
+     "hidden_to_visible_per_frame": 0.17757009345794392,
+     "hidden_frames": 107
+    },
+    "frames_range": [
+     0,
+     5819
+    ],
+    "mean_confidence": 0.9997594088331329,
+    "latency_frames": 1
+   },
+   "real": {
+    "frames": 5819,
+    "labelled_fraction": [
+     1.0,
+     1.0,
+     0.9993,
+     0.9986,
+     0.9997,
+     0.9995,
+     1.0,
+     0.9936,
+     0.9962,
+     0.993
+    ],
+    "frames_with_gap": 0.00807698917339749,
+    "unlabelled_runs": {
+     "count": 17,
+     "mean_frames": 6.882352941176471,
+     "histogram_1_to_10_and_over": [
+      4,
+      6,
+      2,
+      0,
+      1,
+      0,
+      0,
+      1,
+      0,
+      0,
+      3
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.0009,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     "visible_frames": [
+      18987,
+      18068,
+      11783,
+      9226,
+      4,
+      0,
+      0
+     ],
+     "hidden_to_visible_per_frame": 0.10714285714285714,
+     "hidden_frames": 112
+    },
+    "mean_confidence": 0.999553531534628
+   }
+  },
+  "whip": {
+   "synthetic": {
+    "frames": 4820,
+    "labelled_fraction": [
+     0.9959,
+     0.9948,
+     0.9973,
+     0.9971,
+     0.9973,
+     0.9973,
+     0.9959,
+     0.995,
+     0.9961,
+     0.9967
+    ],
+    "frames_with_gap": 0.011410788381742738,
+    "unlabelled_runs": {
+     "count": 27,
+     "mean_frames": 6.555555555555555,
+     "histogram_1_to_10_and_over": [
+      6,
+      3,
+      3,
+      3,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      10
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.00064,
+      0.00024,
+      0.00018,
+      0.00023,
+      0.00022,
+      0.00172,
+      0.0
+     ],
+     "visible_frames": [
+      14134,
+      8492,
+      11353,
+      8828,
+      4585,
+      582,
+      39
+     ],
+     "hidden_to_visible_per_frame": 0.15254237288135594,
+     "hidden_frames": 177
+    },
+    "frames_range": [
+     2466,
+     7286
+    ],
+    "mean_confidence": 0.9971813278008299,
+    "latency_frames": 1
+   },
+   "real": {
+    "frames": 4820,
+    "labelled_fraction": [
+     0.9975,
+     0.9919,
+     0.9934,
+     0.9905,
+     0.9942,
+     0.9859,
+     0.9975,
+     0.9871,
+     0.9927,
+     0.9985
+    ],
+    "frames_with_gap": 0.04564315352697095,
+    "unlabelled_runs": {
+     "count": 206,
+     "mean_frames": 1.6553398058252426,
+     "histogram_1_to_10_and_over": [
+      135,
+      38,
+      17,
+      7,
+      5,
+      2,
+      2,
+      0,
+      0,
+      0,
+      0
+     ]
+    },
+    "label_transitions": {
+     "speed_bins_mps": [
+      0.0,
+      0.25,
+      0.5,
+      1.0,
+      2.0,
+      4.0,
+      8.0
+     ],
+     "visible_to_hidden_per_frame": [
+      0.01288,
+      0.0,
+      0.00045,
+      0.00012,
+      0.0,
+      0.0,
+      1.0
+     ],
+     "visible_frames": [
+      15453,
+      8378,
+      11037,
+      8452,
+      4357,
+      171,
+      1
+     ],
+     "hidden_to_visible_per_frame": 0.6041055718475073,
+     "hidden_frames": 341
+    },
+    "mean_confidence": 0.9997535269709544
+   }
+  }
+ }
+}

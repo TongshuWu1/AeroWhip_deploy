@@ -1,0 +1,54 @@
+{
+ "model": "der_material_kelvin_voigt_v1",
+ "engine": "runs/calibration_2026-10-27/engine_v1/_native.cpython-312-x86_64-linux-gnu.so",
+ "results": {
+  "configured": {
+   "fit_rms_m": 0.04711264481208078,
+   "fit_per_flight_rms_m": {
+    "circle": 0.030671471956086473,
+    "decay": 0.05630663012286552,
+    "figure8": 0.025546895602847165,
+    "line_star": 0.07933153568829643,
+    "random": 0.039442476869734545,
+    "strokes": 0.052984844219732284,
+    "vertical": 0.022849323961710268
+   },
+   "held_out_rms_m": 0.05283552647744744,
+   "held_out_per_flight_rms_m": {
+    "random_high": 0.044524321901069544,
+    "whip": 0.05804717586950724
+   },
+   "parameters": {
+    "EI_n_m2": 1.1789398730482201e-08,
+    "Cb_n_m2_s": 8.174015593606011e-05,
+    "external_drag_s_inv": 0.08137620273661342,
+    "GJ_n_m2": 1.1789398730482201e-08,
+    "Ct_n_m2_s": 8.174015593606012e-06
+   }
+  },
+  "previous best (Cb x4, drag x4)": {
+   "fit_rms_m": 0.03201079935890585,
+   "fit_per_flight_rms_m": {
+    "circle": 0.021164290276200124,
+    "decay": 0.04689880607048124,
+    "figure8": 0.018556381916937783,
+    "line_star": 0.03288245121866137,
+    "random": 0.033585958675428455,
+    "strokes": 0.05285730634505177,
+    "vertical": 0.020682510374783414
+   },
+   "held_out_rms_m": 0.05951024534485644,
+   "held_out_per_flight_rms_m": {
+    "random_high": 0.0359560698978596,
+    "whip": 0.07174503259038374
+   },
+   "parameters": {
+    "EI_n_m2": 1.1789398730482201e-08,
+    "Cb_n_m2_s": 0.00032696062374424045,
+    "external_drag_s_inv": 0.32550481094645367,
+    "GJ_n_m2": 1.1789398730482201e-08,
+    "Ct_n_m2_s": 8.174015593606012e-06
+   }
+  }
+ }
+}

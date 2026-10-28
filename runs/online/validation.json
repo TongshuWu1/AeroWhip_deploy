@@ -1,0 +1,536 @@
+{
+ "parameters": [
+  "log10 EI",
+  "log10 Cb",
+  "Cd",
+  "motor_response_s",
+  "body_drag_xy_s_inv",
+  "command_delay_s"
+ ],
+ "prior": [
+  -3.853064695346349,
+  -4.382302330425234,
+  0.7459902144309993,
+  0.019614425554816906,
+  0.5882839370528116,
+  0.005
+ ],
+ "sd": [
+  0.11139451666240677,
+  0.042194749848400305,
+  0.0534055114152019,
+  0.007402693190363551,
+  0.026410320329095866,
+  0.005
+ ],
+ "wrong": [
+  -3.5530646953463494,
+  -4.532302330425234,
+  1.044386300203399,
+  0.03138308088770705,
+  0.8235975118739362,
+  0.017
+ ],
+ "flights": [
+  {
+   "flight": "strokes/001",
+   "scores": {
+    "prior": {
+     "cable": 0.01417667198392751,
+     "drone": 1.0398742708749373
+    },
+    "wrong start": {
+     "cable": 0.014116109115221402,
+     "drone": 1.104460230126879
+    },
+    "final from prior": {
+     "cable": 0.013882537792772065,
+     "drone": 1.0392847465455597
+    },
+    "final from wrong": {
+     "cable": 0.014012875328734206,
+     "drone": 1.0513445757450217
+    }
+   },
+   "start_distance_sd": [
+    2.69313076611466,
+    3.554944644509776,
+    5.587365009062738,
+    1.5897802367670697,
+    8.909909909797006,
+    2.4
+   ],
+   "final_distance_sd": [
+    3.640044374120857,
+    2.9685702874515902,
+    4.554803294689623,
+    0.805795497188338,
+    7.793722206171996,
+    0.8691403758703244
+   ],
+   "final_from_prior": [
+    -3.556275513685981,
+    -4.3644679963190205,
+    0.7654478699429932,
+    0.021381464017332028,
+    0.5891436208383115,
+    0.0026813601394584143
+   ],
+   "final_from_wrong": [
+    -3.4475837116614434,
+    -4.507560411111648,
+    0.9892418137795452,
+    0.025579482394678627,
+    0.7941186370738017,
+    0.009345701879351622
+   ],
+   "counts": {
+    "cable": {
+     "accepted": 42,
+     "outlier": 0,
+     "change": 0,
+     "gated": 9
+    },
+    "drone": {
+     "accepted": 34,
+     "outlier": 0,
+     "change": 0,
+     "gated": 17
+    }
+   },
+   "gated": {
+    "cable": [
+     "cable over the drone (+13 cm)",
+     "cable over the drone (+20 cm)",
+     "cable over the drone (+6 cm)",
+     "no usable window at the newest frames"
+    ],
+    "drone": [
+     "cable over the drone (+13 cm)",
+     "cable over the drone (+20 cm)",
+     "cable over the drone (+6 cm)",
+     "no usable window at the newest frames",
+     "the step does not lower the window error"
+    ]
+   },
+   "update_s": 0.6245
+  },
+  {
+   "flight": "whip/001",
+   "scores": {
+    "prior": {
+     "cable": 0.01334271600449834,
+     "drone": 1.1134553955668218
+    },
+    "wrong start": {
+     "cable": 0.013258791412204868,
+     "drone": 1.185315958078492
+    },
+    "final from prior": {
+     "cable": 0.013003035105868694,
+     "drone": 1.1177839068022764
+    },
+    "final from wrong": {
+     "cable": 0.01347296679166302,
+     "drone": 1.133150339599109
+    }
+   },
+   "start_distance_sd": [
+    2.69313076611466,
+    3.554944644509776,
+    5.587365009062738,
+    1.5897802367670697,
+    8.909909909797006,
+    2.4
+   ],
+   "final_distance_sd": [
+    4.632956629127971,
+    4.125282084944659,
+    6.9859436171003635,
+    0.39026690309027146,
+    8.266440206545598,
+    1.380218932822117
+   ],
+   "final_from_prior": [
+    -3.5508437552936134,
+    -4.4353354395080435,
+    0.7769001659503102,
+    0.01708873504377686,
+    0.6023226741152464,
+    0.006801997772726357
+   ],
+   "final_from_wrong": [
+    -3.3369787309267456,
+    -4.556367576053561,
+    1.1190781060200097,
+    0.02250345170074753,
+    0.8066032708889982,
+    0.011901094664110585
+   ],
+   "counts": {
+    "cable": {
+     "accepted": 47,
+     "outlier": 0,
+     "change": 0,
+     "gated": 38
+    },
+    "drone": {
+     "accepted": 44,
+     "outlier": 0,
+     "change": 0,
+     "gated": 41
+    }
+   },
+   "gated": {
+    "cable": [
+     "cable over the drone (+0 cm)",
+     "cable over the drone (+14 cm)",
+     "cable over the drone (+26 cm)",
+     "cable over the drone (+36 cm)",
+     "cable over the drone (+38 cm)",
+     "cable over the drone (+62 cm)",
+     "cable over the drone (+7 cm)",
+     "no usable window (hidden markers or dropped frames)",
+     "no usable window at the newest frames"
+    ],
+    "drone": [
+     "cable over the drone (+0 cm)",
+     "cable over the drone (+14 cm)",
+     "cable over the drone (+26 cm)",
+     "cable over the drone (+36 cm)",
+     "cable over the drone (+38 cm)",
+     "cable over the drone (+62 cm)",
+     "cable over the drone (+7 cm)",
+     "no usable window (hidden markers or dropped frames)",
+     "no usable window at the newest frames",
+     "the step does not lower the window error"
+    ]
+   },
+   "update_s": 0.613
+  },
+  {
+   "flight": "random/001",
+   "scores": {
+    "prior": {
+     "cable": 0.00929281644985484,
+     "drone": 1.019787001875831
+    },
+    "wrong start": {
+     "cable": 0.00923282033013169,
+     "drone": 1.0626624045666746
+    },
+    "final from prior": {
+     "cable": 0.009314925632881067,
+     "drone": 1.020660250612053
+    },
+    "final from wrong": {
+     "cable": 0.009446353079411508,
+     "drone": 1.0212245339689439
+    }
+   },
+   "start_distance_sd": [
+    2.69313076611466,
+    3.554944644509776,
+    5.587365009062738,
+    1.5897802367670697,
+    8.909909909797006,
+    2.4
+   ],
+   "final_distance_sd": [
+    4.788501864287698,
+    2.8164525510167335,
+    7.413305408836458,
+    0.25127594570663164,
+    9.37686437743765,
+    1.2819176295085535
+   ],
+   "final_from_prior": [
+    -3.408541474554213,
+    -4.373051171569064,
+    0.8801693334790439,
+    0.014511531668520428,
+    0.6119770422071827,
+    0.009420146782451575
+   ],
+   "final_from_wrong": [
+    -3.3196518446369874,
+    -4.501141841275274,
+    1.1419015810669928,
+    0.017754306822632262,
+    0.835929928943428,
+    0.011409588147542768
+   ],
+   "counts": {
+    "cable": {
+     "accepted": 67,
+     "outlier": 0,
+     "change": 0,
+     "gated": 11
+    },
+    "drone": {
+     "accepted": 56,
+     "outlier": 0,
+     "change": 0,
+     "gated": 22
+    }
+   },
+   "gated": {
+    "cable": [
+     "no usable window at the newest frames"
+    ],
+    "drone": [
+     "no usable window at the newest frames",
+     "the step does not lower the window error"
+    ]
+   },
+   "update_s": 0.636
+  },
+  {
+   "flight": "decay/001",
+   "scores": {
+    "prior": {
+     "cable": 0.013950915858794462,
+     "drone": 0.9485738706855316
+    },
+    "wrong start": {
+     "cable": 0.013947148426935882,
+     "drone": 1.0161543980598677
+    },
+    "final from prior": {
+     "cable": 0.014178606893220785,
+     "drone": 0.9515840653910369
+    },
+    "final from wrong": {
+     "cable": 0.014081686382470867,
+     "drone": 0.9588780364087994
+    }
+   },
+   "start_distance_sd": [
+    2.69313076611466,
+    3.554944644509776,
+    5.587365009062738,
+    1.5897802367670697,
+    8.909909909797006,
+    2.4
+   ],
+   "final_distance_sd": [
+    1.904538581393377,
+    1.8049062180863606,
+    5.3769425257142744,
+    1.239774023015781,
+    7.8349313813730594,
+    0.7008007813030891
+   ],
+   "final_from_prior": [
+    -3.991555600321757,
+    -4.291143328091989,
+    0.7159328932886998,
+    0.02484739170183306,
+    0.5870183018898827,
+    0.0026018677248344866
+   ],
+   "final_from_wrong": [
+    -3.640909540607128,
+    -4.45845989679721,
+    1.0331485798669175,
+    0.028792092272585453,
+    0.7952069845913596,
+    0.008504003906515446
+   ],
+   "counts": {
+    "cable": {
+     "accepted": 58,
+     "outlier": 0,
+     "change": 0,
+     "gated": 46
+    },
+    "drone": {
+     "accepted": 47,
+     "outlier": 0,
+     "change": 0,
+     "gated": 57
+    }
+   },
+   "gated": {
+    "cable": [
+     "cable over the drone (+14 cm)",
+     "cable over the drone (+16 cm)",
+     "cable over the drone (+19 cm)",
+     "cable over the drone (+22 cm)",
+     "cable over the drone (+23 cm)",
+     "cable over the drone (+3 cm)",
+     "cable over the drone (+8 cm)",
+     "no usable window (hidden markers or dropped frames)",
+     "no usable window at the newest frames"
+    ],
+    "drone": [
+     "cable over the drone (+14 cm)",
+     "cable over the drone (+16 cm)",
+     "cable over the drone (+19 cm)",
+     "cable over the drone (+22 cm)",
+     "cable over the drone (+23 cm)",
+     "cable over the drone (+3 cm)",
+     "cable over the drone (+8 cm)",
+     "no usable window (hidden markers or dropped frames)",
+     "no usable window at the newest frames",
+     "the step does not lower the window error"
+    ]
+   },
+   "update_s": 0.644
+  },
+  {
+   "flight": "circle/001",
+   "scores": {
+    "prior": {
+     "cable": 0.007954886797047905,
+     "drone": 0.9092297736878967
+    },
+    "wrong start": {
+     "cable": 0.008831953696417406,
+     "drone": 0.9381204210381886
+    },
+    "final from prior": {
+     "cable": 0.007709146144742816,
+     "drone": 0.9018512887850274
+    },
+    "final from wrong": {
+     "cable": 0.007864645948144962,
+     "drone": 0.9199095730745821
+    }
+   },
+   "start_distance_sd": [
+    2.69313076611466,
+    3.554944644509776,
+    5.587365009062738,
+    1.5897802367670697,
+    8.909909909797006,
+    2.4
+   ],
+   "final_distance_sd": [
+    1.4953951939151986,
+    0.919682773333797,
+    0.04748205927175624,
+    0.12776199330816862,
+    2.01483387340677,
+    4.146004306029258
+   ],
+   "final_from_prior": [
+    -4.254965974052827,
+    -4.27556741986126,
+    0.6694925725287283,
+    0.010478315372460696,
+    0.5374650099479812,
+    0.015555486116229969
+   ],
+   "final_from_wrong": [
+    -4.019643520191819,
+    -4.421108114985937,
+    0.7434544107725443,
+    0.018668642716967252,
+    0.6414963450593973,
+    0.025730021530146294
+   ],
+   "counts": {
+    "cable": {
+     "accepted": 66,
+     "outlier": 0,
+     "change": 0,
+     "gated": 11
+    },
+    "drone": {
+     "accepted": 61,
+     "outlier": 0,
+     "change": 0,
+     "gated": 16
+    }
+   },
+   "gated": {
+    "cable": [
+     "no usable window at the newest frames"
+    ],
+    "drone": [
+     "no usable window at the newest frames",
+     "the step does not lower the window error"
+    ]
+   },
+   "update_s": 0.646
+  },
+  {
+   "flight": "figure8/001",
+   "scores": {
+    "prior": {
+     "cable": 0.0060454487531620875,
+     "drone": 1.0116960958047219
+    },
+    "wrong start": {
+     "cable": 0.006657389960029946,
+     "drone": 1.0226894109476876
+    },
+    "final from prior": {
+     "cable": 0.005766800983701328,
+     "drone": 1.0132982687676306
+    },
+    "final from wrong": {
+     "cable": 0.005869942388057326,
+     "drone": 1.0165673832956372
+    }
+   },
+   "start_distance_sd": [
+    2.69313076611466,
+    3.554944644509776,
+    5.587365009062738,
+    1.5897802367670697,
+    8.909909909797006,
+    2.4
+   ],
+   "final_distance_sd": [
+    2.486457499929741,
+    0.8721042278888443,
+    0.802888524987047,
+    0.27305720038454256,
+    4.850292609782859,
+    2.837495552749679
+   ],
+   "final_from_prior": [
+    -4.322248447355534,
+    -4.303815463408388,
+    0.6798785558286877,
+    0.014648080140903975,
+    0.5816490435615038,
+    0.010026290286610286
+   ],
+   "final_from_wrong": [
+    -4.130042426752639,
+    -4.419100550162736,
+    0.7888688867173297,
+    0.017593066876950517,
+    0.7163817185670233,
+    0.019187477763748396
+   ],
+   "counts": {
+    "cable": {
+     "accepted": 81,
+     "outlier": 3,
+     "change": 0,
+     "gated": 6
+    },
+    "drone": {
+     "accepted": 68,
+     "outlier": 0,
+     "change": 0,
+     "gated": 22
+    }
+   },
+   "gated": {
+    "cable": [
+     "no usable window at the newest frames"
+    ],
+    "drone": [
+     "no usable window at the newest frames",
+     "the step does not lower the window error"
+    ]
+   },
+   "update_s": 0.6465000000000001
+  }
+ ]
+}

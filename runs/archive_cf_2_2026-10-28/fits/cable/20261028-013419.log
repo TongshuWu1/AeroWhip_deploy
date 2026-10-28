@@ -1,0 +1,6 @@
+820 segments of 1.0 s from 15 flights, 249 held out; 0 dropped (failed at the start point)
+start: 25.14 mm
+held out: 32.367 -> 24.632 mm
+best: 19.178 mm, x [-3.399, -4.4298, 0.7387, -0.7133, -0.4932, 10.0971, -15.0] ± [0.2061, 0.0937, 0.1131, 0.0911, 0.4454, 6.8603, 6.4521] (95 %); 64 evaluations, 0 with failed segments; reproduced twice: True
+  correlated: log10 EI / clamp tilt about y (deg) +0.91
+  correlated: Cd / log10 linear drag -0.91

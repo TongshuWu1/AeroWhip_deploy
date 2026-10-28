@@ -1,0 +1,7 @@
+fitted (drone pipeline + cab circle            drone  129.2 mm debiased ( 1294 raw)  cable shape 126.8 mm  tip 206.4 mm  failed 0  reproduced True
+fitted (drone pipeline + cab decay             drone  183.7 mm debiased ( 1105 raw)  cable shape 159.7 mm  tip 272.9 mm  failed 0  reproduced True
+fitted (drone pipeline + cab figure8           drone  116.0 mm debiased ( 1267 raw)  cable shape 111.6 mm  tip 182.9 mm  failed 0  reproduced True
+fitted (drone pipeline + cab line_star         drone  262.6 mm debiased ( 1392 raw)  cable shape 150.8 mm  tip 249.7 mm  failed 0  reproduced True
+fitted (drone pipeline + cab random            drone  138.1 mm debiased ( 1267 raw)  cable shape 138.2 mm  tip 230.4 mm  failed 0  reproduced True
+fitted (drone pipeline + cab random_high  HELD drone  135.9 mm debiased ( 1007 raw)  cable shape 127.0 mm  tip 213.7 mm  failed 0  reproduced True
+fitted (drone pipeline + cab strokes           drone  168.9 mm debiased ( 1302 raw)  cable shape 156.1 mm  tip 264.6 mm  failed 0  reproduced True

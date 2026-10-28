@@ -1,0 +1,724 @@
+{
+  "protocol": "replay_derived_stage1_behavior_cloning_v1",
+  "configuration": {
+    "schema": "ppo_stage1_velocity_v1",
+    "reward_delivery": "causal_best_event_differences_v1",
+    "settings": {
+      "algorithm": "ppo",
+      "task": "configs/tasks/whip_stage1_outreach_speed_radius055_v7.json",
+      "model": "configs/simulation.json",
+      "scene": "configs/scenes/default.toml",
+      "device": "cuda",
+      "seed": 0,
+      "parallel_environments": 128,
+      "evaluation_environments": 64,
+      "training_episodes": 19200,
+      "evaluation_interval_episodes": 512,
+      "policy_rate_hz": 10,
+      "action_interface": "velocity_v1",
+      "target_observation": "initial_relative_position_v1",
+      "velocity_limit_mps": [
+        2,
+        2,
+        0.8
+      ],
+      "workspace_penalty": {
+        "weight": 0.1,
+        "distance_scale_m": 0.1
+      },
+      "learning_rate": 0.0003,
+      "batch_size": 256,
+      "hidden_units": 128,
+      "initial_log_std": -0.3,
+      "reward_scale": 100,
+      "discount": 1,
+      "ppo": {
+        "epochs": 5,
+        "clip_ratio": 0.2,
+        "gae_lambda": 0.95,
+        "value_loss_weight": 0.5,
+        "max_grad_norm": 0.5,
+        "target_kl": 0.02,
+        "post_step_kl": {
+          "maximum_trials": 8
+        },
+        "transfer_entropy_clock": "stage_local",
+        "entropy": {
+          "initial_weight": 0.02,
+          "final_weight": 0.001,
+          "hold_fraction": 0.1,
+          "anneal_end_fraction": 0.8
+        }
+      },
+      "training_stage": 1,
+      "plateau_detection": {
+        "mode": "warn",
+        "minimum_collections": 40,
+        "window_collections": 8,
+        "patience_checks": 3,
+        "check_interval_collections": 1,
+        "require_entropy_floor": true,
+        "minimum_gain": {
+          "return": 0.005,
+          "quality": 0.005,
+          "rate": 0.02,
+          "containment_m": 0.005
+        }
+      }
+    },
+    "task": {
+      "episode": {
+        "duration_s": 4,
+        "settling_s": 0.5,
+        "termination": "full_horizon_v1"
+      },
+      "workspace": {
+        "radius_m": 0.55,
+        "height_lower_world_m": 1.5,
+        "height_upper_world_m": 2.6
+      },
+      "return": {
+        "acceleration_cost_weight": 0,
+        "acceleration_cost_scale_mps2": 15,
+        "failure_return": -1,
+        "maximum_tilt_deg": 60,
+        "minimum_cable_height_m": 0.05
+      },
+      "request": [
+        0,
+        0,
+        2,
+        3
+      ],
+      "strike_surface": {
+        "distance_m": 1.1,
+        "width_m": 1,
+        "height_m": 0.6,
+        "maximum_entry_angle_deg": 30,
+        "approach_width_m": 0.35,
+        "strike_bonus_weight": 0
+      },
+      "matching": {
+        "height_width_m": 0.35,
+        "speed_width_mps": 1.5,
+        "direction_width_deg": 30,
+        "time_preference": 0,
+        "speed_mode": "minimum",
+        "mechanics_credit_weight": 1,
+        "shaping_weight": 1,
+        "center_weight": 0,
+        "center_sigma_m": 0.3,
+        "reward_mode": "directed_outreach_speed_whip_v1",
+        "hit_speed_weight": 0,
+        "hit_straightness_weight": 0,
+        "hit_speed_scale_mps": 3,
+        "alignment_mode": "cone_plateau_v1",
+        "alignment_cone_deg": 25,
+        "preparation_path_weight": 0.15,
+        "outreach_height_width_fraction": 0.35,
+        "outreach_mechanics_scale": 0.05,
+        "outreach_speed_scale_mps": 3,
+        "outreach_speed_power": 2
+      },
+      "mechanics": {
+        "smoothing_sigma_fraction": 0.05,
+        "windows_s": [
+          0.2,
+          0.4,
+          0.6,
+          0.8
+        ],
+        "window_stride_s": 0.05,
+        "tip_lag_s": 0.15,
+        "turn_reference_rad": 0.5,
+        "travel_reference_fraction": 0.2,
+        "spread_scale_fraction": 0.25,
+        "nonrigid_reference_mps": 0.5,
+        "release_reference_mps": 0.5,
+        "forward_reference_mps": 1,
+        "rigid_pinv_rtol": 1e-08
+      }
+    },
+    "model": {
+      "drone": {
+        "mass_kg": 0.145,
+        "tracking_origin": "top_plate_center",
+        "center_of_mass_tracking_m": [
+          0,
+          0,
+          -0.018
+        ],
+        "inertia_body_about_com_kg_m2": [
+          [
+            0.00013649333333333333,
+            0,
+            0
+          ],
+          [
+            0,
+            0.00013649333333333333,
+            0
+          ],
+          [
+            0,
+            0,
+            0.00024166666666666667
+          ]
+        ],
+        "initial_inertia_box_size_m": [
+          0.1,
+          0.1,
+          0.036
+        ],
+        "upper_plate_thickness_m": 0.006,
+        "plate_gap_m": 0.025,
+        "lower_plate_thickness_m": 0.005,
+        "battery_thickness_m": 0.015
+      },
+      "attachment": {
+        "type": "point_clamp_der_halfcell_v1",
+        "position_tracking_m": [
+          0,
+          0,
+          -0.051
+        ],
+        "transmit_direct_moment": true,
+        "tangent_body": [
+          0,
+          0,
+          -1
+        ]
+      },
+      "cable": {
+        "total_mass_kg": 0.017,
+        "diameter_m": 0.0035,
+        "marker_interval_lengths_m": [
+          0.063,
+          0.087,
+          0.1,
+          0.1,
+          0.1,
+          0.1,
+          0.1,
+          0.1025,
+          0.1,
+          0.1
+        ],
+        "moving_marker_masses_kg": [
+          0.0009604520191835018,
+          0.0009604520191835018,
+          0.0009604520191835018,
+          0.0009604520191835018,
+          0.0009604520191835018,
+          0.0009604520191835018,
+          0.0009604520191835018,
+          0.0009604520191835018,
+          0.0009604520191835018,
+          0.0009604520191835018
+        ],
+        "EI_n_m2": 1.1789398730482201e-08,
+        "Cb_n_m2_s": 8.174015593606011e-05,
+        "external_drag_s_inv": 0.08137620273661342,
+        "constitutive_model": "der_material_kelvin_voigt_v1",
+        "GJ_n_m2": 1.1789398730482201e-08,
+        "Ct_n_m2_s": 8.174015593606012e-06
+      },
+      "simulation": {
+        "timestep_s": 0.01,
+        "gravity_world_m_s2": [
+          0,
+          0,
+          -9.80665
+        ],
+        "physics_timestep_s": 0.0016666666666666668,
+        "segments_per_marker_interval": [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "constraint_iterations": 4
+      },
+      "controller": {
+        "position_gain_s_inv2": [
+          4.0,
+          4.0,
+          6.25
+        ],
+        "velocity_gain_s_inv": [
+          4.0,
+          4.0,
+          5.0
+        ],
+        "attitude_frequency_rad_s": [
+          20.0,
+          20.0,
+          15.0
+        ],
+        "attitude_damping_ratio": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "controller_period_s": 0.005,
+        "command_delay_s": 0.03
+      },
+      "actuator": {
+        "calibration_status": "uncalibrated",
+        "allocation": "inverse_clip",
+        "motor_positions_com_m": [
+          [
+            0.05,
+            0.05,
+            0
+          ],
+          [
+            -0.05,
+            0.05,
+            0
+          ],
+          [
+            -0.05,
+            -0.05,
+            0
+          ],
+          [
+            0.05,
+            -0.05,
+            0
+          ]
+        ],
+        "yaw_torque_per_thrust_m": [
+          0.01,
+          -0.01,
+          0.01,
+          -0.01
+        ],
+        "minimum_thrust_n": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "maximum_thrust_n": [
+          0.7943386499999998,
+          0.7943386499999998,
+          0.7943386499999998,
+          0.7943386499999998
+        ],
+        "response_time_s": [
+          0.015,
+          0.015,
+          0.015,
+          0.015
+        ],
+        "initial_thrust_n": [
+          0.3971693249999999,
+          0.3971693249999999,
+          0.3971693249999999,
+          0.3971693249999999
+        ]
+      },
+      "residual": {
+        "schema": "structured_aerodynamic_residual_v1",
+        "status": "unfitted"
+      }
+    },
+    "model_sources": {
+      "model": {
+        "path": "configs/simulation.json",
+        "sha256": "d221680c3de83cdf9665bf1d13026079a60ab0e66691d6b634b511ec3e7c85db"
+      },
+      "physics": {
+        "path": "configs/physics/drone_cable.json",
+        "sha256": "16319209aa90bc91348c957e240f457ea3f8a447fe5c3f60f1c66a5074f14a8d"
+      },
+      "controller": {
+        "path": "configs/controllers/geometric.toml",
+        "sha256": "b4f94257cc87756e20156f9426ce26cb6330bf5410a3fc9302bf938f511212af"
+      },
+      "actuator": {
+        "path": "configs/actuators/drone.json",
+        "sha256": "e90e4c647c5ce01cc1a68625d5225cae5b963cc5f72f828702a2a43e76628dc6"
+      },
+      "residual_config": {
+        "path": "configs/residuals/current.toml",
+        "sha256": "52add1864d3a874007d15e7056fec4cb278ddf61d81f21279513ee921cbfa680"
+      }
+    },
+    "scene_text": "[simulation]\nbackend = \"native\"\n# 100 Hz outer step with internal substeps from the physical model.\ntimestep_s = 0.01\n\n[initial_state]\nposition_world_m = [0.0, 0.0, 2.0]\nquaternion_body_to_world_xyzw = [0.0, 0.0, 0.0, 1.0]\nlinear_velocity_world_mps = [0.0, 0.0, 0.0]\nangular_velocity_body_radps = [0.0, 0.0, 0.0]\n\n[platform]\n# Centered under the drone and battery, at the battery's bottom surface.\nattachment_offset_body_m = [0.0, 0.0, -0.051]\ncable_segment_lengths_m = [0.063, 0.087, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1025, 0.1, 0.1]\n\n[viewer]\nwindow_size_px = [1440, 900]\n# Start at this pixel size rather than filling a high-resolution monitor.\nstart_maximized = false\nbackground_rgb = [0.73, 0.77, 0.80]\nground_z_m = 0.0\nground_size_m = 8.0\ngrid_spacing_m = 0.5\nworld_axis_length_m = 0.25\nbody_axis_length_m = 0.10\n# Measured clear distances between CAD faces and the cable attachment.\nplate_gap_m = 0.025\n# Battery thickness: battery top touches the lower plate; root is at its bottom.\ncable_attachment_drop_m = 0.015\n# Visual estimate from the video; not an aerodynamic parameter.\nrotor_radius_m = 0.038\n# Slow-motion visual rotation only; not measured RPM or a thrust input.\nvisual_rotor_rpm = 90.0\ncable_radius_m = 0.0018\ncable_marker_radius_m = 0.006\n",
+    "execution_hashes": {
+      "controllers/__init__.py": "89bafe3c0c6f779717cbd49e3ab9ff9362529892852b45007186dc0eee970a64",
+      "controllers/full_state_controller/__init__.py": "2af4a28b18331dd98c5860a8483246cd65de47afe0a97e6b6596157449c4eb4a",
+      "controllers/full_state_controller/bspline_window.py": "2cb343872e95d726ef12de2a9066cc18d03992425a787b71dea64edb4ffb2ba4",
+      "controllers/full_state_controller/controller_window.py": "ffce5b4cc35897c5e2b07a3fc39b9e58d76991e978f18bded81e12ee43e48569",
+      "controllers/full_state_controller/geometric_controller.py": "45d65cfb641ecfa717f3bbc6e9c136ff33c0f8f752d43271caa54e5aa36677e2",
+      "controllers/full_state_controller/preset_window.py": "bdb0afc8e37f5722945cd59ff66af46d18743fdca5b7887937b466772b525720",
+      "controllers/full_state_controller/run_controller.py": "6e03657972336af475cfadea99b70019c32a0e7299a86790dac0a422f5c5f578",
+      "controllers/full_state_controller/run_headless.py": "356aa874c4e5482552709be3c9d883f2aaa5f14014f107d1baf0ac12579dc0b3",
+      "controllers/full_state_controller/setup_window.py": "e37d33c05825d53bf51958570acd8411e0b4e8d89b493fbc89ac6f0fed0b1e70",
+      "controllers/full_state_controller/tensor_controller.py": "bf7be894a48d8b8a8b1800c4768123e072526b77ac25627ff26a3707f86bd9b5",
+      "controllers/gamepad_controller/__init__.py": "5e5fbb4a4fc8d096bc89e6243d6e2b48fc77736000433a5e50fc2e8e55935956",
+      "controllers/gamepad_controller/manual_control.py": "287c06478f005f74f74ac2d5a30b22337529e5738d5e550708f8176c5650cb93",
+      "controllers/gamepad_controller/run_controller.py": "1d7ee11ac2e080f804b315f4e88542450db1f338863e3468b3ef6bdd11e34bbb",
+      "controllers/gamepad_controller/virtual_gamepad.py": "b039a10e64f21559e84cbc7e5498092a3cdadf908b7695d9272be676f1332288",
+      "controllers/gamepad_controller/xbox_input.py": "d15adc5ea6005212dbb9c86c63783b875ccaa9b260d42abc1aebdacd1a986535",
+      "native/actuator.cpp": "d588c511617b177d2745574b75b13961b0854d22a2e42216ffe41194879752a5",
+      "native/actuator.hpp": "8db76bb69784c2d644068bf30c53f5ba39b3314eb77707891c650ce88e27e2da",
+      "native/bindings.cpp": "a6447a4ecb8fab1d30b439d32421220a8289016b90e23eb92b0c4041fbde1e95",
+      "native/engine.cpp": "6a242afcd84ddd679c64384f684fa1050497fc92a75f55f92ab63f77918a7496",
+      "native/engine.hpp": "58375cae9619133b9ec8f52ebd33b6f26f6d13624f5784436c01f8a9a1d22050",
+      "native/material_frame.inc": "4a0915ecf8a04427e00ce46335828346bbca49ed8f5d10d6dbdaf654a3541611",
+      "native/prescribed_material.inc": "2272147f2fa289d65111ce0602154e8c3dec10ebea70a890c708adfe114f2e88",
+      "native/runtime.cpp": "bc2d7ef6c81b98c24b3d2f159b081a21f4192917c98765d4c2b834acaae535ee",
+      "native/runtime.hpp": "58706b9c25ba2a043224cc9528ce7e267b563bc8545e3853ddd4e250eb1e268c",
+      "native/tensor_bindings.cpp": "85f4e763f6420759e4ea35128c179db19211d1b7a893d9a01ad81dd7bbe07408",
+      "native/tensor_material.inc": "29efac35b99054e2523912059fcab24535ab6e2f3b807c1989082ae652a36cf2",
+      "native/tensor_physics.cpp": "f71d25e5d0c0be9597d70bfb8fcf0c317b84d2acf1d710ee4eb339c9e836b8c9",
+      "simulation/__init__.py": "059dfc67be25f054e6fa7f458a025cd0a926a97d81277eb1a3ddbac607fd0cc1",
+      "simulation/_native.cpython-312-x86_64-linux-gnu.so": "f92980ce1b6052a8026d33b17c2997363d3362a7e7af7fac93ecd08265853ef6",
+      "simulation/_tensor_native.cpython-312-x86_64-linux-gnu.so": "5c0a9dd3bf88f99c9b5122b70efa5599e30726d418bd35dfea84f928e52496a1",
+      "simulation/actuator.py": "30bc2c17437a191b0b66cca64b91331c64e434a677c193eda2a0bc49216ea997",
+      "simulation/batched_rollout.py": "cf5c023e7d63e7c5b22ee7af0307170a79a1f616e5204092b9ddae3442c13645",
+      "simulation/configuration.py": "63c98284716aeade70378d6615a01e96cd0256172158188a826f1af15dd2fb96",
+      "simulation/controller_interface.py": "869242bf6af36427d49adcc11a86d6995502045e560f9f905a280c788e92b877",
+      "simulation/model.py": "2baf0d8d910e5c36c4d3d95d252dbe4cda715ffcb09345118b1332f60d4c8b8d",
+      "simulation/model_configuration.py": "3936c211f5cc37c7a3073ebdd7a29177f0f301d6b430c9cb9c5fd4c056a5b91e",
+      "simulation/native_runtime.py": "49a2d50682db7bc5a55ec85a8a1bace05c0f8a3ddc92f66936acec5d6e160d77",
+      "simulation/prescribed_cable.py": "7001c28d20fa3159b93b64cac7bc9947c0efaa4ddeacf85707e1653498e73d9b",
+      "simulation/rollout.py": "0e2ed777078eb917268931b4b2e6fcbfc82697f2ad265d758dd4b4d5db08a041",
+      "simulation/runtime.py": "80e46de5ab23725a3433100c13f8d8dd4266bdaeb7f99775234b1bc30c211cc3",
+      "simulation/state.py": "63400b86800cb413636afdc2531d2a568b910994cad032cb1e69234594cc904e",
+      "simulation/tensor_model.py": "b161eba1b1f33360f2c611cd8d201daf4397593ee39b0fe993e7c5e4e1552d0f",
+      "simulation/timing.py": "ee91e0c2c02534edc6edad0781be754e30d7ae37423bdd166deab9fea78f2229",
+      "tasks/__init__.py": "e92450696a287bcbafe7be3669b2badd81f062980e43446fcd92bcef322ece69",
+      "tasks/whip/__init__.py": "4862ced6cae31d4d1ff371ddd2710f8a78976e063c81534f8b4034920356f518",
+      "tasks/whip/conditional_driver.py": "42db8d2845525e78c5c953aebedb3ac1b557f49f34f66b253344284a0e53554b",
+      "tasks/whip/conditional_graph.py": "688e1c4ef8d09d4fed34b73ebee17444d34e5c5c2d822ed95311d312570f7f2a",
+      "tasks/whip/configuration.py": "6eda418c6a179c5d51750250bb0e6a252115bb864933ef8bc651451506bc245b",
+      "tasks/whip/deterministic_evaluation.py": "e3dbf5097ef3c8dd4179d30eef852cf0041f1bd36199c9608e6b983b2c412e33",
+      "tasks/whip/iteration_graph.py": "9537cac5ab87d6cc70f1453687e1ee507060047076c7dddfba80d2146202841d",
+      "tasks/whip/learned_recovery.py": "16995dda1eacf2177701b6914bdfce2194de34a4cd35db77592acc17376a6d1e",
+      "tasks/whip/sac_environment.py": "68df3c03fac1c94a7416eb8f648fdda9c7bb4c2a761f5a14f1cb58770c34ed77",
+      "tasks/whip/stage1.py": "0890c8bfa8d902cec4d74ed2eba9855ba3c3b9347d5a61c0d4667b4aae7823b4",
+      "tasks/whip/stage1_configuration.py": "215934e6a0a1ccc16b5a4183c1f3c01e292d880fb6886301dbbaac2132aecbe9",
+      "tasks/whip/strike.py": "571c64c8763d37425379a7409d72726f13d6b6ec59bfe2b82f03b7a0d8b5f40e",
+      "tasks/whip/target_sampling.py": "cea2db7eb7e706d4c8f8cc60b7fc4f9a6667e69e079d87f38232f89b8ef1107c",
+      "tasks/whip/workspace.py": "074556513a939c2e96e0d770cbc0a4e9230875685c1b0fd122cb3526b8721d78",
+      "training/__init__.py": "59e33bcdca21912b1da2e268a6db2b2b55a21a1972d26a65e6ebdff2253bbbc9",
+      "training/artifacts.py": "f21156bdd6ee4d7f927e4c1c5beb562285c2fb7fbc58397bbcdc05fcff19ba4e",
+      "training/configuration.py": "2a535648e2cf31057749b03c1a7382a069f72d6e73319052d6d6273ab18fb882",
+      "training/curriculum.py": "c8b37d0d2509a3394602511a8f58b0ce60e018176100b3c402e14e1e068ea75b",
+      "training/demonstration.py": "c0e762fa16b8450b8a018def23a7ab65a2688fc028b210debce6dcf92bd13cab",
+      "training/plateau.py": "c8511d3c2bf4cbc392f56bc7a6b06e9417a4b5a6aae464febceba5f187ade708",
+      "training/ppo.py": "15e4bf0028f48d87abe0405513ed5fe85e45b19c8028018371ae9f034297b22c",
+      "training/sac.py": "38ae57667a4da1608ae9c171f7b8b97ca291f1c00a055e80ba50a0400ea281bd",
+      "training/ui/__init__.py": "fa1ee964a74cd2eaf8889866fc06065f675e2d6e22d154b57dd90919724a7c91",
+      "training/ui/plots.py": "a05cc2d43b8c33e41f9e089880d9464ca4c59332a677b447bad67c9812585d8f",
+      "training/ui/preview.py": "830405d814c6bfaf12d9b7428dbfe998199fe96668c19b9c98538e62fb91a6a4",
+      "training/ui/replay_window.py": "56865e0614e3bbc903c01ae4dc997a23725cee06157882eb437d70e979911c72",
+      "training/ui/window.py": "fe08bd07bcaf4eda185b63e51d7117e0f09d45ce9c03deaf9c32435035a3103e",
+      "training/worker.py": "a7a18c53b323c9450a5b6ff3b18ac26e65612b7b5c1e0ed43f8b8578f0238490"
+    },
+    "demonstration_initialization": {
+      "source": "runs/motion_search/20261010-replay-derived-demo-radius055-v1/demonstration.npz",
+      "sha256": "33a449f26530872536dfa4a6f67154c655d486b4fcf06280bf494b68fb1f5cd3",
+      "retained_replay": "tmp/stages1to4-80-20261010/stage1-seed-interface-baseline.npz",
+      "retained_replay_sha256": "2b5cb9bfa7e59a5a50dd3820ace691a0fdb8991334700784f480fe04be30e48b",
+      "actor_initialization": "fresh random PPO actor, seed0; no prior checkpoint loaded",
+      "loss": "Mean squared error of deterministic bounded commands on causal teacher observations",
+      "steps": 1200,
+      "learning_rate": 0.0003,
+      "scale_head": "weights frozen; shared features may change scale output",
+      "critic_and_ppo_optimizers": "fresh",
+      "reward_bonus": false
+    },
+    "identity": "204e7a2faec415b1e978699031c012f6e3757a538790f34386082500736bc8ae"
+  },
+  "teacher": {
+    "source_replay": "tmp/stages1to4-80-20261010/stage1-seed-interface-baseline.npz",
+    "source_replay_sha256": "2b5cb9bfa7e59a5a50dd3820ace691a0fdb8991334700784f480fe04be30e48b",
+    "original_provenance": "tmp/stages1to4-80-20261010/preflight.json",
+    "original_provenance_sha256": "ce014695d01da0d2fd20ee31f52d43decbbaad873bd69758227047e000316131",
+    "deleted_original_seed": "runs/motion_search/20261010-demo-outreach-speed-v3/cloning/actor.pt",
+    "deleted_original_seed_sha256": "3a2252ba62c3a4e6c77ae99a0787676a0291b86da08a34b6e310f3159554160b",
+    "reconstruction": "Recorded requested world velocity, samples 1+10*k; action=velocity/[2,2,0.8] m/s. Native reintegration under current settings; future samples masked by existing encoder.",
+    "teacher_kind": "Replay of an earlier closed-loop demonstration-cloned actor; not the original scripted search winner",
+    "action_count": 45,
+    "maximum_normalized_action": 0.99956214427948,
+    "maximum_absolute_state_differences": {
+      "drone_positions": 0.0,
+      "drone_velocities": 0.0,
+      "drone_rotations": 0.0,
+      "cable_positions": 0.0,
+      "cable_velocities": 0.0
+    },
+    "valid_full_horizon": true,
+    "raw_return": 0.014572815969586372,
+    "components": {
+      "mechanical": 0.48877458421836684,
+      "matching": 0.08166925311085904,
+      "center_factor": 1.0,
+      "time_factor": 1.0,
+      "bend": 0.16807610007439375,
+      "pulse": 0.8291529844393166,
+      "coherence": 0.8708086543298998,
+      "travel_m": 0.20449503799305363,
+      "turn_rad": 3.1518954436887787,
+      "spread_m": 0.21789640971898533,
+      "transport_mps": 1.5386122600617813,
+      "nonrigid_mps": 5.431633576671714,
+      "release_mps": 4.789845674924412,
+      "forward_mps": 5.168519278225001,
+      "tip_speed_mps": 5.802874201604537,
+      "height_error_m": -0.8802089545177145,
+      "speed_error_mps": 2.168519278225001,
+      "direction_error_rad": 0.47195182893474713,
+      "release_time_s": 1.83,
+      "release_height_world_m": 1.1197910454822855,
+      "mechanics_credit": 0.4623427203543398,
+      "approach_reward": 0.0,
+      "strike_bonus": 0.0,
+      "unfolding_fraction": 0.9794017203292288,
+      "folded_chord_arc_ratio": 0.26164052880153044,
+      "release_chord_arc_ratio": 0.9847910651146912,
+      "forward_alignment": 0.9658163352331487,
+      "forward_reach_m": 0.6266714164736109,
+      "forward_reach_fraction": 0.6579227469539222,
+      "preparation_path_m": 1.5098376271591378,
+      "preparation_factor": 0.788384231084799,
+      "outreach_mechanics_gate": 0.9054296021479538,
+      "outreach_speed_factor": 0.400355320403572,
+      "outreach_credit": 0.01848440876462541,
+      "tip_drone_height_error_m": -0.7488154262388205,
+      "level_height_factor": 0.08024829649072326,
+      "level_outreach_quality": 0.05279717966554944,
+      "preparation_cost": 0.0039115923736690855,
+      "strike_success": 0.0,
+      "strike_count": 0.0,
+      "first_strike_time_s": null,
+      "geometric_hit_success": 0.0,
+      "strict_strike_success": 0.0,
+      "first_geometric_hit_time_s": null,
+      "workspace_cost": 0.0
+    },
+    "workspace": {
+      "boundary_breached": 0.0,
+      "executed_duration_s": 4.5,
+      "workspace_mean_square_excess_m2": 0.0,
+      "max_radial_violation_m": 0.0,
+      "max_vertical_violation_m": 0.0,
+      "outside_duration_s": 0.0,
+      "workspace_cost": 0.0
+    },
+    "provenance": {
+      "evaluation_backend": "native_fixed_state_v1",
+      "evaluation_environments": 1,
+      "evaluation_policy_lanes": 64,
+      "unique_initial_states": 1,
+      "numerical_failure": null
+    },
+    "demonstration_sha256": "33a449f26530872536dfa4a6f67154c655d486b4fcf06280bf494b68fb1f5cd3",
+    "replay": "runs/motion_search/20261010-replay-derived-demo-radius055-v1/teacher-replay.npz"
+  },
+  "loss_history": [
+    {
+      "step": 0,
+      "mse": 0.11972691118717194,
+      "maximum_normalized_command_error": 0.99956214427948
+    },
+    {
+      "step": 100,
+      "mse": 0.010237024165689945,
+      "maximum_normalized_command_error": 0.48333266377449036
+    },
+    {
+      "step": 200,
+      "mse": 0.004265319090336561,
+      "maximum_normalized_command_error": 0.3186856210231781
+    },
+    {
+      "step": 300,
+      "mse": 0.0013071796856820583,
+      "maximum_normalized_command_error": 0.18407833576202393
+    },
+    {
+      "step": 400,
+      "mse": 0.0006363776628859341,
+      "maximum_normalized_command_error": 0.129805326461792
+    },
+    {
+      "step": 500,
+      "mse": 0.0004218235844746232,
+      "maximum_normalized_command_error": 0.09105077385902405
+    },
+    {
+      "step": 600,
+      "mse": 0.0003648769052233547,
+      "maximum_normalized_command_error": 0.08713153749704361
+    },
+    {
+      "step": 700,
+      "mse": 0.0002161058218916878,
+      "maximum_normalized_command_error": 0.06523238867521286
+    },
+    {
+      "step": 800,
+      "mse": 0.0001934133906615898,
+      "maximum_normalized_command_error": 0.06865794956684113
+    },
+    {
+      "step": 900,
+      "mse": 0.00014599462156184018,
+      "maximum_normalized_command_error": 0.05978386104106903
+    },
+    {
+      "step": 1000,
+      "mse": 0.0002947757311630994,
+      "maximum_normalized_command_error": 0.07584342360496521
+    },
+    {
+      "step": 1100,
+      "mse": 0.00010774626571219414,
+      "maximum_normalized_command_error": 0.05713669955730438
+    },
+    {
+      "step": 1200,
+      "mse": 0.0001667856122367084,
+      "maximum_normalized_command_error": 0.06674507260322571
+    }
+  ],
+  "best_teacher_state_command_mse": 9.365459118271247e-05,
+  "random_actor_evaluation": {
+    "raw_return": 0.0,
+    "valid_full_horizon": true,
+    "components": {
+      "mechanical": null,
+      "matching": null,
+      "center_factor": null,
+      "time_factor": null,
+      "bend": null,
+      "pulse": null,
+      "coherence": null,
+      "travel_m": null,
+      "turn_rad": null,
+      "spread_m": null,
+      "transport_mps": null,
+      "nonrigid_mps": null,
+      "release_mps": null,
+      "forward_mps": null,
+      "tip_speed_mps": null,
+      "height_error_m": null,
+      "speed_error_mps": null,
+      "direction_error_rad": null,
+      "release_time_s": null,
+      "release_height_world_m": null,
+      "mechanics_credit": null,
+      "approach_reward": null,
+      "strike_bonus": null,
+      "unfolding_fraction": null,
+      "folded_chord_arc_ratio": null,
+      "release_chord_arc_ratio": null,
+      "forward_alignment": null,
+      "forward_reach_m": null,
+      "forward_reach_fraction": null,
+      "preparation_path_m": null,
+      "preparation_factor": null,
+      "outreach_mechanics_gate": null,
+      "outreach_speed_factor": null,
+      "outreach_credit": null,
+      "tip_drone_height_error_m": null,
+      "level_height_factor": null,
+      "level_outreach_quality": null,
+      "preparation_cost": null,
+      "strike_success": 0.0,
+      "strike_count": 0.0,
+      "first_strike_time_s": null,
+      "geometric_hit_success": 0.0,
+      "strict_strike_success": 0.0,
+      "first_geometric_hit_time_s": null,
+      "workspace_cost": 0.0
+    },
+    "workspace": {
+      "boundary_breached": false,
+      "executed_duration_s": 4.5,
+      "workspace_mean_square_excess_m2": 0.0,
+      "max_radial_violation_m": 0.0,
+      "max_vertical_violation_m": 0.0,
+      "outside_duration_s": 0.0,
+      "workspace_cost": 0.0
+    },
+    "replay": "random-actor.npz"
+  },
+  "cloned_actor_evaluation": {
+    "raw_return": 0.01513542141765356,
+    "valid_full_horizon": true,
+    "components": {
+      "mechanical": 0.4909542856008529,
+      "matching": 0.0907639472878031,
+      "center_factor": 1.0,
+      "time_factor": 1.0,
+      "bend": 0.17166757235677513,
+      "pulse": 0.8268498001981519,
+      "coherence": 0.8740357753069288,
+      "travel_m": 0.20515501247918216,
+      "turn_rad": 3.182180886043919,
+      "spread_m": 0.2170454336806128,
+      "transport_mps": 1.539623221049656,
+      "nonrigid_mps": 5.4227786704024945,
+      "release_mps": 4.659339590448747,
+      "forward_mps": 5.013123132367836,
+      "tip_speed_mps": 5.725740259854419,
+      "height_error_m": -0.8689986278746284,
+      "speed_error_mps": 2.013123132367836,
+      "direction_error_rad": 0.5042408897024222,
+      "release_time_s": 1.83,
+      "release_height_world_m": 1.1310013721253716,
+      "mechanics_credit": 0.44918201803371877,
+      "approach_reward": 0.0,
+      "strike_bonus": 0.0,
+      "unfolding_fraction": 0.9803457529162711,
+      "folded_chord_arc_ratio": 0.24867470833818334,
+      "release_chord_arc_ratio": 0.9852332670774241,
+      "forward_alignment": 0.9332586735009567,
+      "forward_reach_m": 0.639620391978709,
+      "forward_reach_fraction": 0.6715174718936576,
+      "preparation_path_m": 1.519551229461761,
+      "preparation_factor": 0.7871791607535745,
+      "outreach_mechanics_gate": 0.905892086802055,
+      "outreach_speed_factor": 0.39139305141803027,
+      "outreach_credit": 0.01922741668913223,
+      "tip_drone_height_error_m": -0.7375430290702625,
+      "level_height_factor": 0.08653105712512935,
+      "level_outreach_quality": 0.05810711672095253,
+      "preparation_cost": 0.004091994956321849,
+      "strike_success": 0.0,
+      "strike_count": 0.0,
+      "first_strike_time_s": null,
+      "geometric_hit_success": 0.0,
+      "strict_strike_success": 0.0,
+      "first_geometric_hit_time_s": null,
+      "workspace_cost": 0.0
+    },
+    "workspace": {
+      "boundary_breached": false,
+      "executed_duration_s": 4.5,
+      "workspace_mean_square_excess_m2": 0.0,
+      "max_radial_violation_m": 0.0,
+      "max_vertical_violation_m": 0.0,
+      "outside_duration_s": 0.0,
+      "workspace_cost": 0.0
+    },
+    "replay": "cloned-actor.npz"
+  },
+  "fresh_critic_and_ppo_optimizers": true,
+  "checkpoint": "runs/motion_search/20261010-replay-derived-demo-radius055-v1/cloning/actor.pt",
+  "checkpoint_sha256": "49cf43bd0fcb7386d10e0ac53df6e143a4b6781369527b12d350f095b70c4ea4",
+  "limitations": "One nominal simulated teacher. Supervised fit and nominal closed-loop motion do not establish robustness, target success, or real flight. Original actor checkpoint was not restored."
+}

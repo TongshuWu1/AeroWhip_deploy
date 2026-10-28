@@ -1,0 +1,11 @@
+circle       frames  7889  in-reach <10:  0.19 %  label gap frames:  3.13 %  noise cable 0.10 mm
+decay        frames 10500  in-reach <10:  0.12 %  label gap frames:  7.34 %  noise cable 0.10 mm
+figure8      frames  9211  in-reach <10:  0.01 %  label gap frames:  2.17 %  noise cable 0.10 mm
+line_star    frames 11602  in-reach <10:  0.90 %  label gap frames: 14.09 %  noise cable 0.10 mm
+random       frames  7990  in-reach <10:  0.00 %  label gap frames:  0.61 %  noise cable 0.09 mm
+random_high  frames  5686  in-reach <10:  0.00 %  label gap frames:  3.87 %  noise cable 0.11 mm
+strokes      frames  5317  in-reach <10:  0.13 %  label gap frames:  4.81 %  noise cable 0.10 mm
+vertical     frames  6191  in-reach <10:  4.43 %  label gap frames:  6.80 %  noise cable 0.08 mm
+whip         frames  8629  in-reach <10:  0.42 %  label gap frames:  9.18 %  noise cable 0.10 mm
+pooled hazard per marker per frame by speed bin (0.0, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0) : [0.000782, 0.000176, 0.000247, 0.000139, 0.000125, 0.000654, 0.035061]
+label reappearance per frame 0.3155 ; cable noise 0.097 mm

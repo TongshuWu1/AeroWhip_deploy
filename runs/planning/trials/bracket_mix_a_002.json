@@ -1,0 +1,135 @@
+{
+ "flight": "cf_6/mix_a/002",
+ "phase": "decay 0 6",
+ "seconds": 2.5,
+ "measured_rise_m": 0.2852109814298682,
+ "measured_tilt_deg": 37.23492891138266,
+ "members": [
+  {
+   "label": "adopted",
+   "max_rise": 0.22388319204067608,
+   "max_tilt": 36.74850477544384
+  },
+  {
+   "label": "damping/3",
+   "max_rise": 0.30537495943228254,
+   "max_tilt": 36.69706286734682
+  },
+  {
+   "label": "damping/10",
+   "max_rise": 0.3501673081424732,
+   "max_tilt": 36.663290026629376
+  },
+  {
+   "label": "stiff x3",
+   "max_rise": 0.24688378187602167,
+   "max_tilt": 36.689584214329756
+  },
+  {
+   "label": "stiff x3, damping/3",
+   "max_rise": 0.3174433606335043,
+   "max_tilt": 36.6520810435405
+  },
+  {
+   "label": "drag/2",
+   "max_rise": 0.28428696120313823,
+   "max_tilt": 36.752853180506534
+  },
+  {
+   "label": "drag/2, damping/3",
+   "max_rise": 0.37047046890807467,
+   "max_tilt": 36.70116607194138
+  },
+  {
+   "label": "residual x0",
+   "max_rise": 0.181235693055517,
+   "max_tilt": 36.74086426869737
+  },
+  {
+   "label": "residual x2",
+   "max_rise": 0.2620161308465576,
+   "max_tilt": 36.75642883133974
+  },
+  {
+   "label": "sample 1",
+   "max_rise": 0.18358622000334845,
+   "max_tilt": 36.830182372042756
+  },
+  {
+   "label": "sample 2",
+   "max_rise": 0.20770741148139926,
+   "max_tilt": 36.82442032375374
+  },
+  {
+   "label": "sample 3",
+   "max_rise": 0.20889641539724257,
+   "max_tilt": 36.81173594648696
+  },
+  {
+   "label": "sample 4",
+   "max_rise": 0.22738976670341016,
+   "max_tilt": 36.8061009376931
+  },
+  {
+   "label": "sample 5",
+   "max_rise": 0.1895203870126969,
+   "max_tilt": 36.842404914597466
+  },
+  {
+   "label": "sample 6",
+   "max_rise": 0.20665704112521777,
+   "max_tilt": 36.88135435626439
+  },
+  {
+   "label": "sample 7",
+   "max_rise": 0.2407466308258912,
+   "max_tilt": 36.77141223863778
+  },
+  {
+   "label": "sample 8",
+   "max_rise": 0.19248771350496208,
+   "max_tilt": 36.87755873965298
+  },
+  {
+   "label": "sample 9",
+   "max_rise": 0.23383505604693644,
+   "max_tilt": 36.752238541534524
+  },
+  {
+   "label": "sample 10",
+   "max_rise": 0.24708499017518015,
+   "max_tilt": 36.793009680461
+  },
+  {
+   "label": "sample 11",
+   "max_rise": 0.24631038164725583,
+   "max_tilt": 36.83569086845048
+  },
+  {
+   "label": "sample 12",
+   "max_rise": 0.2472163236234315,
+   "max_tilt": 36.84289421416289
+  },
+  {
+   "label": "sample 13",
+   "max_rise": 0.23283175130498313,
+   "max_tilt": 36.71975544963316
+  },
+  {
+   "label": "sample 14",
+   "max_rise": 0.24296823381103305,
+   "max_tilt": 36.791727918141866
+  },
+  {
+   "label": "sample 15",
+   "max_rise": 0.16311041113296154,
+   "max_tilt": 36.91545855920353
+  },
+  {
+   "label": "sample 16",
+   "max_rise": 0.21265020905459897,
+   "max_tilt": 36.860533338100815
+  }
+ ],
+ "bracketed": true
+}

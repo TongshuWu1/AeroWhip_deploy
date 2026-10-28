@@ -1,0 +1,79 @@
+{
+ "summary": {
+  "flights": 3,
+  "failed": [],
+  "nonfinite": [],
+  "over_budget": [],
+  "reasons": {
+   "no usable window": 206,
+   "no cable on this flight": 67,
+   "no usable window at the newest frames": 56,
+   "not explained by the model": 13,
+   "improbable step": 6,
+   "4 outliers agree: applied as a change": 3
+  }
+ },
+ "flights": [
+  {
+   "flight": "cf_6_nocable/tune_cf6_baseline/001",
+   "ok": true,
+   "wall_s": 0.3,
+   "updates": 28,
+   "finite": true,
+   "median_s": 0.0,
+   "max_s": 0.0,
+   "max_distance_sd": 0.0,
+   "status": {
+    "cable gated": 28,
+    "drone gated": 28
+   },
+   "reasons": {
+    "no usable window": 56
+   }
+  },
+  {
+   "flight": "cf_6_nocable/tune_cf6_estimator/002",
+   "ok": true,
+   "wall_s": 0.4,
+   "updates": 73,
+   "finite": true,
+   "median_s": 0.0,
+   "max_s": 0.0,
+   "max_distance_sd": 0.0,
+   "status": {
+    "cable gated": 73,
+    "drone gated": 73
+   },
+   "reasons": {
+    "no usable window": 146
+   }
+  },
+  {
+   "flight": "cf_6_nocable/tune_cf6_stiffness/001",
+   "ok": true,
+   "wall_s": 8.5,
+   "updates": 97,
+   "finite": true,
+   "median_s": 0.128,
+   "max_s": 0.151,
+   "max_distance_sd": 8.071606478176152,
+   "status": {
+    "drone accepted": 35,
+    "cable skipped": 67,
+    "cable gated": 30,
+    "drone gated": 30,
+    "drone outlier": 19,
+    "drone no gain": 10,
+    "drone change": 3
+   },
+   "reasons": {
+    "no cable on this flight": 67,
+    "no usable window at the newest frames": 56,
+    "not explained by the model": 13,
+    "improbable step": 6,
+    "no usable window": 4,
+    "4 outliers agree: applied as a change": 3
+   }
+  }
+ ]
+}

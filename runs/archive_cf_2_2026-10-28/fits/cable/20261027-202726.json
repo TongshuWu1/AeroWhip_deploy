@@ -1,0 +1,198 @@
+{
+ "method": "least_squares",
+ "stage": "cable",
+ "model": "der_twist_free_kelvin_voigt_v2, measured drone pose drives the clamp",
+ "data": "manifest flights, setup cf_2 (cable labels)",
+ "parameters": [
+  "log10 EI",
+  "log10 Cb",
+  "Cd",
+  "log10 linear drag"
+ ],
+ "segments": {
+  "horizon_s": 1.0,
+  "fit": {
+   "decay": 71,
+   "line_star": 88,
+   "vertical": 56,
+   "circle": 67,
+   "figure8": 83,
+   "strokes/001": 47,
+   "random": 72,
+   "random_high/001": 36,
+   "whip/001": 58,
+   "decay_x/001": 50,
+   "line_star_xy/001": 16,
+   "strokes/002": 47,
+   "random_high/002": 39,
+   "whip/002": 72,
+   "decay_y/001": 42,
+   "decay_y/002": 43,
+   "line_star_diag": 41,
+   "figure8_xy": 45,
+   "figure8_xz": 48,
+   "decay_x/002": 20,
+   "line_star_xy/002": 28
+  },
+  "held_out": {},
+  "dropped_at_start": {},
+  "seen_marker_frames": 1062312
+ },
+ "loss": "RMS marker distance over every seen marker of every segment",
+ "start": {
+  "x": [
+   -6.941905545425416,
+   -3.520368955230713,
+   0.689441841506958,
+   -1.279361795425415
+  ],
+  "values": {
+   "EI_n_m2": 1.143126926082729e-07,
+   "Cb_n_m2_s": 0.000301738720745531,
+   "normal_drag_coefficient": 0.689441841506958,
+   "external_drag_s_inv": 0.052557924242295904
+  },
+  "rms_m": 0.032946267563978546,
+  "per_flight_rms_m": {
+   "decay": 0.04259984286340033,
+   "line_star": 0.026976856309984483,
+   "vertical": 0.02141043656583813,
+   "circle": 0.01871184141238152,
+   "figure8": 0.019700468228342143,
+   "strokes/001": 0.04280035992695908,
+   "random": 0.024653273425174854,
+   "random_high/001": 0.034237093044538015,
+   "whip/001": 0.0363425054703607,
+   "decay_x/001": 0.04115601958588436,
+   "line_star_xy/001": 0.02400132741501202,
+   "strokes/002": 0.045090392830373,
+   "random_high/002": 0.03817668102189072,
+   "whip/002": 0.04680507078712972,
+   "decay_y/001": 0.031086415579453294,
+   "decay_y/002": 0.03319149956792199,
+   "line_star_diag": 0.028263262864573833,
+   "figure8_xy": 0.030142480355550585,
+   "figure8_xz": 0.02410012939183016,
+   "decay_x/002": 0.034625028804740145,
+   "line_star_xy/002": 0.027295815108777977
+  }
+ },
+ "best": {
+  "x": [
+   -3.2431776080731947,
+   -4.383775356985822,
+   0.6424020563318297,
+   -0.6516599244514508
+  ],
+  "values": {
+   "EI_n_m2": 0.000571244973864383,
+   "Cb_n_m2_s": 4.132612100653426e-05,
+   "normal_drag_coefficient": 0.6424020563318297,
+   "external_drag_s_inv": 0.22301808152361446
+  },
+  "rms_m": 0.027879295591193884,
+  "per_flight_rms_m": {
+   "decay": 0.03255391761909102,
+   "line_star": 0.02339535039104167,
+   "vertical": 0.023866713977661748,
+   "circle": 0.019222297184397694,
+   "figure8": 0.01751441889793686,
+   "strokes/001": 0.026114125230394022,
+   "random": 0.019054999844654242,
+   "random_high/001": 0.022404252922096145,
+   "whip/001": 0.026095530907705198,
+   "decay_x/001": 0.035035903244596496,
+   "line_star_xy/001": 0.027295726507222565,
+   "strokes/002": 0.03263546469033197,
+   "random_high/002": 0.03440402249169093,
+   "whip/002": 0.036703214727960155,
+   "decay_y/001": 0.028620145695836433,
+   "decay_y/002": 0.0316045874277049,
+   "line_star_diag": 0.028586736264905203,
+   "figure8_xy": 0.0349884288746803,
+   "figure8_xz": 0.026105298026526363,
+   "decay_x/002": 0.033659096968727174,
+   "line_star_xy/002": 0.02828869236565157
+  },
+  "failed_segments": 0,
+  "reproduced_twice": true,
+  "held_out": null
+ },
+ "uncertainty": {
+  "parameters": [
+   "log10 EI",
+   "log10 Cb",
+   "Cd",
+   "log10 linear drag"
+  ],
+  "standard_deviation": [
+   0.036708245649917225,
+   0.046273434756696576,
+   0.07562556978438494,
+   0.0469534794019472
+  ],
+  "standard_deviation_independent": [
+   0.0006410116876224466,
+   0.0011879303814023782,
+   0.001489156042914044,
+   0.0009518838696114908
+  ],
+  "correlation": [
+   [
+    1.0,
+    -0.5787,
+    -0.1757,
+    0.1463
+   ],
+   [
+    -0.5787,
+    1.0,
+    0.2585,
+    -0.2479
+   ],
+   [
+    -0.1757,
+    0.2585,
+    1.0,
+    -0.937
+   ],
+   [
+    0.1463,
+    -0.2479,
+    -0.937,
+    1.0
+   ]
+  ],
+  "flights": 21,
+  "condition_number": 4.598927512981314,
+  "note": "clustered by flight (sandwich), linearised at the optimum; 95 % interval \u00b11.96 sd"
+ },
+ "counts": {
+  "evaluations": 41,
+  "evaluations_with_failed_segments": 0,
+  "failed_segment_replays": 0
+ },
+ "status": 3,
+ "adopt": {
+  "EI_n_m2": 0.000571244973864383,
+  "Cb_n_m2_s": 4.132612100653426e-05,
+  "normal_drag_coefficient": 0.6424020563318297,
+  "external_drag_s_inv": 0.22301808152361446
+ },
+ "search": {
+  "optimiser": "scipy.optimize.least_squares trf, 2-point Jacobian, bounds",
+  "lower": [
+   -9.0,
+   -7.0,
+   0.0,
+   -4.0
+  ],
+  "upper": [
+   -3.0,
+   -1.0,
+   6.0,
+   0.5
+  ]
+ },
+ "seconds": 674.0270974636078
+}

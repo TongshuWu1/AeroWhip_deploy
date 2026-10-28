@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "/home/tony-lab/Documents/PHD/AeroWhip_deploy/scripts/label_sequence.py", line 40, in <module>
+    main()
+  File "/home/tony-lab/Documents/PHD/AeroWhip_deploy/scripts/label_sequence.py", line 26, in main
+    labels, report = sl.label(flight)
+                     ^^^^^^^^^^^^^^^^
+  File "/home/tony-lab/Documents/PHD/AeroWhip_deploy/aerowhip/takes/sequence_labels.py", line 104, in label
+    P[c, seen] = flight.points[f][index[seen]]
+                 ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+IndexError: index 1035 is out of bounds for axis 0 with size 12
+2026-10-27_cf_2_strokes_01: 9.94 markers/frame, 5061/5317 complete, 234 uncertain marker-frames left unlabelled, 177 flagged; 134.2 s
+2026-10-27_cf_2_vertical_02: 9.49 markers/frame, 5766/6182 complete, 619 uncertain marker-frames left unlabelled, 99 flagged; 144.1 s
+2026-10-27_cf_2_random_high_01: 9.95 markers/frame, 5466/5686 complete, 156 uncertain marker-frames left unlabelled, 158 flagged; 163.8 s
+2026-10-27_cf_2_random_01: 9.99 markers/frame, 7941/7990 complete, 10 uncertain marker-frames left unlabelled, 14 flagged; 218.5 s
+2026-10-27_cf_2_whip_01: 9.80 markers/frame, 7837/8629 complete, 965 uncertain marker-frames left unlabelled, 406 flagged; 228.2 s
+2026-10-27_cf_2_decay_01: 9.88 markers/frame, 9729/10500 complete, 531 uncertain marker-frames left unlabelled, 406 flagged; 233.0 s
+2026-10-27_cf_2_vertical_01: 9.62 markers/frame, 5770/6191 complete, 1466 uncertain marker-frames left unlabelled, 248 flagged; 235.2 s
+2026-10-27_cf_2_figure8_01: 9.96 markers/frame, 9011/9211 complete, 214 uncertain marker-frames left unlabelled, 120 flagged; 242.4 s
+2026-10-27_cf_2_line_star_01: 9.67 markers/frame, 9967/11602 complete, 2078 uncertain marker-frames left unlabelled, 1147 flagged; 265.5 s

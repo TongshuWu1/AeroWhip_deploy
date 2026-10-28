@@ -1,0 +1,19 @@
+820 segments of 1.0 s from 15 flights, 249 held out; 0 dropped (failed at the start point)
+start: 25.72 mm
+double free or corruption (out)
+a worker process died; repeating the evaluation on new workers (restart 1)
+held out: 33.533 -> 23.047 mm
+best: 17.933 mm, x [-3.4976, -4.4296, 0.716, -0.7189, 0.7134, -0.9674, 0.7391, 0.5939, -0.9719, 0.8552, 1.0061, -3.9743, 4.3456] ± [0.2161, 0.0772, 0.1171, 0.0889, 0.3138, 0.7858, 0.7773, 0.4061, 0.8784, 0.8272, 1.2344, 3.1219, 3.6503] (95 %); 126 evaluations, 0 with failed segments; reproduced twice: True
+  correlated: log10 EI / static z P0 (0.01 N/m) +0.95
+  correlated: log10 EI / static z P1 (0.01 N/m) -0.92
+  correlated: log10 EI / static z P2 (0.01 N/m) +0.90
+  correlated: Cd / log10 linear drag -0.92
+  correlated: static x P0 (0.01 N/m) / static x P1 (0.01 N/m) -1.00
+  correlated: static x P0 (0.01 N/m) / static x P2 (0.01 N/m) +0.97
+  correlated: static x P1 (0.01 N/m) / static x P2 (0.01 N/m) -0.98
+  correlated: static y P0 (0.01 N/m) / static y P1 (0.01 N/m) -0.98
+  correlated: static y P0 (0.01 N/m) / static y P2 (0.01 N/m) +0.94
+  correlated: static y P1 (0.01 N/m) / static y P2 (0.01 N/m) -0.98
+  correlated: static z P0 (0.01 N/m) / static z P1 (0.01 N/m) -0.98
+  correlated: static z P0 (0.01 N/m) / static z P2 (0.01 N/m) +0.96
+  correlated: static z P1 (0.01 N/m) / static z P2 (0.01 N/m) -0.99

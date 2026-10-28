@@ -1,0 +1,18 @@
+fitted (drone pipeline + cab circle            drone   37.3 mm debiased (  244 raw)  cable shape  37.2 mm  tip  61.6 mm  failed 0  reproduced True
+fitted (drone pipeline + cab decay             drone   43.7 mm debiased (  200 raw)  cable shape  63.2 mm  tip 112.5 mm  failed 0  reproduced True
+fitted (drone pipeline + cab figure8           drone   32.5 mm debiased (  265 raw)  cable shape  32.5 mm  tip  52.0 mm  failed 0  reproduced True
+fitted (drone pipeline + cab line_star         drone   78.9 mm debiased (  420 raw)  cable shape  90.5 mm  tip 152.5 mm  failed 0  reproduced True
+fitted (drone pipeline + cab random            drone   30.1 mm debiased (  154 raw)  cable shape  45.3 mm  tip  79.2 mm  failed 0  reproduced True
+fitted (drone pipeline + cab random_high  HELD drone   54.7 mm debiased (  245 raw)  cable shape  60.0 mm  tip 107.5 mm  failed 0  reproduced True
+fitted (drone pipeline + cab strokes           drone   31.6 mm debiased (  273 raw)  cable shape  67.7 mm  tip 123.2 mm  failed 0  reproduced True
+fitted (drone pipeline + cab vertical          drone   38.2 mm debiased (  209 raw)  cable shape  25.7 mm  tip  40.1 mm  failed 0  reproduced True
+fitted (drone pipeline + cab whip         HELD drone   54.2 mm debiased (  273 raw)  cable shape  73.7 mm  tip 132.8 mm  failed 0  reproduced True
+unfitted (previous simulator circle            drone   46.2 mm debiased (  275 raw)  cable shape  53.6 mm  tip  88.9 mm  failed 0  reproduced True
+unfitted (previous simulator decay             drone   45.0 mm debiased (  215 raw)  cable shape  77.6 mm  tip 132.7 mm  failed 0  reproduced True
+unfitted (previous simulator figure8           drone   37.8 mm debiased (  295 raw)  cable shape  41.6 mm  tip  65.1 mm  failed 0  reproduced True
+unfitted (previous simulator line_star         drone  111.8 mm debiased (  465 raw)  cable shape 121.1 mm  tip 192.7 mm  failed 0  reproduced True
+unfitted (previous simulator random            drone   34.6 mm debiased (  175 raw)  cable shape  59.2 mm  tip 102.9 mm  failed 0  reproduced True
+unfitted (previous simulator random_high  HELD drone   49.2 mm debiased (  268 raw)  cable shape  74.3 mm  tip 129.3 mm  failed 0  reproduced True
+unfitted (previous simulator strokes           drone   39.4 mm debiased (  286 raw)  cable shape  83.9 mm  tip 148.4 mm  failed 0  reproduced True
+unfitted (previous simulator vertical          drone   53.8 mm debiased (  259 raw)  cable shape  28.0 mm  tip  44.2 mm  failed 0  reproduced True
+unfitted (previous simulator whip         HELD drone   62.9 mm debiased (  272 raw)  cable shape  73.5 mm  tip 123.6 mm  failed 0  reproduced True

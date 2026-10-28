@@ -1,0 +1,423 @@
+{
+ "setup": "cf_6",
+ "members": [
+  "adopted",
+  "sample 1",
+  "sample 2",
+  "sample 3",
+  "sample 4",
+  "damping/3",
+  "damping/10",
+  "drone slower",
+  "drone slower, damping/3"
+ ],
+ "candidates": [
+  {
+   "spec": {
+    "kind": "decay",
+    "level": 2.0,
+    "heading": 0.0,
+    "hold": 8.0
+   },
+   "feasible": false,
+   "passed": 0,
+   "members": 9,
+   "disagreement": 0.010243658562236777,
+   "novelty": 1.0,
+   "score": 0.0,
+   "duration_s": 26.389999999999418,
+   "rows": [
+    {
+     "label": "adopted",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07894251427471888,
+     "tilt": 13.060200759720939,
+     "error": 0.10375550054548799,
+     "motor": 0.28861454843753415
+    },
+    {
+     "label": "sample 1",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07906276147049773,
+     "tilt": 13.044622431572698,
+     "error": 0.10253418062295629,
+     "motor": 0.2488259947893067
+    },
+    {
+     "label": "sample 2",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07880863459044085,
+     "tilt": 13.079582663964665,
+     "error": 0.09916021968512949,
+     "motor": 0.2563944155930923
+    },
+    {
+     "label": "sample 3",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07925400426386076,
+     "tilt": 13.129933177460675,
+     "error": 0.10827294556684745,
+     "motor": 0.31569696658616586
+    },
+    {
+     "label": "sample 4",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07872996666508181,
+     "tilt": 13.10159643883763,
+     "error": 0.10843509891934028,
+     "motor": 0.31445423486999813
+    },
+    {
+     "label": "damping/3",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07829570592121438,
+     "tilt": 13.076030206100825,
+     "error": 0.10363780950308864,
+     "motor": 0.2871157559371264
+    },
+    {
+     "label": "damping/10",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07805711274694649,
+     "tilt": 13.086232192950373,
+     "error": 0.10362126276372119,
+     "motor": 0.28644661506911673
+    },
+    {
+     "label": "drone slower",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07909410850126175,
+     "tilt": 13.408640400742357,
+     "error": 0.12458771683100402,
+     "motor": 0.16070021861794
+    },
+    {
+     "label": "drone slower, damping/3",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07847543966965298,
+     "tilt": 13.422023792605314,
+     "error": 0.12439638736356458,
+     "motor": 0.1607289605788947
+    }
+   ],
+   "worst_rise": -0.07805711274694649
+  },
+  {
+   "spec": {
+    "kind": "decay",
+    "level": 3.0,
+    "heading": 0.0,
+    "hold": 8.0
+   },
+   "feasible": false,
+   "passed": 0,
+   "members": 9,
+   "disagreement": 0.012471351258166915,
+   "novelty": 0.3,
+   "score": 0.0,
+   "duration_s": 25.769999999999428,
+   "rows": [
+    {
+     "label": "adopted",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07764379502492891,
+     "tilt": 18.7811498152556,
+     "error": 0.11393942298967738,
+     "motor": 0.16061400948026583
+    },
+    {
+     "label": "sample 1",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07765779598589284,
+     "tilt": 18.732999222084825,
+     "error": 0.1124586753636508,
+     "motor": 0.16041295250046148
+    },
+    {
+     "label": "sample 2",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07733253834448961,
+     "tilt": 18.76526433033746,
+     "error": 0.10988402836770918,
+     "motor": 0.15992524048936654
+    },
+    {
+     "label": "sample 3",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.0781872559549015,
+     "tilt": 18.87722724150536,
+     "error": 0.11784452107747959,
+     "motor": 0.16029812418888004
+    },
+    {
+     "label": "sample 4",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07731608955016855,
+     "tilt": 18.871474174875498,
+     "error": 0.11755664568821216,
+     "motor": 0.162169617962934
+    },
+    {
+     "label": "damping/3",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07621874951444574,
+     "tilt": 18.80241171059112,
+     "error": 0.11458415694424745,
+     "motor": 0.16058527868262804
+    },
+    {
+     "label": "damping/10",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07555489302243612,
+     "tilt": 18.817733884726515,
+     "error": 0.11479630251250457,
+     "motor": 0.16061400948026583
+    },
+    {
+     "label": "drone slower",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.0777845872725107,
+     "tilt": 19.219127568829254,
+     "error": 0.13297872051988466,
+     "motor": 0.15103387468461388
+    },
+    {
+     "label": "drone slower, damping/3",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07646733314739218,
+     "tilt": 19.23902708873945,
+     "error": 0.1336072080426511,
+     "motor": 0.15095052135482212
+    }
+   ],
+   "worst_rise": -0.07555489302243612
+  },
+  {
+   "spec": {
+    "kind": "decay",
+    "level": 4.0,
+    "heading": 0.0,
+    "hold": 8.0
+   },
+   "feasible": false,
+   "passed": 0,
+   "members": 9,
+   "disagreement": 0.015088768720724812,
+   "novelty": 1.0,
+   "score": 0.0,
+   "duration_s": 25.399999999999437,
+   "rows": [
+    {
+     "label": "adopted",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.0754750994102813,
+     "tilt": 23.962770336829358,
+     "error": 0.1212382709305386,
+     "motor": 0.14509622137443917
+    },
+    {
+     "label": "sample 1",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07535085419899845,
+     "tilt": 23.878261397813183,
+     "error": 0.11891270237707158,
+     "motor": 0.13622133318686125
+    },
+    {
+     "label": "sample 2",
+     "ok": false,
+     "reason": "cable rise -0.07 m",
+     "rise": -0.07492596490940961,
+     "tilt": 23.912434245449717,
+     "error": 0.11645984677528633,
+     "motor": 0.13902184459161412
+    },
+    {
+     "label": "sample 3",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07624332744621265,
+     "tilt": 24.120264815002017,
+     "error": 0.1254827775968542,
+     "motor": 0.1438484072511598
+    },
+    {
+     "label": "sample 4",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07530202886252546,
+     "tilt": 24.149152293027882,
+     "error": 0.1257958503628551,
+     "motor": 0.14482445961322798
+    },
+    {
+     "label": "damping/3",
+     "ok": false,
+     "reason": "cable rise -0.07 m",
+     "rise": -0.07420287425612826,
+     "tilt": 23.962867542794452,
+     "error": 0.12162980708105882,
+     "motor": 0.14452584115420508
+    },
+    {
+     "label": "damping/10",
+     "ok": false,
+     "reason": "cable rise -0.07 m",
+     "rise": -0.07361990980989286,
+     "tilt": 23.97182557849669,
+     "error": 0.1217471099608796,
+     "motor": 0.14439021611739417
+    },
+    {
+     "label": "drone slower",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.0755770009075174,
+     "tilt": 24.47243996666712,
+     "error": 0.1392765844068548,
+     "motor": 0.13716898060836383
+    },
+    {
+     "label": "drone slower, damping/3",
+     "ok": false,
+     "reason": "cable rise -0.07 m",
+     "rise": -0.07430735510915976,
+     "tilt": 24.47063202240116,
+     "error": 0.13969757730908255,
+     "motor": 0.13687904320934158
+    }
+   ],
+   "worst_rise": -0.07361990980989286
+  },
+  {
+   "spec": {
+    "kind": "strokes",
+    "level": 2.0,
+    "heading": 0.0
+   },
+   "feasible": false,
+   "passed": 0,
+   "members": 9,
+   "disagreement": 0.014198449219608172,
+   "novelty": 1.0,
+   "score": 0.0,
+   "duration_s": 19.19999999999957,
+   "rows": [
+    {
+     "label": "adopted",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07857025472367396,
+     "tilt": 12.736999199129029,
+     "error": 0.1119676693370282,
+     "motor": 0.28861454843753415
+    },
+    {
+     "label": "sample 1",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.0787129952989496,
+     "tilt": 12.767852761396464,
+     "error": 0.11022220467181734,
+     "motor": 0.2488259947893067
+    },
+    {
+     "label": "sample 2",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07865346832781994,
+     "tilt": 12.75209431433887,
+     "error": 0.10640501470226842,
+     "motor": 0.2563944155930923
+    },
+    {
+     "label": "sample 3",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07888788060082574,
+     "tilt": 12.751565720251971,
+     "error": 0.11660558569946715,
+     "motor": 0.31569696658616586
+    },
+    {
+     "label": "sample 4",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07817512034029983,
+     "tilt": 12.690723409329118,
+     "error": 0.1173508127645055,
+     "motor": 0.31445423486999813
+    },
+    {
+     "label": "damping/3",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07789311140202271,
+     "tilt": 12.745022286070567,
+     "error": 0.11276275405080821,
+     "motor": 0.2871157559371264
+    },
+    {
+     "label": "damping/10",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07737724510976407,
+     "tilt": 12.746487349635833,
+     "error": 0.11310164819035948,
+     "motor": 0.28644661506911673
+    },
+    {
+     "label": "drone slower",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.07856978772574297,
+     "tilt": 13.088262364000338,
+     "error": 0.13353168815903096,
+     "motor": 0.16070021861794
+    },
+    {
+     "label": "drone slower, damping/3",
+     "ok": false,
+     "reason": "cable rise -0.08 m",
+     "rise": -0.0780845723555672,
+     "tilt": 13.094433694304609,
+     "error": 0.13430580633070777,
+     "motor": 0.1607289605788947
+    }
+   ],
+   "worst_rise": -0.07737724510976407
+  }
+ ],
+ "plan": {
+  "name": "trial_plan",
+  "setup": "cf_6",
+  "parts": [],
+  "planned": {
+   "members": 9,
+   "motion_s": 0.0,
+   "rise_margin_m": 0.1,
+   "step": 1.0
+  }
+ },
+ "seconds": 6
+}

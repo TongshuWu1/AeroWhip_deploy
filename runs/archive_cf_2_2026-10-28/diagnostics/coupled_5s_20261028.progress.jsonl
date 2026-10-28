@@ -1,0 +1,32 @@
+{"kind": "start", "stage": "coupled", "parameters": [], "x0": [], "unit": "m", "result": "runs/diagnostics/coupled_5s_20261028.json", "pid": 336692, "time": 1793194781.8721752}
+{"kind": "plan", "phases": ["loading flights", "segments", "segments, bias cancelled", "stroke test"], "evaluations": [3, 4, 4, 2], "time": 1793194781.8722315}
+{"kind": "phase", "index": 0, "label": "loading flights", "time": 1793194781.8722425}
+{"kind": "phase_done", "index": 0, "label": "loading flights", "value": null, "x": [], "time": 1793194785.6182096}
+{"kind": "phase", "index": 1, "label": "segments", "time": 1793194785.6182451}
+{"kind": "flight", "name": "decay", "role": "fit", "position_m": 0.28497185400734154, "tilt_deg": 1.096882213359725, "shape_m": 0.062481688074172474, "tip_m": 0.11254542556348823, "time": 1793194792.4377377}
+{"kind": "flight", "name": "line_star", "role": "fit", "position_m": 0.5810261702318597, "tilt_deg": 1.948117524883985, "shape_m": 0.042447883159018436, "tip_m": 0.07751883753496863, "time": 1793194792.4377844}
+{"kind": "flight", "name": "vertical", "role": "fit", "position_m": 0.33615681304024714, "tilt_deg": 0.8054940378821095, "shape_m": 0.01881250959778218, "tip_m": 0.031115003229693086, "time": 1793194792.4377928}
+{"kind": "flight", "name": "circle", "role": "fit", "position_m": 0.6974103378853544, "tilt_deg": 1.1103335109061854, "shape_m": 0.022436393287535356, "tip_m": 0.03727322797301436, "time": 1793194792.4377995}
+{"kind": "flight", "name": "figure8", "role": "fit", "position_m": 0.35456612471332316, "tilt_deg": 1.1551493588993527, "shape_m": 0.023885407519308354, "tip_m": 0.04101187367591925, "time": 1793194792.4378054}
+{"kind": "flight", "name": "strokes/001", "role": "fit", "position_m": 0.25901343279139843, "tilt_deg": 1.0633747295900808, "shape_m": 0.06123738247645799, "tip_m": 0.10977724509908289, "time": 1793194792.437811}
+{"kind": "flight", "name": "random", "role": "fit", "position_m": 0.31932102328419204, "tilt_deg": 1.0138093023925296, "shape_m": 0.03379819706981965, "tip_m": 0.05938583984093312, "time": 1793194792.4378173}
+{"kind": "flight", "name": "random_high/001", "role": "fit", "position_m": 0.4065964019222538, "tilt_deg": 1.1556989058227056, "shape_m": 0.038377515267845996, "tip_m": 0.06956944293861966, "time": 1793194792.437824}
+{"kind": "flight", "name": "whip/001", "role": "fit", "position_m": 0.5692746868917574, "tilt_deg": 1.3096014608538566, "shape_m": 0.07943769643733228, "tip_m": 0.13504337805190847, "time": 1793194792.4378302}
+{"kind": "flight", "name": "decay_x/001", "role": "fit", "position_m": 0.27993702643334994, "tilt_deg": 0.9443560829680792, "shape_m": 0.05924551266489802, "tip_m": 0.10202543392176676, "time": 1793194792.4378393}
+{"kind": "flight", "name": "line_star_xy/001", "role": "fit", "position_m": 0.8937280080080285, "tilt_deg": 1.8851883707410888, "shape_m": 0.05351676115346402, "tip_m": 0.09724693313062945, "time": 1793194792.437845}
+{"kind": "flight", "name": "decay_y/001", "role": "fit", "position_m": 0.34812146260939314, "tilt_deg": 0.9383733708197629, "shape_m": 0.04572777653383281, "tip_m": 0.07442005671196435, "time": 1793194792.4378507}
+{"kind": "flight", "name": "line_star_diag", "role": "fit", "position_m": 0.9561942452536569, "tilt_deg": 2.071292264157309, "shape_m": 0.06231041546343924, "tip_m": 0.11121020279860024, "time": 1793194792.4378562}
+{"kind": "flight", "name": "figure8_xy", "role": "fit", "position_m": 0.3219831160170298, "tilt_deg": 0.7632731831466474, "shape_m": 0.03144804121873088, "tip_m": 0.048042581133315526, "time": 1793194792.4378617}
+{"kind": "flight", "name": "figure8_xz", "role": "fit", "position_m": 0.35556704534875866, "tilt_deg": 0.7839129171990933, "shape_m": 0.030963339242856006, "tip_m": 0.05380906187031803, "time": 1793194792.437867}
+{"kind": "flight", "name": "strokes/002", "role": "held_out", "position_m": 0.35767092856193616, "tilt_deg": 1.0513258948722197, "shape_m": 0.06635763247041485, "tip_m": 0.11844340321789859, "time": 1793194794.8521488}
+{"kind": "flight", "name": "random_high/002", "role": "held_out", "position_m": 0.7241724610853362, "tilt_deg": 1.2728386736519495, "shape_m": 0.05295757325689505, "tip_m": 0.09030174242125014, "time": 1793194794.8521922}
+{"kind": "flight", "name": "whip/002", "role": "held_out", "position_m": 0.49367727344135726, "tilt_deg": 1.2460129562992448, "shape_m": 0.09487746443626849, "tip_m": 0.16216219639617535, "time": 1793194794.8522058}
+{"kind": "flight", "name": "decay_y/002", "role": "held_out", "position_m": 0.2671030688622123, "tilt_deg": 0.8498764945203013, "shape_m": 0.03944001039289177, "tip_m": 0.06861237610035965, "time": 1793194794.852212}
+{"kind": "flight", "name": "decay_x/002", "role": "held_out", "position_m": 0.09296563307670547, "tilt_deg": 0.8040467684239349, "shape_m": 0.03410054154430722, "tip_m": 0.05408030954732521, "time": 1793194794.8522217}
+{"kind": "flight", "name": "line_star_xy/002", "role": "held_out", "position_m": 0.6010706217408773, "tilt_deg": 1.3157512941134317, "shape_m": 0.03208148644012066, "tip_m": 0.048540715281385136, "time": 1793194794.8522265}
+{"kind": "phase_done", "index": 1, "label": "segments", "value": 0.04586636917656158, "x": [], "time": 1793194794.8522685}
+{"kind": "phase", "index": 2, "label": "segments, bias cancelled", "time": 1793194794.852278}
+{"kind": "phase_done", "index": 2, "label": "segments, bias cancelled", "value": 0.04468915807456362, "x": [], "time": 1793194803.9653654}
+{"kind": "phase", "index": 3, "label": "stroke test", "time": 1793194803.9653964}
+{"kind": "phase_done", "index": 3, "label": "stroke test", "value": 0.03153227820409947, "x": [], "time": 1793194808.0902328}
+{"kind": "done", "result": "runs/diagnostics/coupled_5s_20261028.json", "best": [], "value": NaN, "time": 1793194808.091203}

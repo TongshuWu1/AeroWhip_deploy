@@ -1,0 +1,27 @@
+257 fitting windows, 66 held out; cable cross-check 241 + 46 windows
+start x [1.375, 1.225, 0.0225, 0.0]: drone-only fit 64.9 mm debiased (278 raw), held out 57.7 (265); cable 60.8 (296), cable held out 54.2 (250)
+  iteration  0  best 64.854 mm  x [1.375, 1.345, 0.0225, 0.0]
+  iteration  1  best 64.854 mm  x [1.375, 1.345, 0.0225, 0.0]
+  iteration  2  best 63.744 mm  x [1.6562, 1.36, 0.0128, -0.006]
+  iteration  3  best 63.744 mm  x [1.6562, 1.36, 0.0128, -0.006]
+  iteration  4  best 63.744 mm  x [1.6562, 1.36, 0.0128, -0.006]
+  iteration  5  best 63.744 mm  x [1.6562, 1.36, 0.0128, -0.006]
+  iteration  6  best 63.744 mm  x [1.6562, 1.36, 0.0128, -0.006]
+  iteration  7  best 63.295 mm  x [1.7892, 1.4313, 0.0042, -0.0154]
+  iteration  8  best 63.295 mm  x [1.7892, 1.4313, 0.0042, -0.0154]
+  iteration  9  best 63.295 mm  x [1.7892, 1.4313, 0.0042, -0.0154]
+  iteration 10  best 63.295 mm  x [1.7892, 1.4313, 0.0042, -0.0154]
+  iteration 11  best 63.295 mm  x [1.7892, 1.4313, 0.0042, -0.0154]
+  iteration 12  best 63.295 mm  x [1.7892, 1.4313, 0.0042, -0.0154]
+  iteration 13  best 63.295 mm  x [1.7892, 1.4313, 0.0042, -0.0154]
+  iteration 14  best 63.295 mm  x [1.7892, 1.4313, 0.0042, -0.0154]
+  iteration 15  best 63.295 mm  x [1.7892, 1.4313, 0.0042, -0.0154]
+  iteration 16  best 63.295 mm  x [1.7892, 1.4313, 0.0042, -0.0154]
+  iteration 17  best 63.295 mm  x [1.7892, 1.4313, 0.0042, -0.0154]
+  iteration 18  best 63.295 mm  x [1.7892, 1.4313, 0.0042, -0.0154]
+  iteration 19  best 63.295 mm  x [1.7892, 1.4313, 0.0042, -0.0154]
+  iteration 20  best 63.295 mm  x [1.7892, 1.4313, 0.0042, -0.0154]
+  iteration 21  best 63.295 mm  x [1.7892, 1.4313, 0.0042, -0.0154]
+best x [1.7892, 1.4313, 0.0042, 0.0]: drone-only fit 63.3 mm debiased (272 raw), held out 58.0 (257); cable 58.2 (294), cable held out 53.8 (252)
+best x [1.7892, 1.4313, 0.0042, 0.0]: drone-only fit 63.3 mm debiased (272 raw), held out 58.0 (257); cable 58.2 (294), cable held out 53.8 (252)
+reproduced twice: True

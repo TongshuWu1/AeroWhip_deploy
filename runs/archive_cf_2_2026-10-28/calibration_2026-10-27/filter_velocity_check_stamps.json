@@ -1,0 +1,942 @@
+{
+ "snap_threshold_mps": 3.0,
+ "clock": "stamps",
+ "reference": "central differences of cable_labels.npz, uniform 10 ms clock",
+ "reproduced_twice": true,
+ "flights": {
+  "circle": {
+   "frames": 7889,
+   "compared_marker_frames": 77813,
+   "per_marker_rms_mps": [
+    0.17734138538988498,
+    0.17337377936220047,
+    0.2574355161616289,
+    0.25961734365686184,
+    0.2940792352642398,
+    0.2572592252163626,
+    0.2696645079509523,
+    0.17244778817630896,
+    0.47101517419689004,
+    0.16599883385376976
+   ],
+   "rms_mps": 0.26447624525928093,
+   "tip_speed_rms_by_lag_mps": {
+    "0": 0.13511025483308353,
+    "1": 0.11765600232235976,
+    "2": 0.1212373307464221,
+    "3": 0.09818306796682663,
+    "4": 0.09925691514716807,
+    "5": 0.08870861582330017,
+    "6": 0.0892733419910725,
+    "7": 0.09274938815338755
+   },
+   "best_lag_frames": 5,
+   "snaps": [
+    {
+     "frame": 6467,
+     "reference_peak_mps": 4.273587485941993,
+     "filter_peak_mps": 4.23221340627389,
+     "ratio": 0.9903186538700322,
+     "delay_frames": 0,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 6545,
+     "reference_peak_mps": 3.1312138221462944,
+     "filter_peak_mps": 3.1962752521438555,
+     "ratio": 1.0207783414653442,
+     "delay_frames": -9,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 6713,
+     "reference_peak_mps": 3.25476957709759,
+     "filter_peak_mps": 3.222870508458529,
+     "ratio": 0.990199285115751,
+     "delay_frames": 0,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 6749,
+     "reference_peak_mps": 3.43417020544993,
+     "filter_peak_mps": 3.3960573158776795,
+     "ratio": 0.9889018635384564,
+     "delay_frames": -6,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 6783,
+     "reference_peak_mps": 3.115593843876318,
+     "filter_peak_mps": 3.150151208763397,
+     "ratio": 1.0110917425758177,
+     "delay_frames": -10,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 6929,
+     "reference_peak_mps": 3.0980074241357154,
+     "filter_peak_mps": 3.0471669544379965,
+     "ratio": 0.9835893002380708,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 6983,
+     "reference_peak_mps": 3.16251086954654,
+     "filter_peak_mps": 3.1097532234895566,
+     "ratio": 0.9833177977141473,
+     "delay_frames": -8,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 7026,
+     "reference_peak_mps": 3.0846920429760862,
+     "filter_peak_mps": 3.0254461203589145,
+     "ratio": 0.9807935697334598,
+     "delay_frames": 0,
+     "tip_labelled_by_filter": true
+    }
+   ],
+   "held_out": false
+  },
+  "decay": {
+   "frames": 10500,
+   "compared_marker_frames": 102998,
+   "per_marker_rms_mps": [
+    0.06735757724410846,
+    0.0785419282662264,
+    0.062214872764857286,
+    0.08169359439828969,
+    0.10655129433665954,
+    0.10916569033997707,
+    0.11638996109485117,
+    0.12765567018491464,
+    0.23473927107551804,
+    0.13971408012711098
+   ],
+   "rms_mps": 0.12153103646616283,
+   "tip_speed_rms_by_lag_mps": {
+    "0": 0.116954347043411,
+    "1": 0.07635816661503056,
+    "2": 0.08885312090670743,
+    "3": 0.11994695107164258,
+    "4": 0.16159371868037142,
+    "5": 0.2082959493351558,
+    "6": 0.25709122927491296,
+    "7": 0.30756699529798626
+   },
+   "best_lag_frames": 1,
+   "snaps": [
+    {
+     "frame": 601,
+     "reference_peak_mps": 5.721201796825558,
+     "filter_peak_mps": 3.6784860945606273,
+     "ratio": 0.6429568865411558,
+     "delay_frames": -2,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 694,
+     "reference_peak_mps": 3.2169434250542897,
+     "filter_peak_mps": 3.2037027133028637,
+     "ratio": 0.995884070683897,
+     "delay_frames": 0,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 1276,
+     "reference_peak_mps": 3.320060240417331,
+     "filter_peak_mps": 3.309140823970696,
+     "ratio": 0.996711078819081,
+     "delay_frames": 2,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 1362,
+     "reference_peak_mps": 3.4279731620886436,
+     "filter_peak_mps": 3.4050192963787467,
+     "ratio": 0.9933039540788262,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 2383,
+     "reference_peak_mps": 5.363107774415876,
+     "filter_peak_mps": 5.214517358708166,
+     "ratio": 0.9722939717123449,
+     "delay_frames": 0,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 3004,
+     "reference_peak_mps": 3.7179093587660246,
+     "filter_peak_mps": 3.695886826635792,
+     "ratio": 0.9940766355483336,
+     "delay_frames": 2,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 3977,
+     "reference_peak_mps": 3.3083152812269883,
+     "filter_peak_mps": 3.2690659450199893,
+     "ratio": 0.9881361560581244,
+     "delay_frames": 2,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 4577,
+     "reference_peak_mps": 3.2168035376752506,
+     "filter_peak_mps": 3.191142878811778,
+     "ratio": 0.9920229325282274,
+     "delay_frames": 0,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 5557,
+     "reference_peak_mps": 3.0656320718572814,
+     "filter_peak_mps": 3.0590634910160848,
+     "ratio": 0.9978573486030836,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 6224,
+     "reference_peak_mps": 3.1537675881396203,
+     "filter_peak_mps": 3.141903740258959,
+     "ratio": 0.9962381984248688,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 7872,
+     "reference_peak_mps": 3.5956188618928984,
+     "filter_peak_mps": 3.559189249202057,
+     "ratio": 0.9898683330769761,
+     "delay_frames": 2,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 8786,
+     "reference_peak_mps": 3.821298862952229,
+     "filter_peak_mps": 3.778085522837614,
+     "ratio": 0.9886914523923864,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 9378,
+     "reference_peak_mps": 3.649400635720882,
+     "filter_peak_mps": 3.6264050492092434,
+     "ratio": 0.9936988045964166,
+     "delay_frames": 4,
+     "tip_labelled_by_filter": true
+    }
+   ],
+   "held_out": false
+  },
+  "figure8": {
+   "frames": 9211,
+   "compared_marker_frames": 91465,
+   "per_marker_rms_mps": [
+    0.05361933428664725,
+    0.07471186517900037,
+    0.054043314368593054,
+    0.0526060637222246,
+    0.09664660711568103,
+    0.08098175014837286,
+    0.10823653578276177,
+    0.09171148950617487,
+    0.118642759548184,
+    0.3180027647856396
+   ],
+   "rms_mps": 0.12798886127247472,
+   "tip_speed_rms_by_lag_mps": {
+    "0": 0.2571468699997939,
+    "1": 0.2476295502293234,
+    "2": 0.24953480558865196,
+    "3": 0.26766362321646237,
+    "4": 0.2691133590128872,
+    "5": 0.2780669493851197,
+    "6": 0.2846376496132688,
+    "7": 0.30512384038001866
+   },
+   "best_lag_frames": 1,
+   "snaps": [
+    {
+     "frame": 3953,
+     "reference_peak_mps": 3.436546231320044,
+     "filter_peak_mps": 3.430471338143388,
+     "ratio": 0.9982322678736893,
+     "delay_frames": 3,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 4073,
+     "reference_peak_mps": 3.309939576487764,
+     "filter_peak_mps": 3.310119390052072,
+     "ratio": 1.00005432533137,
+     "delay_frames": 2,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 4179,
+     "reference_peak_mps": 3.083885536137812,
+     "filter_peak_mps": 3.0816016354976896,
+     "ratio": 0.999259408102746,
+     "delay_frames": 2,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 5804,
+     "reference_peak_mps": 4.166275314954594,
+     "filter_peak_mps": 4.162773676659826,
+     "ratio": 0.9991595278684058,
+     "delay_frames": 3,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 6198,
+     "reference_peak_mps": 4.32306893306133,
+     "filter_peak_mps": 4.302528065937212,
+     "ratio": 0.9952485450863324,
+     "delay_frames": 2,
+     "tip_labelled_by_filter": true
+    }
+   ],
+   "held_out": false
+  },
+  "line_star": {
+   "frames": 11602,
+   "compared_marker_frames": 110782,
+   "per_marker_rms_mps": [
+    0.12534468990054062,
+    0.13238619500285428,
+    0.20606843041662945,
+    0.1425189784144286,
+    0.20209378412603987,
+    0.22521440585242913,
+    0.260905184183219,
+    0.23903441131617154,
+    0.26127285227084057,
+    0.19747015903271997
+   ],
+   "rms_mps": 0.2046871087274984,
+   "tip_speed_rms_by_lag_mps": {
+    "0": 0.12809047214324396,
+    "1": 0.09388901953870495,
+    "2": 0.10342269631400393,
+    "3": 0.12430994828360112,
+    "4": 0.16367594479897368,
+    "5": 0.20859474800634148,
+    "6": 0.2595456619996035,
+    "7": 0.30603716778692003
+   },
+   "best_lag_frames": 1,
+   "snaps": [
+    {
+     "frame": 1296,
+     "reference_peak_mps": 3.1118402915316863,
+     "filter_peak_mps": 3.0985801155539208,
+     "ratio": 0.9957387993163239,
+     "delay_frames": -4,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 1434,
+     "reference_peak_mps": 4.235897189498347,
+     "filter_peak_mps": 4.2322718910510115,
+     "ratio": 0.9991441486218495,
+     "delay_frames": 6,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 1574,
+     "reference_peak_mps": 5.0958365358398225,
+     "filter_peak_mps": 5.083069759750911,
+     "ratio": 0.9974946653019341,
+     "delay_frames": 0,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 1679,
+     "reference_peak_mps": 6.274752983185873,
+     "filter_peak_mps": 6.2297298741206175,
+     "ratio": 0.992824720082862,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 4024,
+     "reference_peak_mps": 3.113414524280375,
+     "filter_peak_mps": 3.1086859682031855,
+     "ratio": 0.998481231445311,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 4171,
+     "reference_peak_mps": 4.2705737319475,
+     "filter_peak_mps": 4.236124629636191,
+     "ratio": 0.9919333783998155,
+     "delay_frames": -2,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 4298,
+     "reference_peak_mps": 5.224882773804597,
+     "filter_peak_mps": 5.219986538083978,
+     "ratio": 0.9990629003687571,
+     "delay_frames": 2,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 5112,
+     "reference_peak_mps": 3.3913566606890524,
+     "filter_peak_mps": 3.4275502661828243,
+     "ratio": 1.010672308788194,
+     "delay_frames": -10,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 6819,
+     "reference_peak_mps": 4.151957369723346,
+     "filter_peak_mps": 4.16202302268787,
+     "ratio": 1.0024243151044672,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 6955,
+     "reference_peak_mps": 5.323591362980446,
+     "filter_peak_mps": 5.319987607371276,
+     "ratio": 0.9993230593102562,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 7076,
+     "reference_peak_mps": 5.9878376731504686,
+     "filter_peak_mps": 5.983980472856761,
+     "ratio": 0.9993558275116569,
+     "delay_frames": 0,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 9410,
+     "reference_peak_mps": 3.0759632637598253,
+     "filter_peak_mps": 3.0755626554782056,
+     "ratio": 0.9998697616820267,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 9555,
+     "reference_peak_mps": 4.1836766127414755,
+     "filter_peak_mps": 4.183489352760917,
+     "ratio": 0.9999552403309596,
+     "delay_frames": -2,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 9685,
+     "reference_peak_mps": 5.2702110963413995,
+     "filter_peak_mps": 5.255512658209943,
+     "ratio": 0.9972110342711584,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 9804,
+     "reference_peak_mps": 5.975502070956046,
+     "filter_peak_mps": 5.964070966228115,
+     "ratio": 0.9980870051433013,
+     "delay_frames": 3,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 10339,
+     "reference_peak_mps": 3.5689914541786183,
+     "filter_peak_mps": 3.771389090984922,
+     "ratio": 1.056710036828285,
+     "delay_frames": 10,
+     "tip_labelled_by_filter": true
+    }
+   ],
+   "held_out": false
+  },
+  "random": {
+   "frames": 7990,
+   "compared_marker_frames": 79762,
+   "per_marker_rms_mps": [
+    0.05321574399080102,
+    0.0630704831486586,
+    0.046048668360130704,
+    0.07094639679384536,
+    0.06328761366407375,
+    0.08346667986259465,
+    0.09850481304444214,
+    0.08204629741591082,
+    0.10846994243196927,
+    0.10635760387590007
+   ],
+   "rms_mps": 0.08024475858979112,
+   "tip_speed_rms_by_lag_mps": {
+    "0": 0.08033381099464619,
+    "1": 0.06137697390368178,
+    "2": 0.06645488755415847,
+    "3": 0.08274275449289543,
+    "4": 0.10844784148201642,
+    "5": 0.13807328285327247,
+    "6": 0.16876141435180145,
+    "7": 0.20004389334411277
+   },
+   "best_lag_frames": 1,
+   "snaps": [
+    {
+     "frame": 5910,
+     "reference_peak_mps": 3.015804204519915,
+     "filter_peak_mps": 3.0029234844492376,
+     "ratio": 0.9957289269471233,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 5982,
+     "reference_peak_mps": 3.0947495859923784,
+     "filter_peak_mps": 3.078770007067776,
+     "ratio": 0.9948365518822816,
+     "delay_frames": 2,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 6392,
+     "reference_peak_mps": 5.894597102432022,
+     "filter_peak_mps": 3.046584208778889,
+     "ratio": 0.5168435019115919,
+     "delay_frames": -1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 6944,
+     "reference_peak_mps": 3.3098376093095574,
+     "filter_peak_mps": 3.296356181817673,
+     "ratio": 0.995926861349945,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    }
+   ],
+   "held_out": false
+  },
+  "random_high": {
+   "frames": 5686,
+   "compared_marker_frames": 56447,
+   "per_marker_rms_mps": [
+    0.08167814240359025,
+    0.08878914942242956,
+    0.08084245056778457,
+    0.10517652473329293,
+    0.10359098155810041,
+    0.11480307734273648,
+    0.11989819001019515,
+    0.13340737377589845,
+    0.155784518627664,
+    0.18356101246732617
+   ],
+   "rms_mps": 0.12059760002356332,
+   "tip_speed_rms_by_lag_mps": {
+    "0": 0.11100859897278392,
+    "1": 0.07048511240632348,
+    "2": 0.07994118009071324,
+    "3": 0.1196882165927545,
+    "4": 0.17181922139353675,
+    "5": 0.22573710909274994,
+    "6": 0.28296827001570984,
+    "7": 0.33799759962743847
+   },
+   "best_lag_frames": 1,
+   "snaps": [
+    {
+     "frame": 1326,
+     "reference_peak_mps": 3.1010119316120033,
+     "filter_peak_mps": 3.019535290707211,
+     "ratio": 0.9737257892901953,
+     "delay_frames": 0,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 1437,
+     "reference_peak_mps": 3.011660671456863,
+     "filter_peak_mps": 3.0061361935441777,
+     "ratio": 0.9981656373292503,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 1606,
+     "reference_peak_mps": 3.1942800440787904,
+     "filter_peak_mps": 3.165038776493081,
+     "ratio": 0.9908457407671836,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 1844,
+     "reference_peak_mps": 3.5371669454522503,
+     "filter_peak_mps": 3.511934044736495,
+     "ratio": 0.9928663529019468,
+     "delay_frames": 2,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 2023,
+     "reference_peak_mps": 4.117213863767584,
+     "filter_peak_mps": 4.022303781271229,
+     "ratio": 0.9769479833604017,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 2129,
+     "reference_peak_mps": 3.0965545369006513,
+     "filter_peak_mps": 4.192995328179129,
+     "ratio": 1.3540841209843208,
+     "delay_frames": -10,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 2385,
+     "reference_peak_mps": 3.4618275520308632,
+     "filter_peak_mps": 3.454163876125893,
+     "ratio": 0.9977862340657395,
+     "delay_frames": 4,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 3214,
+     "reference_peak_mps": 3.8733480349692315,
+     "filter_peak_mps": 3.850107493177524,
+     "ratio": 0.9939998828966857,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 3749,
+     "reference_peak_mps": 3.0476671406175564,
+     "filter_peak_mps": 2.9741396078342435,
+     "ratio": 0.9758741590236741,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 4130,
+     "reference_peak_mps": 3.1954733608653356,
+     "filter_peak_mps": 3.174101550783416,
+     "ratio": 0.9933118484592429,
+     "delay_frames": 3,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 4466,
+     "reference_peak_mps": 3.372984583421632,
+     "filter_peak_mps": 3.346967517314857,
+     "ratio": 0.9922866335545528,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 4557,
+     "reference_peak_mps": 4.2750263157084785,
+     "filter_peak_mps": 3.023499491675863,
+     "ratio": 0.7072469894667288,
+     "delay_frames": -2,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 4608,
+     "reference_peak_mps": 4.171983940525182,
+     "filter_peak_mps": 4.102127798808276,
+     "ratio": 0.983255893907369,
+     "delay_frames": 3,
+     "tip_labelled_by_filter": true
+    }
+   ],
+   "held_out": true
+  },
+  "strokes": {
+   "frames": 5317,
+   "compared_marker_frames": 52696,
+   "per_marker_rms_mps": [
+    0.05319210584154124,
+    0.05885190282648548,
+    0.05798671031617064,
+    0.07863880399762033,
+    0.0779117428644929,
+    0.09963029290394203,
+    0.11151055752698197,
+    0.12600115228807063,
+    0.14159064271585792,
+    0.12894052046406038
+   ],
+   "rms_mps": 0.09812728525180531,
+   "tip_speed_rms_by_lag_mps": {
+    "0": 0.09566904179050116,
+    "1": 0.0402917564487811,
+    "2": 0.04835336497563355,
+    "3": 0.09631788398664591,
+    "4": 0.1523033325963147,
+    "5": 0.20948499355199549,
+    "6": 0.26702395276618884,
+    "7": 0.32464317460682474
+   },
+   "best_lag_frames": 1,
+   "snaps": [
+    {
+     "frame": 635,
+     "reference_peak_mps": 3.1250079999897578,
+     "filter_peak_mps": 3.125599592196923,
+     "ratio": 1.0001893090216623,
+     "delay_frames": 3,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 718,
+     "reference_peak_mps": 3.4819570646405134,
+     "filter_peak_mps": 3.45485405014734,
+     "ratio": 0.9922161548835837,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 871,
+     "reference_peak_mps": 3.542079191661304,
+     "filter_peak_mps": 3.5363468166841563,
+     "ratio": 0.9983816355685545,
+     "delay_frames": 5,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 1249,
+     "reference_peak_mps": 3.385310177812367,
+     "filter_peak_mps": 3.3671041663169006,
+     "ratio": 0.9946220551325576,
+     "delay_frames": 0,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 1330,
+     "reference_peak_mps": 3.524308442801228,
+     "filter_peak_mps": 3.516806694680656,
+     "ratio": 0.9978714269076263,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 1481,
+     "reference_peak_mps": 3.5732128400082743,
+     "filter_peak_mps": 3.5461370005705106,
+     "ratio": 0.9924225506147848,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 2367,
+     "reference_peak_mps": 3.998193341998358,
+     "filter_peak_mps": 3.985101147540979,
+     "ratio": 0.9967254723977818,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 2923,
+     "reference_peak_mps": 3.819371676074483,
+     "filter_peak_mps": 3.791373970128538,
+     "ratio": 0.9926695518738515,
+     "delay_frames": -1,
+     "tip_labelled_by_filter": true
+    }
+   ],
+   "held_out": false
+  },
+  "vertical": {
+   "frames": 6191,
+   "compared_marker_frames": 59177,
+   "per_marker_rms_mps": [
+    0.0978850991975533,
+    0.15240926270825375,
+    0.24114087231427786,
+    0.16989177926951834,
+    0.22268412976567176,
+    0.21048753283553348,
+    0.25681865494614226,
+    0.08690891228486589,
+    0.17394606619209382,
+    0.12481415944215177
+   ],
+   "rms_mps": 0.18265455638442774,
+   "tip_speed_rms_by_lag_mps": {
+    "0": 0.0950076411153373,
+    "1": 0.11256031610229998,
+    "2": 0.0989244278787747,
+    "3": 0.11826195863860725,
+    "4": 0.1177522720905254,
+    "5": 0.1226243116208229,
+    "6": 0.11557807160648206,
+    "7": 0.13274197651281938
+   },
+   "best_lag_frames": 0,
+   "snaps": [],
+   "held_out": false
+  },
+  "whip": {
+   "frames": 8629,
+   "compared_marker_frames": 83933,
+   "per_marker_rms_mps": [
+    0.08138644015506111,
+    0.12141694682077549,
+    0.2918308749995003,
+    0.1209455805226243,
+    0.23985993810948936,
+    0.14528723477786254,
+    0.17453994313926716,
+    0.18867995338655213,
+    0.192750061855079,
+    0.1840190580042516
+   ],
+   "rms_mps": 0.18348028824411391,
+   "tip_speed_rms_by_lag_mps": {
+    "0": 0.1528755078837283,
+    "1": 0.1251153323568312,
+    "2": 0.12557528142812382,
+    "3": 0.15208019024233255,
+    "4": 0.19113847524687896,
+    "5": 0.2351741028693217,
+    "6": 0.28742107038673886,
+    "7": 0.3389870217452254
+   },
+   "best_lag_frames": 1,
+   "snaps": [
+    {
+     "frame": 1080,
+     "reference_peak_mps": 3.718134612947732,
+     "filter_peak_mps": 3.688839270550189,
+     "ratio": 0.992120957026266,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 1806,
+     "reference_peak_mps": 3.5951808021294305,
+     "filter_peak_mps": 3.558352660327847,
+     "ratio": 0.9897562476469138,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 2005,
+     "reference_peak_mps": 3.193982623622113,
+     "filter_peak_mps": 2.3921686943690172,
+     "ratio": 0.7489610859736598,
+     "delay_frames": 10,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 2349,
+     "reference_peak_mps": 5.1043559828836385,
+     "filter_peak_mps": 4.790785885327454,
+     "ratio": 0.9385681369779705,
+     "delay_frames": 10,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 2540,
+     "reference_peak_mps": 3.10042335818836,
+     "filter_peak_mps": 3.53070974636051,
+     "ratio": 1.1387831074861903,
+     "delay_frames": -10,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 2587,
+     "reference_peak_mps": 5.60120745911094,
+     "filter_peak_mps": 4.225101676567544,
+     "ratio": 0.7543197975456134,
+     "delay_frames": 0,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 2735,
+     "reference_peak_mps": 5.0806348028568245,
+     "filter_peak_mps": 3.341944738461952,
+     "ratio": 0.657780940401933,
+     "delay_frames": -6,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 3526,
+     "reference_peak_mps": 3.7561316537097045,
+     "filter_peak_mps": 3.717636785773717,
+     "ratio": 0.9897514593510138,
+     "delay_frames": 2,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 3589,
+     "reference_peak_mps": 3.058059024937225,
+     "filter_peak_mps": 3.0358283730252325,
+     "ratio": 0.9927304699710795,
+     "delay_frames": 3,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 4202,
+     "reference_peak_mps": 3.1447893411165126,
+     "filter_peak_mps": 3.074393499278538,
+     "ratio": 0.9776150850813486,
+     "delay_frames": 2,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 4303,
+     "reference_peak_mps": 3.200742101450851,
+     "filter_peak_mps": 3.1690580081477706,
+     "ratio": 0.9901010164834216,
+     "delay_frames": 3,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 4971,
+     "reference_peak_mps": 3.646292637734934,
+     "filter_peak_mps": 3.6139732668566933,
+     "ratio": 0.9911363749185207,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 5034,
+     "reference_peak_mps": 3.6091654159930093,
+     "filter_peak_mps": 3.568469470251302,
+     "ratio": 0.9887242780390794,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 6050,
+     "reference_peak_mps": 3.5269533594874805,
+     "filter_peak_mps": 3.487620217962508,
+     "ratio": 0.9888478418862086,
+     "delay_frames": 1,
+     "tip_labelled_by_filter": true
+    },
+    {
+     "frame": 7194,
+     "reference_peak_mps": 3.6280780035715887,
+     "filter_peak_mps": 3.2956649983739927,
+     "ratio": 0.9083776575723128,
+     "delay_frames": 9,
+     "tip_labelled_by_filter": true
+    }
+   ],
+   "held_out": true
+  }
+ }
+}

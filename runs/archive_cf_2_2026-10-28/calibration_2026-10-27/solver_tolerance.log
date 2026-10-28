@@ -1,0 +1,22 @@
+whip/002 x1        2e-11: drone max 0.0000 mm, marker max 0.0000 mm, peak tip speed 0.0000 %, shift <= 0 frames, failed 0; 6.9 s vs 6.3 s
+whip/002 x1        1e-07: drone max 0.0040 mm, marker max 0.0050 mm, peak tip speed 0.0002 %, shift <= 0 frames, failed 0; 3.6 s vs 6.3 s
+whip/002 x1        1e-05: drone max 0.0061 mm, marker max 0.0068 mm, peak tip speed 0.0010 %, shift <= 0 frames, failed 0; 4.3 s vs 6.3 s
+whip/002 x1        1e-04: drone max 0.0169 mm, marker max 0.0329 mm, peak tip speed 0.0018 %, shift <= 0 frames, failed 0; 2.1 s vs 6.3 s
+whip/002 x1.5      2e-11: drone max 0.0000 mm, marker max 0.0000 mm, peak tip speed 0.0000 %, shift <= 0 frames, failed 0; 5.5 s vs 7.7 s
+whip/002 x1.5      1e-07: drone max 0.0026 mm, marker max 0.0034 mm, peak tip speed 0.0002 %, shift <= 0 frames, failed 0; 4.0 s vs 7.7 s
+whip/002 x1.5      1e-05: drone max 0.0074 mm, marker max 0.0161 mm, peak tip speed 0.0008 %, shift <= 0 frames, failed 0; 3.3 s vs 7.7 s
+whip/002 x1.5      1e-04: drone max 0.0199 mm, marker max 0.0480 mm, peak tip speed 0.0018 %, shift <= 0 frames, failed 0; 3.8 s vs 7.7 s
+strokes/002 x1     2e-11: drone max 0.0000 mm, marker max 0.0000 mm, peak tip speed 0.0000 %, shift <= 0 frames, failed 0; 4.3 s vs 3.2 s
+strokes/002 x1     1e-07: drone max 0.0018 mm, marker max 0.0025 mm, peak tip speed 0.0001 %, shift <= 0 frames, failed 0; 2.4 s vs 3.2 s
+strokes/002 x1     1e-05: drone max 0.0032 mm, marker max 0.0050 mm, peak tip speed 0.0009 %, shift <= 0 frames, failed 0; 2.1 s vs 3.2 s
+strokes/002 x1     1e-04: drone max 0.0107 mm, marker max 0.0252 mm, peak tip speed 0.0015 %, shift <= 0 frames, failed 0; 2.2 s vs 3.2 s
+strokes/002 x1.5   2e-11: drone max 0.0000 mm, marker max 0.0000 mm, peak tip speed 0.0000 %, shift <= 0 frames, failed 0; 3.3 s vs 4.1 s
+strokes/002 x1.5   1e-07: drone max 0.0018 mm, marker max 0.0037 mm, peak tip speed 0.0002 %, shift <= 0 frames, failed 0; 3.1 s vs 4.1 s
+strokes/002 x1.5   1e-05: drone max 0.0046 mm, marker max 0.0072 mm, peak tip speed 0.0008 %, shift <= 0 frames, failed 0; 2.6 s vs 4.1 s
+strokes/002 x1.5   1e-04: drone max 0.0186 mm, marker max 0.0515 mm, peak tip speed 0.0014 %, shift <= 0 frames, failed 0; 1.0 s vs 4.1 s
+cable segments     1e-13: marker max 0.0000 mm (median 0.000000), RMS error 27.727 mm, failed 0 of 1069; 81.3 s
+cable segments     2e-11: marker max 0.0000 mm (median 0.000000), RMS error 27.727 mm, failed 0 of 1069; 68.7 s
+cable segments     1e-07: marker max 0.0000 mm (median 0.000000), RMS error 27.727 mm, failed 0 of 1069; 58.7 s
+cable segments     1e-05: marker max 0.0017 mm (median 0.000031), RMS error 27.727 mm, failed 0 of 1069; 48.4 s
+cable segments     1e-04: marker max 0.0151 mm (median 0.000241), RMS error 27.727 mm, failed 0 of 1069; 42.1 s
+written to runs/calibration_2026-10-27/solver_tolerance.json (381 s)

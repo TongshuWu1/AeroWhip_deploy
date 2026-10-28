@@ -1,0 +1,11 @@
+820 segments of 1.0 s from 15 flights, 249 held out; 0 dropped (failed at the start point)
+start: 18.80 mm
+held out: 25.096 -> 24.833 mm
+best: 18.726 mm, x [-4.4184, 0.7512, -0.7204, 0.7457, -1.0422, 0.7714, 0.565, -0.9511, 0.8784, -0.2043] ± [0.1039, 0.116, 0.0967, 0.3537, 0.8723, 0.9181, 0.493, 1.0647, 1.0031, 0.2725] (95 %); 61 evaluations, 0 with failed segments; reproduced twice: True
+  correlated: Cd / log10 linear drag -0.91
+  correlated: static x P0 (0.01 N/m) / static x P1 (0.01 N/m) -1.00
+  correlated: static x P0 (0.01 N/m) / static x P2 (0.01 N/m) +0.96
+  correlated: static x P1 (0.01 N/m) / static x P2 (0.01 N/m) -0.97
+  correlated: static y P0 (0.01 N/m) / static y P1 (0.01 N/m) -0.99
+  correlated: static y P0 (0.01 N/m) / static y P2 (0.01 N/m) +0.94
+  correlated: static y P1 (0.01 N/m) / static y P2 (0.01 N/m) -0.98

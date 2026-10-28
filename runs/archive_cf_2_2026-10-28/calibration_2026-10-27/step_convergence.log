@@ -1,0 +1,8 @@
+whip x1        step 2.0 ms vs 0.5: drone max 1.32 mm, marker max 1.53 mm (median 0.26), peak tip speed max 0.06 %, shift <= 1 frames, fastest peaks [6.13, 6.05, 5.83, 5.27, 5.26] m/s; failed 0; cost 0.7 s vs 2.2 s
+whip x1        step 1.0 ms vs 0.5: drone max 0.29 mm, marker max 0.33 mm (median 0.06), peak tip speed max 0.01 %, shift <= 1 frames, fastest peaks [6.13, 6.05, 5.83, 5.27, 5.26] m/s; failed 0; cost 1.2 s vs 2.2 s
+whip x1.5      step 2.0 ms vs 0.5: drone max 2.11 mm, marker max 2.77 mm (median 0.26), peak tip speed max 0.09 %, shift <= 0 frames, fastest peaks [7.52, 7.3, 7.29, 7.25, 6.94] m/s; failed 0; cost 0.7 s vs 2.2 s
+whip x1.5      step 1.0 ms vs 0.5: drone max 0.43 mm, marker max 0.61 mm (median 0.07), peak tip speed max 0.02 %, shift <= 0 frames, fastest peaks [7.52, 7.3, 7.29, 7.25, 6.94] m/s; failed 0; cost 1.2 s vs 2.2 s
+strokes x1     step 2.0 ms vs 0.5: drone max 1.03 mm, marker max 1.27 mm (median 0.23), peak tip speed max 0.06 %, shift <= 0 frames, fastest peaks [5.72, 3.43, 3.36, 3.32, 3.29] m/s; failed 0; cost 0.6 s vs 1.9 s
+strokes x1     step 1.0 ms vs 0.5: drone max 0.20 mm, marker max 0.24 mm (median 0.06), peak tip speed max 0.01 %, shift <= 0 frames, fastest peaks [5.72, 3.43, 3.36, 3.32, 3.29] m/s; failed 0; cost 1.1 s vs 1.9 s
+strokes x1.5   step 2.0 ms vs 0.5: drone max 1.23 mm, marker max 1.88 mm (median 0.24), peak tip speed max 0.04 %, shift <= 0 frames, fastest peaks [6.67, 4.68, 4.43, 4.16, 4.13] m/s; failed 0; cost 0.6 s vs 1.9 s
+strokes x1.5   step 1.0 ms vs 0.5: drone max 0.26 mm, marker max 0.39 mm (median 0.05), peak tip speed max 0.01 %, shift <= 0 frames, fastest peaks [6.67, 4.68, 4.43, 4.16, 4.13] m/s; failed 0; cost 1.1 s vs 1.9 s

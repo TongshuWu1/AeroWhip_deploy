@@ -1,0 +1,5 @@
+45 segments of 0.6 s from 5 flights, 26 held out; 0 dropped (failed at the start point)
+start: 13.64 mm
+held out: 14.129 -> 13.377 mm
+best: 12.279 mm, x [-3.264, -4.9157, 0.0, -0.3989] ± [0.1812, 0.438, 1.0604, 0.2637] (95 %); 40 evaluations, 0 with failed segments; reproduced twice: True
+  correlated: Cd / log10 linear drag -0.98

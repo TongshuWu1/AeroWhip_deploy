@@ -1,0 +1,12 @@
+820 segments of 1.0 s from 15 flights, 249 held out; 0 dropped (failed at the start point)
+start: 18.01 mm
+malloc(): unaligned tcache chunk detected
+a worker process died; repeating the evaluation on new workers (restart 1)
+held out: 23.253 -> 23.138 mm
+best: 17.971 mm, x [-3.9111, -4.3742, 0.7448, -0.7557, 1.2487, -2.1915, 1.7373, 0.4829, -0.8144, 0.7155, -0.9776, 3.9972, 15.0] ± [0.2576, 0.0842, 0.1034, 0.0816, 0.9077, 2.0692, 1.6187, 0.4442, 1.0011, 0.9063, 0.2534, 9.1653, 24.0868] (95 %); 154 evaluations, 0 with failed segments; reproduced twice: True
+  correlated: static x P0 (0.01 N/m) / static x P1 (0.01 N/m) -1.00
+  correlated: static x P0 (0.01 N/m) / static x P2 (0.01 N/m) +0.99
+  correlated: static x P1 (0.01 N/m) / static x P2 (0.01 N/m) -0.99
+  correlated: static y P0 (0.01 N/m) / static y P1 (0.01 N/m) -0.98
+  correlated: static y P0 (0.01 N/m) / static y P2 (0.01 N/m) +0.95
+  correlated: static y P1 (0.01 N/m) / static y P2 (0.01 N/m) -0.98

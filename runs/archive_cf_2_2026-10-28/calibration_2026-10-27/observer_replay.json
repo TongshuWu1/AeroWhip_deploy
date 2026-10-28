@@ -1,0 +1,151 @@
+{
+ "model": "/home/tony-lab/Documents/PHD/AeroWhip_deploy/configs/simulation.json",
+ "reference": "central differences of the recorded poses, 10 ms clock",
+ "reproduced_twice": true,
+ "flights": {
+  "circle": {
+   "frames": 7889,
+   "seconds_per_frame": 0.0003767235653441961,
+   "velocity_rms_mps": 0.01593557290173105,
+   "velocity_rms_by_lag_mps": {
+    "0": 0.01593557290173105,
+    "1": 0.0243093145569664,
+    "2": 0.04349430906648171,
+    "3": 0.06347404818330378
+   },
+   "velocity_rms_fast_mps": 0.02548196893352098,
+   "body_rate_rms_radps": 0.2920058258348285,
+   "all_markers_labelled": 0.975282038281151,
+   "initialized": 1.0,
+   "held_out": false
+  },
+  "decay": {
+   "frames": 10500,
+   "seconds_per_frame": 0.00047911851295170244,
+   "velocity_rms_mps": 0.03373431893671375,
+   "velocity_rms_by_lag_mps": {
+    "0": 0.03373431893671375,
+    "1": 0.03682980929964309,
+    "2": 0.04587231831801559,
+    "3": 0.06000342406679966
+   },
+   "velocity_rms_fast_mps": 0.11108937699955601,
+   "body_rate_rms_radps": 0.24027898810761733,
+   "all_markers_labelled": 0.9573333333333334,
+   "initialized": 1.0,
+   "held_out": false
+  },
+  "figure8": {
+   "frames": 9211,
+   "seconds_per_frame": 0.00039768529193388483,
+   "velocity_rms_mps": 0.022410650220379042,
+   "velocity_rms_by_lag_mps": {
+    "0": 0.022410650220379042,
+    "1": 0.02433603159072794,
+    "2": 0.03350623770440559,
+    "3": 0.04456737883073181
+   },
+   "velocity_rms_fast_mps": 0.04794507488955404,
+   "body_rate_rms_radps": 0.29063087600809795,
+   "all_markers_labelled": 0.9854521767451959,
+   "initialized": 1.0,
+   "held_out": false
+  },
+  "line_star": {
+   "frames": 11602,
+   "seconds_per_frame": 0.0004646911619545894,
+   "velocity_rms_mps": 0.04284185109843939,
+   "velocity_rms_by_lag_mps": {
+    "0": 0.04284185109843939,
+    "1": 0.05231391655893913,
+    "2": 0.07961099637091189,
+    "3": 0.11412805481072678
+   },
+   "velocity_rms_fast_mps": 0.06702900376306507,
+   "body_rate_rms_radps": 0.32276334435158266,
+   "all_markers_labelled": 0.9233752801241165,
+   "initialized": 1.0,
+   "held_out": false
+  },
+  "random": {
+   "frames": 7990,
+   "seconds_per_frame": 0.0003940000694621155,
+   "velocity_rms_mps": 0.01835088611022343,
+   "velocity_rms_by_lag_mps": {
+    "0": 0.01835088611022343,
+    "1": 0.019691842194668987,
+    "2": 0.02856839669934861,
+    "3": 0.03903950495958008
+   },
+   "velocity_rms_fast_mps": 0.6175306084415857,
+   "body_rate_rms_radps": 0.3329521637339246,
+   "all_markers_labelled": 0.9947434292866083,
+   "initialized": 1.0,
+   "held_out": false
+  },
+  "random_high": {
+   "frames": 5686,
+   "seconds_per_frame": 0.00044366204396858327,
+   "velocity_rms_mps": 0.02482183511975342,
+   "velocity_rms_by_lag_mps": {
+    "0": 0.02482183511975342,
+    "1": 0.03397218940794258,
+    "2": 0.054605729590064433,
+    "3": 0.07776420735028464
+   },
+   "velocity_rms_fast_mps": 0.053200056091830907,
+   "body_rate_rms_radps": 0.34529686549602767,
+   "all_markers_labelled": 0.9845233907843827,
+   "initialized": 1.0,
+   "held_out": true
+  },
+  "strokes": {
+   "frames": 5317,
+   "seconds_per_frame": 0.00039646284653061556,
+   "velocity_rms_mps": 0.01907008844274581,
+   "velocity_rms_by_lag_mps": {
+    "0": 0.01907008844274581,
+    "1": 0.024218969115715316,
+    "2": 0.03897136255216509,
+    "3": 0.055171926022952136
+   },
+   "velocity_rms_fast_mps": 0.046546931550139045,
+   "body_rate_rms_radps": 0.29516041185183023,
+   "all_markers_labelled": 0.9862704532631184,
+   "initialized": 1.0,
+   "held_out": false
+  },
+  "vertical": {
+   "frames": 6191,
+   "seconds_per_frame": 0.00038268367872876404,
+   "velocity_rms_mps": 0.03644501481569159,
+   "velocity_rms_by_lag_mps": {
+    "0": 0.03644501481569159,
+    "1": 0.03303932294526691,
+    "2": 0.06761918228216525,
+    "3": 0.10032033609630005
+   },
+   "velocity_rms_fast_mps": 0.024119858895100484,
+   "body_rate_rms_radps": 0.35940549599357824,
+   "all_markers_labelled": 0.9323211112905831,
+   "initialized": 1.0,
+   "held_out": false
+  },
+  "whip": {
+   "frames": 8629,
+   "seconds_per_frame": 0.0003906180586396369,
+   "velocity_rms_mps": 0.05545845634080036,
+   "velocity_rms_by_lag_mps": {
+    "0": 0.05545845634080036,
+    "1": 0.05922046127347689,
+    "2": 0.07372318964671244,
+    "3": 0.09157384367999667
+   },
+   "velocity_rms_fast_mps": 0.17695386418897982,
+   "body_rate_rms_radps": 0.3398248875302172,
+   "all_markers_labelled": 0.9626839726503651,
+   "initialized": 1.0,
+   "held_out": true
+  }
+ }
+}

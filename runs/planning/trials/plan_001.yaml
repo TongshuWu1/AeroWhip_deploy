@@ -1,0 +1,19 @@
+name: plan_001
+setup: cf_6
+parts:
+- kind: circle
+  level: 2.0
+  heading: 90.0
+- kind: whip
+  level: 2.0
+  heading: 0.0
+  stroke_length: 1.1
+- kind: whip
+  level: 2.0
+  heading: 90.0
+  stroke_length: 1.1
+planned:
+  members: 9
+  motion_s: 77.6
+  rise_margin_m: 0.04
+  step: 1.0

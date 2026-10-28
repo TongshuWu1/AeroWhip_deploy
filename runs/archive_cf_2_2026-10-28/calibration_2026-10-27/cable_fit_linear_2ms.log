@@ -1,0 +1,21 @@
+241 fitting windows, 46 held out
+start: fit 30.06 mm, held out 56.59 mm
+  iteration  0  best 30.056 mm  x [-6.4419, -3.5204, 0.6894, -1.2794]
+  iteration  1  best 30.056 mm  x [-6.4419, -3.5204, 0.6894, -1.2794]
+  iteration  2  best 30.056 mm  x [-6.4419, -3.5204, 0.6894, -1.2794]
+  iteration  3  best 30.056 mm  x [-6.4419, -3.5204, 0.6894, -1.2794]
+  iteration  4  best 30.056 mm  x [-6.4419, -3.5204, 0.6894, -1.2794]
+  iteration  5  best 30.056 mm  x [-6.4419, -3.5204, 0.6894, -1.2794]
+  iteration  6  best 30.056 mm  x [-6.4419, -3.5204, 0.6894, -1.2794]
+  iteration  7  best 30.056 mm  x [-6.4419, -3.5204, 0.6894, -1.2794]
+  iteration  8  best 30.056 mm  x [-6.4419, -3.5204, 0.6894, -1.2794]
+  iteration  9  best 30.056 mm  x [-6.4419, -3.5204, 0.6894, -1.2794]
+  iteration 10  best 30.056 mm  x [-6.4419, -3.5204, 0.6894, -1.2794]
+  iteration 11  best 30.056 mm  x [-6.4419, -3.5204, 0.6894, -1.2794]
+  iteration 12  best 30.056 mm  x [-6.4419, -3.5204, 0.6894, -1.2794]
+  iteration 13  best 30.047 mm  x [-6.7596, -3.5504, 0.6519, -1.0828]
+  iteration 14  best 30.045 mm  x [-6.7121, -3.4997, 0.6859, -1.2566]
+best {'EI_n_m2': np.float64(1.9403051033633057e-07), 'Cb_n_m2_s': np.float64(0.00031645253901014056), 'normal_drag_coefficient': np.float64(0.6858653140176088), 'external_drag_s_inv': np.float64(0.055384719639999115)}
+fit 30.04 mm {'circle': 21.21, 'decay': 43.7, 'figure8': 19.03, 'line_star': 28.93, 'random': 31.83, 'strokes': 48.63, 'vertical': 20.98}
+held out 57.01 mm {'random_high': 35.09, 'whip': 68.5}
+reproduced: True

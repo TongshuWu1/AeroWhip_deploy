@@ -1,0 +1,8 @@
+name: trial_plan
+setup: cf_6
+parts: []
+planned:
+  members: 9
+  motion_s: 0.0
+  rise_margin_m: 0.1
+  step: 1.0

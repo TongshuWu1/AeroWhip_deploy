@@ -1,0 +1,3 @@
+OpenMP threads: 24
+  24 lanes:     4336 lane-steps/s (10 ms each) =   43.4 simulated s per s; 0 lanes failed
+  96 lanes:     7245 lane-steps/s (10 ms each) =   72.5 simulated s per s; 0 lanes failed

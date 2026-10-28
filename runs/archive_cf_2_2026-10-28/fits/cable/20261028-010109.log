@@ -1,0 +1,17 @@
+820 segments of 1.0 s from 15 flights, 249 held out; 0 dropped (failed at the start point)
+start: 31.31 mm
+munmap_chunk(): invalid pointer
+a worker process died; repeating the evaluation on new workers (restart 1)
+double free or corruption (out)
+a worker process died; repeating the evaluation on new workers (restart 2)
+held out: 38.891 -> 24.830 mm
+best: 18.698 mm, x [-4.4648, 0.5701, -0.7116, 0.7541, -1.0675, 0.8014, 0.5536, -0.9163, 0.8417, -0.1777, -0.9522, 0.5578, 0.0, 0.0] ± [0.0964, 18.3304, 0.0985, 0.3532, 0.8726, 0.9237, 0.4829, 1.0363, 0.9803, 0.2466, 33.142, 31.9616, 3.1871, 0.8947] (95 %); 128 evaluations, 0 with failed segments; reproduced twice: True
+  correlated: Cd / normal drag log, clamp -1.00
+  correlated: Cd / normal drag log, tip -1.00
+  correlated: static x P0 (0.01 N/m) / static x P1 (0.01 N/m) -1.00
+  correlated: static x P0 (0.01 N/m) / static x P2 (0.01 N/m) +0.96
+  correlated: static x P1 (0.01 N/m) / static x P2 (0.01 N/m) -0.97
+  correlated: static y P0 (0.01 N/m) / static y P1 (0.01 N/m) -0.99
+  correlated: static y P0 (0.01 N/m) / static y P2 (0.01 N/m) +0.94
+  correlated: static y P1 (0.01 N/m) / static y P2 (0.01 N/m) -0.98
+  correlated: normal drag log, clamp / normal drag log, tip +1.00

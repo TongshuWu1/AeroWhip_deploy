@@ -1,0 +1,209 @@
+{
+ "physics": {
+  "drone": {
+   "mass_kg": 0.156,
+   "body_drag_s_inv": [
+    0.5882839370528116,
+    0.5882839370528116,
+    0.4770170246070864
+   ],
+   "tracking_origin": "top_plate_center",
+   "center_of_mass_tracking_m": [
+    0,
+    0,
+    -0.025
+   ],
+   "inertia_body_about_com_kg_m2": [
+    [
+     0.00013013000000001095,
+     0.0,
+     0.0
+    ],
+    [
+     0.0,
+     0.00013013000000001095,
+     0.0
+    ],
+    [
+     0.0,
+     0.0,
+     0.00026000000000000003
+    ]
+   ],
+   "initial_inertia_box_size_m": [
+    0.1,
+    0.1,
+    0.036
+   ],
+   "upper_plate_thickness_m": 0.006,
+   "plate_gap_m": 0.025,
+   "lower_plate_thickness_m": 0.005,
+   "battery_thickness_m": 0.015
+  },
+  "attachment": {
+   "type": "point_clamp_der_halfcell_v1",
+   "position_tracking_m": [
+    0,
+    0,
+    -0.055
+   ],
+   "transmit_direct_moment": true,
+   "tangent_body": [
+    0,
+    0,
+    -1
+   ]
+  },
+  "cable": {
+   "total_mass_kg": 0.016,
+   "diameter_m": 0.0035,
+   "marker_interval_lengths_m": [
+    0.0832,
+    0.1001,
+    0.0993,
+    0.1017,
+    0.1003,
+    0.0989,
+    0.1012,
+    0.0989,
+    0.1001,
+    0.0969
+   ],
+   "moving_marker_masses_kg": [
+    0.0009604520191835018,
+    0.0009604520191835018,
+    0.0009604520191835018,
+    0.0009604520191835018,
+    0.0009604520191835018,
+    0.0009604520191835018,
+    0.0009604520191835018,
+    0.0009604520191835018,
+    0.0009604520191835018,
+    0.0009604520191835018
+   ],
+   "EI_n_m2": 0.00014026047478221668,
+   "Cb_n_m2_s": 4.1466527641485895e-05,
+   "Cb_saturation_rate_rad_s": null,
+   "external_drag_s_inv": 0.1775548971730099,
+   "normal_drag_coefficient": 0.7459902144309993,
+   "constitutive_model": "der_twist_free_kelvin_voigt_v2",
+   "residual": {
+    "frame": "body",
+    "static_n_per_m": [
+     [
+      0.020122638547862948,
+      -0.05259876837766761,
+      0.037355333342245
+     ],
+     [
+      0.02838961005780969,
+      -0.08408012152871774,
+      0.06034249497876344
+     ],
+     [
+      -0.009521575248962516,
+      0.0,
+      0.0
+     ]
+    ]
+   }
+  },
+  "simulation": {
+   "timestep_s": 0.01,
+   "air_density_kg_m3": 1.2,
+   "gravity_world_m_s2": [
+    0,
+    0,
+    -9.80665
+   ],
+   "physics_timestep_s": 0.002,
+   "solver_tolerance": 1e-07,
+   "fit_solver_tolerance": 1e-07,
+   "segments_per_marker_interval": [
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "constraint_iterations": 4
+  }
+ },
+ "controller": {
+  "attitude_frequency_rad_s": [
+   20.0,
+   20.0,
+   15.0
+  ],
+  "attitude_damping_ratio": [
+   1.0,
+   1.0,
+   1.0
+  ],
+  "controller_period_s": 0.002,
+  "command_delay_s": 0.005
+ },
+ "actuator": {
+  "calibration_status": "calibrated",
+  "allocation": "inverse_clip",
+  "motor_positions_com_m": [
+   [
+    0.049,
+    -0.049,
+    0.008
+   ],
+   [
+    -0.049,
+    -0.049,
+    0.008
+   ],
+   [
+    -0.049,
+    0.049,
+    0.008
+   ],
+   [
+    0.049,
+    0.049,
+    0.008
+   ]
+  ],
+  "yaw_torque_per_thrust_m": [
+   -0.01,
+   0.01,
+   -0.01,
+   0.01
+  ],
+  "minimum_thrust_n": [
+   0,
+   0,
+   0,
+   0
+  ],
+  "maximum_thrust_n": [
+   0.85,
+   0.85,
+   0.85,
+   0.85
+  ],
+  "response_time_s": [
+   0.019614425554816906,
+   0.019614425554816906,
+   0.019614425554816906,
+   0.019614425554816906
+  ],
+  "initial_thrust_n": [
+   0.3971693249999999,
+   0.3971693249999999,
+   0.3971693249999999,
+   0.3971693249999999
+  ],
+  "motor_layout": "crazyflie legacy mixer: M1 front-right, M2 rear-right, M3 rear-left, M4 front-left; x forward, y left",
+  "calibration_note": "drone cf_6 from 2026-10-28 (cf_2 before): arm measured 2026-10-27 on the same frame: adjacent motor centres 9.8 cm (square), so +-0.049 m per body axis (arm 0.0693 m); propeller plane 0.015 m below the tracking origin on cf_6 (0.010 on cf_2), and 0.008 m above the centre of mass on both (centre of mass taken 0.025 m below the origin on cf_6 (user's assumption, 2026-10-28; 0.018 on cf_2): on the centre line, not measured); response time from stage 2 on cf_2, to be refitted on cf_6"
+ }
+}

@@ -1,0 +1,330 @@
+{
+ "summary": {
+  "flights": 14,
+  "failed": [],
+  "nonfinite": [],
+  "over_budget": [],
+  "reasons": {
+   "no usable window at the newest frames": 410,
+   "no cable on this flight": 354,
+   "no usable window": 324,
+   "phase link-landing": 22,
+   "not explained by the model": 20,
+   "cable over the drone": 8,
+   "the step promised 4 % less error and gave none": 5,
+   "the step promised 2 % less error and gave none": 5,
+   "improbable step": 5,
+   "4 outliers agree: applied as a change": 4,
+   "the step promised 1 % less error and gave none": 3,
+   "the step promised 13 % less error and gave none": 1
+  }
+ },
+ "flights": [
+  {
+   "flight": "cf_6/hover_start/001",
+   "ok": true,
+   "wall_s": 6.3,
+   "updates": 13,
+   "finite": true,
+   "median_s": 0.427,
+   "max_s": 0.576,
+   "max_distance_sd": 0.8951066343710062,
+   "status": {
+    "cable accepted": 13,
+    "drone accepted": 13
+   },
+   "reasons": {}
+  },
+  {
+   "flight": "cf_6/hover_trim/001",
+   "ok": true,
+   "wall_s": 6.2,
+   "updates": 18,
+   "finite": true,
+   "median_s": 0.413,
+   "max_s": 0.568,
+   "max_distance_sd": 0.7345743773450344,
+   "status": {
+    "cable gated": 4,
+    "drone gated": 4,
+    "cable accepted": 14,
+    "drone accepted": 14
+   },
+   "reasons": {
+    "no usable window": 4,
+    "no usable window at the newest frames": 4
+   }
+  },
+  {
+   "flight": "cf_6/mix_a/001",
+   "ok": true,
+   "wall_s": 2.8,
+   "updates": 42,
+   "finite": true,
+   "median_s": 0.404,
+   "max_s": 0.534,
+   "max_distance_sd": 0.4010622241507078,
+   "status": {
+    "cable accepted": 5,
+    "drone accepted": 5,
+    "cable gated": 37,
+    "drone gated": 37
+   },
+   "reasons": {
+    "no usable window": 54,
+    "no usable window at the newest frames": 20
+   }
+  },
+  {
+   "flight": "cf_6/mix_a/002",
+   "ok": true,
+   "wall_s": 9.7,
+   "updates": 31,
+   "finite": true,
+   "median_s": 0.442,
+   "max_s": 0.773,
+   "max_distance_sd": 1.653927599098339,
+   "status": {
+    "cable accepted": 17,
+    "drone accepted": 17,
+    "cable gated": 14,
+    "drone gated": 14
+   },
+   "reasons": {
+    "no usable window at the newest frames": 20,
+    "cable over the drone": 8
+   }
+  },
+  {
+   "flight": "cf_6_nocable/battery_check/001",
+   "ok": true,
+   "wall_s": 4.3,
+   "updates": 58,
+   "finite": true,
+   "median_s": 0.123,
+   "max_s": 0.136,
+   "max_distance_sd": 2.1303338589648986,
+   "status": {
+    "drone accepted": 31,
+    "cable skipped": 37,
+    "cable gated": 21,
+    "drone gated": 21,
+    "drone no gain": 6
+   },
+   "reasons": {
+    "no usable window at the newest frames": 42,
+    "no cable on this flight": 37,
+    "the step promised 4 % less error and gave none": 2,
+    "the step promised 1 % less error and gave none": 1,
+    "the step promised 13 % less error and gave none": 1,
+    "the step promised 7 % less error and gave none": 1
+   }
+  },
+  {
+   "flight": "cf_6_nocable/battery_run/001",
+   "ok": true,
+   "wall_s": 5.7,
+   "updates": 67,
+   "finite": true,
+   "median_s": 0.126,
+   "max_s": 0.132,
+   "max_distance_sd": 1.5993196497903743,
+   "status": {
+    "cable gated": 23,
+    "drone gated": 23,
+    "drone accepted": 40,
+    "cable skipped": 44,
+    "drone outlier": 3,
+    "drone no gain": 1
+   },
+   "reasons": {
+    "no cable on this flight": 44,
+    "no usable window at the newest frames": 34,
+    "phase link-landing": 8,
+    "no usable window": 4,
+    "not explained by the model": 3,
+    "the step promised 3 % less error and gave none": 1
+   }
+  },
+  {
+   "flight": "cf_6_nocable/battery_run_hover/001",
+   "ok": true,
+   "wall_s": 7.7,
+   "updates": 92,
+   "finite": true,
+   "median_s": 0.106,
+   "max_s": 0.144,
+   "max_distance_sd": 2.2037845528396436,
+   "status": {
+    "drone accepted": 59,
+    "cable skipped": 64,
+    "drone no gain": 5,
+    "cable gated": 28,
+    "drone gated": 28
+   },
+   "reasons": {
+    "no cable on this flight": 64,
+    "no usable window at the newest frames": 42,
+    "phase link-landing": 14,
+    "the step promised 4 % less error and gave none": 2,
+    "the step promised 8 % less error and gave none": 1,
+    "the step promised 2 % less error and gave none": 1
+   }
+  },
+  {
+   "flight": "cf_6_nocable/hover_trim/001",
+   "ok": true,
+   "wall_s": 0.9,
+   "updates": 18,
+   "finite": true,
+   "median_s": 0.0,
+   "max_s": 0.0,
+   "max_distance_sd": 0.7574385454648768,
+   "status": {
+    "drone accepted": 7,
+    "cable skipped": 7,
+    "cable gated": 11,
+    "drone gated": 11
+   },
+   "reasons": {
+    "no usable window at the newest frames": 12,
+    "no usable window": 10,
+    "no cable on this flight": 7
+   }
+  },
+  {
+   "flight": "cf_6_nocable/tune_cf6_baseline/001",
+   "ok": true,
+   "wall_s": 0.3,
+   "updates": 28,
+   "finite": true,
+   "median_s": 0.0,
+   "max_s": 0.0,
+   "max_distance_sd": 0.0,
+   "status": {
+    "cable gated": 28,
+    "drone gated": 28
+   },
+   "reasons": {
+    "no usable window": 56
+   }
+  },
+  {
+   "flight": "cf_6_nocable/tune_cf6_damping/001",
+   "ok": true,
+   "wall_s": 6.8,
+   "updates": 97,
+   "finite": true,
+   "median_s": 0.11599999999999999,
+   "max_s": 0.129,
+   "max_distance_sd": 1.3477814934548977,
+   "status": {
+    "cable gated": 36,
+    "drone gated": 36,
+    "drone accepted": 53,
+    "cable skipped": 61,
+    "drone no gain": 5,
+    "drone outlier": 3
+   },
+   "reasons": {
+    "no usable window at the newest frames": 64,
+    "no cable on this flight": 61,
+    "no usable window": 8,
+    "not explained by the model": 3,
+    "the step promised 1 % less error and gave none": 2,
+    "the step promised 2 % less error and gave none": 1
+   }
+  },
+  {
+   "flight": "cf_6_nocable/tune_cf6_estimator/002",
+   "ok": true,
+   "wall_s": 0.4,
+   "updates": 73,
+   "finite": true,
+   "median_s": 0.0,
+   "max_s": 0.0,
+   "max_distance_sd": 0.0,
+   "status": {
+    "cable gated": 73,
+    "drone gated": 73
+   },
+   "reasons": {
+    "no usable window": 146
+   }
+  },
+  {
+   "flight": "cf_6_nocable/tune_cf6_integral/001",
+   "ok": true,
+   "wall_s": 4.2,
+   "updates": 66,
+   "finite": true,
+   "median_s": 0.1215,
+   "max_s": 0.13,
+   "max_distance_sd": 1.7615174109397183,
+   "status": {
+    "drone accepted": 36,
+    "cable skipped": 36,
+    "cable gated": 30,
+    "drone gated": 30
+   },
+   "reasons": {
+    "no usable window at the newest frames": 52,
+    "no cable on this flight": 36,
+    "no usable window": 8
+   }
+  },
+  {
+   "flight": "cf_6_nocable/tune_cf6_stiffness/001",
+   "ok": true,
+   "wall_s": 7.9,
+   "updates": 97,
+   "finite": true,
+   "median_s": 0.121,
+   "max_s": 0.142,
+   "max_distance_sd": 11.072982940004435,
+   "status": {
+    "drone accepted": 34,
+    "cable skipped": 67,
+    "cable gated": 30,
+    "drone gated": 30,
+    "drone outlier": 18,
+    "drone no gain": 11,
+    "drone change": 4
+   },
+   "reasons": {
+    "no cable on this flight": 67,
+    "no usable window at the newest frames": 56,
+    "not explained by the model": 13,
+    "improbable step": 5,
+    "4 outliers agree: applied as a change": 4,
+    "no usable window": 4
+   }
+  },
+  {
+   "flight": "cf_6_nocable/tune_compare_tune/001",
+   "ok": true,
+   "wall_s": 4.4,
+   "updates": 85,
+   "finite": true,
+   "median_s": 0.11,
+   "max_s": 0.125,
+   "max_distance_sd": 3.8056831237942985,
+   "status": {
+    "cable gated": 47,
+    "drone gated": 47,
+    "drone accepted": 32,
+    "cable skipped": 38,
+    "drone no gain": 5,
+    "drone outlier": 1
+   },
+   "reasons": {
+    "no usable window at the newest frames": 64,
+    "no cable on this flight": 38,
+    "no usable window": 30,
+    "the step promised 2 % less error and gave none": 3,
+    "not explained by the model": 1,
+    "the step promised 4 % less error and gave none": 1
+   }
+  }
+ ]
+}

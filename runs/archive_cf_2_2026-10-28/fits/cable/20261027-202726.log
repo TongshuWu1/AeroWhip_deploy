@@ -1,0 +1,5 @@
+1069 segments of 1.0 s from 21 flights, 0 held out; 0 dropped (failed at the start point)
+start: 32.95 mm
+a worker process died; repeating the evaluation on new workers (restart 1)
+best: 27.879 mm, x [-3.2432, -4.3838, 0.6424, -0.6517] ± [0.0719, 0.0907, 0.1482, 0.092] (95 %); 41 evaluations, 0 with failed segments; reproduced twice: True
+  correlated: Cd / log10 linear drag -0.94

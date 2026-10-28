@@ -1,0 +1,6 @@
+1610 segments of 1.0 s from 22 flights, 0 held out; 0 dropped (failed at the start point)
+start: 59.56 mm (bias removed per flight)
+delay    0 ms: 57.314 mm  x [0.6445, 0.0224, 0.5624, 0.475]  (30 evaluations, 0 with failed segments)
+delay   10 ms: 55.133 mm  x [0.6445, 0.018, 0.6055, 0.4791]  (27 evaluations, 0 with failed segments)
+delay   20 ms: 53.819 mm  x [0.6445, 0.0141, 0.6505, 0.4949]  (26 evaluations, 0 with failed segments)
+delay   30 ms: 53.493 mm  x [0.692, 0.0096, 0.6971, 0.5146]  (31 evaluations, 0 with failed segments)

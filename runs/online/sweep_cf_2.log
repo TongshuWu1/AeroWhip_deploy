@@ -1,0 +1,93 @@
+71 flights
+cf_2/circle/001                            77 upd  0.74/0.82 s  max  3.6 sd  cable accepted:66 cable gated:11 drone accepted:61 drone gated:16
+cf_2/decay/001                            104 upd  0.75/0.85 s  max  2.2 sd  cable accepted:58 cable gated:46 drone accepted:47 drone gated:57
+cf_2/decay_x/001                           55 upd  0.75/0.86 s  max  1.6 sd  cable accepted:42 cable gated:13 drone accepted:39 drone gated:16
+cf_2/decay_x/002                           55 upd  0.74/0.78 s  max  1.1 sd  cable accepted:13 cable gated:42 drone accepted:13 drone gated:42
+cf_2/decay_y/001                           55 upd  0.73/0.81 s  max  4.8 sd  cable accepted:39 cable gated:16 drone accepted:29 drone gated:26
+cf_2/decay_y/002                           55 upd  0.73/0.78 s  max  3.8 sd  cable accepted:41 cable gated:14 drone accepted:38 drone gated:17
+cf_2/figure8/001                           90 upd  0.73/0.89 s  max  4.2 sd  cable accepted:81 cable gated:6 cable outlier:3 drone accepted:68 drone gated:22
+cf_2/figure8_xy/002                        67 upd  0.72/0.78 s  max  4.6 sd  cable accepted:50 cable gated:17 drone accepted:38 drone gated:29
+cf_2/figure8_xz/001                        56 upd  0.72/0.77 s  max  2.1 sd  cable accepted:42 cable gated:14 drone accepted:38 drone gated:18
+cf_2/hover_start/001                       13 upd  0.11/0.12 s  max  0.1 sd  cable gated:8 cable skipped:5 drone accepted:4 drone gated:9
+cf_2/hover_start/002                       13 upd  0.71/0.73 s  max  0.8 sd  cable accepted:13 drone accepted:12 drone gated:1
+cf_2/hover_start/003                       13 upd  0.71/0.74 s  max  0.7 sd  cable accepted:13 drone accepted:12 drone gated:1
+cf_2/hover_start/004                       13 upd  0.69/0.71 s  max  0.3 sd  cable accepted:9 cable gated:4 drone accepted:6 drone gated:7
+cf_2/line_star/001                        114 upd  0.72/0.79 s  max  2.7 sd  cable accepted:76 cable gated:38 drone accepted:69 drone gated:44 drone outlier:1
+cf_2/line_star_diag/001                    60 upd  0.72/0.77 s  max  1.4 sd  cable accepted:35 cable gated:25 drone accepted:33 drone gated:27
+cf_2/line_star_xy/001                      36 upd  0.72/0.82 s  max  1.9 sd  cable accepted:25 cable gated:11 drone accepted:21 drone gated:14 drone outlier:1
+cf_2/line_star_xy/002                      60 upd  0.73/0.86 s  max  1.8 sd  cable accepted:28 cable gated:31 cable outlier:1 drone accepted:26 drone gated:34
+cf_2/random/001                            78 upd  0.74/0.84 s  max  5.6 sd  cable accepted:67 cable gated:11 drone accepted:56 drone gated:22
+cf_2/random_high/001                       55 upd  0.72/0.82 s  max  3.2 sd  cable accepted:39 cable gated:16 drone accepted:33 drone gated:20 drone outlier:2
+cf_2/random_high/002                       55 upd  0.73/0.82 s  max  2.4 sd  cable accepted:49 cable gated:6 drone accepted:43 drone gated:10 drone outlier:2
+cf_2/strokes/001                           51 upd  0.73/0.81 s  max  2.8 sd  cable accepted:42 cable gated:9 drone accepted:34 drone gated:17
+cf_2/strokes/002                           51 upd  0.73/0.83 s  max  2.6 sd  cable accepted:44 cable gated:7 drone accepted:38 drone gated:13
+cf_2/vertical/001                          60 upd  0.72/0.77 s  max  3.6 sd  cable accepted:56 cable gated:3 cable outlier:1 drone accepted:48 drone gated:11 drone outlier:1
+cf_2/vertical/002                          60 upd  0.73/0.85 s  max  2.3 sd  cable accepted:50 cable gated:9 cable outlier:1 drone accepted:47 drone gated:12 drone outlier:1
+cf_2/whip/001                              85 upd  0.73/0.80 s  max  3.1 sd  cable accepted:47 cable gated:38 drone accepted:44 drone gated:41
+cf_2/whip/002                              85 upd  0.73/0.80 s  max  2.2 sd  cable accepted:68 cable gated:17 drone accepted:60 drone gated:25
+cf_2_nocable/circle/001                    77 upd  0.13/0.15 s  max  2.3 sd  cable gated:5 cable skipped:72 drone accepted:68 drone gated:5 drone no gain:4
+cf_2_nocable/circle/002                     5 upd  0.11/0.11 s  max  2.9 sd  cable skipped:5 drone accepted:2 drone outlier:3
+cf_2_nocable/circle/003                    75 upd  0.13/0.15 s  max  2.3 sd  cable gated:6 cable skipped:69 drone accepted:62 drone gated:6 drone no gain:7
+cf_2_nocable/decay/001                    133 upd  0.12/0.13 s  max  1.7 sd  cable gated:32 cable skipped:101 drone accepted:97 drone gated:32 drone no gain:2 drone outlier:2
+cf_2_nocable/decay/002                    133 upd  0.12/0.14 s  max  1.5 sd  cable gated:37 cable skipped:96 drone accepted:92 drone gated:37 drone no gain:3 drone outlier:1
+cf_2_nocable/decay/003                    129 upd  0.12/0.13 s  max 14.9 sd  cable gated:29 cable skipped:100 drone accepted:89 drone change:1 drone gated:29 drone no gain:7 drone outlier:3
+cf_2_nocable/figure8/001                  126 upd  0.12/0.15 s  max  2.3 sd  cable gated:3 cable skipped:123 drone accepted:122 drone gated:3 drone no gain:1
+cf_2_nocable/figure8/002                   90 upd  0.12/0.13 s  max  2.3 sd  cable gated:30 cable skipped:60 drone accepted:55 drone gated:30 drone no gain:5
+cf_2_nocable/figure8_xy/001                67 upd  0.12/0.14 s  max  2.3 sd  cable gated:10 cable skipped:57 drone accepted:53 drone gated:10 drone no gain:4
+cf_2_nocable/figure8_xz/001                27 upd  0.12/0.13 s  max  1.5 sd  cable gated:2 cable skipped:25 drone accepted:25 drone gated:2
+cf_2_nocable/figure8_xz/002                56 upd  0.12/0.13 s  max  2.7 sd  cable gated:6 cable skipped:50 drone accepted:49 drone gated:6 drone outlier:1
+cf_2_nocable/hover_start/001               13 upd  0.00/0.00 s  max  0.2 sd  cable gated:11 cable skipped:2 drone accepted:2 drone gated:11
+cf_2_nocable/hover_start/002               13 upd  0.00/0.00 s  max  0.0 sd  cable gated:9 cable skipped:4 drone accepted:4 drone gated:9
+cf_2_nocable/hover_start/003               13 upd  0.12/0.12 s  max  0.3 sd  cable gated:4 cable skipped:9 drone accepted:9 drone gated:4
+cf_2_nocable/line_star/001                114 upd  0.12/0.13 s  max  2.2 sd  cable gated:7 cable skipped:107 drone accepted:88 drone gated:7 drone no gain:6 drone outlier:13
+cf_2_nocable/line_star_diag/001            60 upd  0.12/0.14 s  max  2.5 sd  cable gated:2 cable skipped:58 drone accepted:43 drone change:2 drone gated:2 drone no gain:6 drone outlier:7
+cf_2_nocable/line_star_xy/001              60 upd  0.12/0.14 s  max  5.0 sd  cable gated:7 cable skipped:53 drone accepted:43 drone change:1 drone gated:7 drone no gain:5 drone outlier:4
+cf_2_nocable/line_star_xy/002              60 upd  0.11/0.13 s  max  2.0 sd  cable gated:18 cable skipped:42 drone accepted:31 drone gated:18 drone no gain:9 drone outlier:2
+cf_2_nocable/line_star_xy/003              60 upd  0.12/0.13 s  max  1.9 sd  cable gated:19 cable skipped:41 drone accepted:32 drone gated:19 drone no gain:8 drone outlier:1
+cf_2_nocable/link_test/001                 28 upd  0.12/0.12 s  max  1.0 sd  cable gated:5 cable skipped:23 drone accepted:23 drone gated:5
+cf_2_nocable/random/001                    78 upd  0.12/0.15 s  max  2.0 sd  cable gated:3 cable skipped:75 drone accepted:72 drone gated:3 drone no gain:3
+cf_2_nocable/random_high/001               55 upd  0.12/0.14 s  max  1.5 sd  cable gated:2 cable skipped:53 drone accepted:52 drone gated:2 drone no gain:1
+cf_2_nocable/random_high/002               55 upd  0.12/0.14 s  max  1.8 sd  cable gated:6 cable skipped:49 drone accepted:46 drone gated:6 drone outlier:3
+cf_2_nocable/random_high/003               55 upd  0.13/0.15 s  max  0.7 sd  cable gated:16 cable skipped:39 drone accepted:31 drone gated:16 drone no gain:6 drone outlier:2
+cf_2_nocable/random_high/004               55 upd  0.12/0.14 s  max  2.3 sd  cable gated:7 cable skipped:48 drone accepted:44 drone gated:7 drone no gain:1 drone outlier:3
+cf_2_nocable/random_high/005                9 upd  0.12/0.12 s  max  0.1 sd  cable gated:3 cable skipped:6 drone accepted:5 drone gated:3 drone outlier:1
+cf_2_nocable/random_high/006               10 upd  0.00/0.00 s  max  0.1 sd  cable gated:7 cable skipped:3 drone accepted:2 drone gated:7 drone outlier:1
+cf_2_nocable/random_high/007               10 upd  0.13/0.13 s  max  1.5 sd  cable skipped:10 drone accepted:6 drone outlier:4
+cf_2_nocable/random_high/009               55 upd  0.12/0.14 s  max  2.1 sd  cable gated:25 cable skipped:30 drone accepted:27 drone gated:25 drone no gain:1 drone outlier:2
+cf_2_nocable/random_high/010               55 upd  0.12/0.13 s  max  1.4 sd  cable gated:13 cable skipped:42 drone accepted:41 drone gated:13 drone outlier:1
+cf_2_nocable/strokes/001                  107 upd  0.12/0.14 s  max 38.0 sd  cable skipped:107 drone accepted:102 drone change:1 drone no gain:1 drone outlier:3
+cf_2_nocable/strokes/002                   65 upd  0.12/0.14 s  max  2.1 sd  cable gated:19 cable skipped:46 drone accepted:46 drone gated:19
+cf_2_nocable/tune_baseline/001             23 upd  0.12/0.13 s  max  1.4 sd  cable gated:6 cable skipped:17 drone accepted:17 drone gated:6
+cf_2_nocable/tune_estimator/001            20 upd  0.12/0.13 s  max  1.1 sd  cable gated:12 cable skipped:8 drone accepted:8 drone gated:12
+cf_2_nocable/tune_estimator/002            43 upd  0.00/0.00 s  max  0.1 sd  cable gated:42 cable skipped:1 drone accepted:1 drone gated:42
+cf_2_nocable/tune_estimator_fine/001       41 upd  0.12/0.14 s  max  1.9 sd  cable gated:18 cable skipped:23 drone accepted:23 drone gated:18
+cf_2_nocable/tune_stiffness/001            50 upd  0.12/0.14 s  max  1.0 sd  cable gated:9 cable skipped:41 drone accepted:27 drone gated:9 drone no gain:9 drone outlier:5
+cf_2_nocable/tune_stiffness2/001           53 upd  0.12/0.14 s  max  4.5 sd  cable gated:18 cable skipped:35 drone accepted:27 drone change:1 drone gated:18 drone no gain:4 drone outlier:3
+cf_2_nocable/tune_stiffness3/001           53 upd  0.11/0.13 s  max 10.1 sd  cable gated:17 cable skipped:36 drone accepted:8 drone change:1 drone gated:17 drone no gain:16 drone outlier:11
+cf_2_nocable/vertical/001                  60 upd  0.10/0.13 s  max  2.4 sd  cable skipped:60 drone accepted:56 drone no gain:2 drone outlier:2
+cf_2_nocable/vertical/002                  10 upd  0.12/0.12 s  max  0.5 sd  cable gated:2 cable skipped:8 drone accepted:5 drone gated:2 drone outlier:3
+cf_2_nocable/vertical/003                   0 upd  0.00/0.00 s  max  0.0 sd  
+cf_2_nocable/vertical/004                  60 upd  0.12/0.14 s  max  2.7 sd  cable skipped:60 drone accepted:58 drone no gain:2
+cf_2_nocable/whip/001                      64 upd  0.11/0.13 s  max  1.9 sd  cable gated:7 cable skipped:57 drone accepted:56 drone gated:7 drone outlier:1
+cf_2_nocable/whip/002                      85 upd  0.12/0.14 s  max  2.4 sd  cable gated:2 cable skipped:83 drone accepted:80 drone gated:2 drone no gain:1 drone outlier:2
+
+summary: {
+ "flights": 71,
+ "failed": [],
+ "nonfinite": [],
+ "over_budget": [],
+ "reasons": {
+  "no cable on this flight": 2039,
+  "no usable window at the newest frames": 1250,
+  "no usable window": 302,
+  "cable over the drone": 210,
+  "the step does not lower the window error": 139,
+  "not explained by the model": 66,
+  "improbable step": 28,
+  "the step promised 1 % less error and gave none": 15,
+  "the step promised 2 % less error and gave none": 15,
+  "the step promised 4 % less error and gave none": 7,
+  "the step promised 5 % less error and gave none": 5,
+  "4 outliers agree: applied as a change": 4
+ }
+}

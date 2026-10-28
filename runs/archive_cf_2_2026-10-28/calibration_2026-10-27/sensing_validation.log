@@ -1,0 +1,9 @@
+circle       frames  7889  labelled fraction sim 0.9959 real 0.9916  gap frames sim  1.51 % real  2.47 %  mean run sim 5.77 real 3.06  confidence sim 0.9989 real 0.9991
+decay        frames 10500  labelled fraction sim 0.9985 real 0.9937  gap frames sim  1.51 % real  4.27 %  mean run sim 3.38 real 1.39  confidence sim 0.9999 real 0.9998
+figure8      frames  9211  labelled fraction sim 0.9980 real 0.9979  gap frames sim  1.60 % real  1.45 %  mean run sim 3.14 real 1.38  confidence sim 0.9998 real 0.9999
+line_star    frames 11602  labelled fraction sim 0.9965 real 0.9825  gap frames sim  2.31 % real  7.66 %  mean run sim 3.63 real 1.96  confidence sim 0.9995 real 0.9989
+random       frames  7990  labelled fraction sim 0.9986 real 0.9994  gap frames sim  1.40 % real  0.53 %  mean run sim 3.20 real 1.32  confidence sim 0.9999 real 1.0000
+random_high  frames  5686  labelled fraction sim 0.9989 real 0.9980  gap frames sim  0.98 % real  1.55 %  mean run sim 3.15 real 1.31  confidence sim 0.9999 real 0.9999
+strokes      frames  5317  labelled fraction sim 0.9983 real 0.9980  gap frames sim  1.60 % real  1.37 %  mean run sim 3.46 real 1.89  confidence sim 0.9999 real 0.9999
+vertical     frames  6191  labelled fraction sim 0.9524 real 0.9610  gap frames sim  6.11 % real  6.77 %  mean run sim 19.49 real 13.66  confidence sim 0.9679 real 0.9763
+whip         frames  8629  labelled fraction sim 0.9032 real 0.9938  gap frames sim 12.85 % real  3.73 %  mean run sim 19.03 real 1.69  confidence sim 0.9409 real 0.9998

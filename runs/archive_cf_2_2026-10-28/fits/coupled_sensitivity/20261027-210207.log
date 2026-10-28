@@ -1,0 +1,25 @@
+820 segments from 15 fit flights (0 dropped at the start point); reference: position 51.43 mm, tilt 1.384 deg, shape 31.85 mm
+com_z          +0.005 : loss 1.0024 (+0.0024); position +0.0011, tilt +0.0010, shape +0.0011 (normalised units)
+attachment_z   +0.003 : loss 0.9985 (-0.0015); position -0.0006, tilt -0.0007, shape -0.0007 (normalised units)
+log10_EI       +0.1   : loss 1.0034 (+0.0034); position +0.0015, tilt +0.0017, shape +0.0015 (normalised units)
+log10_Cb       +0.1   : loss 1.0007 (+0.0007); position +0.0001, tilt +0.0006, shape +0.0003 (normalised units)
+Cd             +0.1   : loss 1.0004 (+0.0004); position +0.0000, tilt +0.0003, shape +0.0002 (normalised units)
+log10_drag     +0.1   : loss 0.9999 (-0.0001); position -0.0003, tilt +0.0001, shape +0.0000 (normalised units)
+if all six were fitted jointly, 95 % half-widths at this point: {'com_z': '0.0346', 'attachment_z': '0.0139', 'log10_EI': '0.175', 'log10_Cb': '0.354', 'Cd': '0.246', 'log10_drag': '0.175'}
+  correlated: Cd / log10_drag -0.91
+Exception ignored in: <module 'threading' from '/usr/lib/python3.12/threading.py'>
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/threading.py", line 1592, in _shutdown
+    atexit_call()
+  File "/usr/lib/python3.12/concurrent/futures/process.py", line 100, in _python_exit
+    thread_wakeup.wakeup()
+  File "/usr/lib/python3.12/concurrent/futures/process.py", line 86, in wakeup
+    self._writer.send_bytes(b"")
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 200, in send_bytes
+    self._send_bytes(m[offset:offset + size])
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 427, in _send_bytes
+    self._send(header + buf)
+  File "/usr/lib/python3.12/multiprocessing/connection.py", line 384, in _send
+    n = write(self._handle, buf)
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 9] Bad file descriptor

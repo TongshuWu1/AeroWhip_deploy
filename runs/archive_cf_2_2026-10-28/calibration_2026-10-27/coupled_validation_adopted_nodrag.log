@@ -1,0 +1,9 @@
+adopted configuration (firmw circle            drone   43.9 mm debiased (  257 raw)  cable shape  35.8 mm  tip  58.9 mm  failed 0  reproduced True
+adopted configuration (firmw decay             drone   33.4 mm debiased (  188 raw)  cable shape  50.5 mm  tip  90.7 mm  failed 0  reproduced True
+adopted configuration (firmw figure8           drone   37.4 mm debiased (  282 raw)  cable shape  28.1 mm  tip  45.6 mm  failed 0  reproduced True
+adopted configuration (firmw line_star         drone  102.9 mm debiased (  392 raw)  cable shape  66.6 mm  tip 112.2 mm  failed 0  reproduced True
+adopted configuration (firmw random            drone   32.3 mm debiased (  167 raw)  cable shape  37.0 mm  tip  65.0 mm  failed 0  reproduced True
+adopted configuration (firmw random_high  HELD drone   46.6 mm debiased (  221 raw)  cable shape  45.1 mm  tip  81.3 mm  failed 0  reproduced True
+adopted configuration (firmw strokes           drone   36.5 mm debiased (  249 raw)  cable shape  57.3 mm  tip 105.8 mm  failed 0  reproduced True
+adopted configuration (firmw vertical          drone   47.7 mm debiased (  228 raw)  cable shape  25.0 mm  tip  39.1 mm  failed 0  reproduced True
+adopted configuration (firmw whip         HELD drone   54.3 mm debiased (  250 raw)  cable shape  70.6 mm  tip 130.7 mm  failed 0  reproduced True

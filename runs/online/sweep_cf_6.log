@@ -1,0 +1,36 @@
+14 flights
+cf_6/hover_start/001                       13 upd  0.43/0.58 s  max  0.9 sd  cable accepted:13 drone accepted:13
+cf_6/hover_trim/001                        18 upd  0.41/0.57 s  max  0.7 sd  cable accepted:14 cable gated:4 drone accepted:14 drone gated:4
+cf_6/mix_a/001                             42 upd  0.40/0.53 s  max  0.4 sd  cable accepted:5 cable gated:37 drone accepted:5 drone gated:37
+cf_6/mix_a/002                             31 upd  0.44/0.77 s  max  1.7 sd  cable accepted:17 cable gated:14 drone accepted:17 drone gated:14
+cf_6_nocable/battery_check/001             58 upd  0.12/0.14 s  max  2.1 sd  cable gated:21 cable skipped:37 drone accepted:31 drone gated:21 drone no gain:6
+cf_6_nocable/battery_run/001               67 upd  0.13/0.13 s  max  1.6 sd  cable gated:23 cable skipped:44 drone accepted:40 drone gated:23 drone no gain:1 drone outlier:3
+cf_6_nocable/battery_run_hover/001         92 upd  0.11/0.14 s  max  2.2 sd  cable gated:28 cable skipped:64 drone accepted:59 drone gated:28 drone no gain:5
+cf_6_nocable/hover_trim/001                18 upd  0.00/0.00 s  max  0.8 sd  cable gated:11 cable skipped:7 drone accepted:7 drone gated:11
+cf_6_nocable/tune_cf6_baseline/001         28 upd  0.00/0.00 s  max  0.0 sd  cable gated:28 drone gated:28
+cf_6_nocable/tune_cf6_damping/001          97 upd  0.12/0.13 s  max  1.3 sd  cable gated:36 cable skipped:61 drone accepted:53 drone gated:36 drone no gain:5 drone outlier:3
+cf_6_nocable/tune_cf6_estimator/002        73 upd  0.00/0.00 s  max  0.0 sd  cable gated:73 drone gated:73
+cf_6_nocable/tune_cf6_integral/001         66 upd  0.12/0.13 s  max  1.8 sd  cable gated:30 cable skipped:36 drone accepted:36 drone gated:30
+cf_6_nocable/tune_cf6_stiffness/001        97 upd  0.12/0.14 s  max 11.1 sd  cable gated:30 cable skipped:67 drone accepted:34 drone change:4 drone gated:30 drone no gain:11 drone outlier:18
+cf_6_nocable/tune_compare_tune/001         85 upd  0.11/0.12 s  max  3.8 sd  cable gated:47 cable skipped:38 drone accepted:32 drone gated:47 drone no gain:5 drone outlier:1
+
+summary: {
+ "flights": 14,
+ "failed": [],
+ "nonfinite": [],
+ "over_budget": [],
+ "reasons": {
+  "no usable window at the newest frames": 410,
+  "no cable on this flight": 354,
+  "no usable window": 324,
+  "phase link-landing": 22,
+  "not explained by the model": 20,
+  "cable over the drone": 8,
+  "the step promised 4 % less error and gave none": 5,
+  "the step promised 2 % less error and gave none": 5,
+  "improbable step": 5,
+  "4 outliers agree: applied as a change": 4,
+  "the step promised 1 % less error and gave none": 3,
+  "the step promised 13 % less error and gave none": 1
+ }
+}

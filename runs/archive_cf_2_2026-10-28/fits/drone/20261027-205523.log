@@ -1,0 +1,14 @@
+1068 segments of 1.0 s from 14 flights, 542 held out; 0 dropped (failed at the start point)
+start: position 57.08 mm, tilt 1.44 deg (offsets removed per flight); loss 1.0000
+delay    0 ms: loss 1.0004 (position 58.56 mm, tilt 1.40 deg)  x [0.6445, 0.0208, 0.5825, 0.4938]  (25 evaluations, 0 with failed segments)
+munmap_chunk(): invalid pointer
+a worker process died; repeating the evaluation on new workers (restart 1)
+delay    5 ms: loss 0.9962 (position 56.97 mm, tilt 1.43 deg)  x [0.6445, 0.0191, 0.6097, 0.4995]  (20 evaluations, 0 with failed segments)
+delay   10 ms: loss 1.0026 (position 56.16 mm, tilt 1.47 deg)  x [0.6445, 0.0174, 0.6271, 0.4985]  (16 evaluations, 0 with failed segments)
+delay   15 ms: loss 1.0247 (position 55.16 mm, tilt 1.56 deg)  x [0.6445, 0.0157, 0.6547, 0.5082]  (21 evaluations, 0 with failed segments)
+delay   20 ms: loss 1.0472 (position 54.69 mm, tilt 1.63 deg)  x [0.6445, 0.0143, 0.6732, 0.5136]  (23 evaluations, 0 with failed segments)
+free(): invalid pointer
+a worker process died; repeating the evaluation on new workers (restart 2)
+delay   30 ms: loss 1.1282 (position 54.13 mm, tilt 1.85 deg)  x [0.6445, 0.011, 0.7211, 0.5358]  (35 evaluations, 0 with failed segments)
+delay   40 ms: loss 1.2380 (position 54.45 mm, tilt 2.12 deg)  x [0.6445, 0.0088, 0.7712, 0.5744]  (22 evaluations, 0 with failed segments)
+best: delay 5 ms, loss 0.9962 (position 56.97 mm, tilt 1.43 deg), x [0.64448, 0.0191, 0.60968, 0.4995] ± [1.78354, 0.01738, 0.05073, 0.2737] (95 %); reproduced twice: True

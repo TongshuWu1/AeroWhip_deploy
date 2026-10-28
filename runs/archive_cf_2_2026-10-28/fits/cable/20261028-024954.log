@@ -1,0 +1,4 @@
+45 segments of 0.6 s from 5 flights, 26 held out; 0 dropped (failed at the start point)
+start: 13.64 mm
+held out: 14.129 -> 13.950 mm
+best: 12.639 mm, x [-3.2567, -4.7092] ± [0.1788, 0.1704] (95 %); 25 evaluations, 0 with failed segments; reproduced twice: True

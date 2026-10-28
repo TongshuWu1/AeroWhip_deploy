@@ -1,0 +1,7 @@
+1151 segments of 1.0 s from 16 flights, 542 held out; 0 dropped (failed at the start point)
+start: position 56.93 mm, tilt 1.43 deg (offsets removed per flight); loss 1.0000
+delay    0 ms: loss 0.9985 (position 58.43 mm, tilt 1.39 deg)  x [0.6445, 0.0211, 0.5839, 0.4811]  (32 evaluations, 0 with failed segments)
+delay    5 ms: loss 0.9959 (position 56.81 mm, tilt 1.42 deg)  x [0.6445, 0.0193, 0.6115, 0.4885]  (21 evaluations, 0 with failed segments)
+delay   10 ms: loss 1.0047 (position 55.99 mm, tilt 1.47 deg)  x [0.6445, 0.0176, 0.6292, 0.4874]  (15 evaluations, 0 with failed segments)
+delay   15 ms: loss 1.0322 (position 55.01 mm, tilt 1.57 deg)  x [0.6445, 0.0158, 0.6574, 0.4984]  (15 evaluations, 0 with failed segments)
+delay   20 ms: loss 1.0591 (position 54.56 mm, tilt 1.65 deg)  x [0.6445, 0.0144, 0.6759, 0.5042]  (21 evaluations, 0 with failed segments)

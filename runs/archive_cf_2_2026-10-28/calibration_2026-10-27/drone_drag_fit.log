@@ -1,0 +1,20 @@
+257 fitting windows, 66 held out; cable cross-check 241 + 46 windows
+no drag x [0.0, 0.0]: fit 278 raw / 64.9 debiased; held_out 265 raw / 57.7 debiased; cable_fit 296 raw / 60.8 debiased; cable_held_out 250 raw / 54.2 debiased
+  iteration  0  best 150.335 mm  x [0.4, 0.5]
+  iteration  1  best 145.798 mm  x [0.6, 0.5]
+  iteration  2  best 144.384 mm  x [0.4, 0.7]
+  iteration  3  best 140.783 mm  x [0.6, 0.7]
+  iteration  4  best 140.783 mm  x [0.6, 0.7]
+  iteration  5  best 140.271 mm  x [0.6, 0.9]
+  iteration  6  best 138.912 mm  x [0.5, 0.85]
+  iteration  7  best 138.912 mm  x [0.5, 0.85]
+  iteration  8  best 138.912 mm  x [0.5, 0.85]
+  iteration  9  best 138.912 mm  x [0.5, 0.85]
+  iteration 10  best 138.855 mm  x [0.5375, 0.8062]
+  iteration 11  best 138.839 mm  x [0.5344, 0.8766]
+  iteration 12  best 138.775 mm  x [0.518, 0.8457]
+  iteration 13  best 138.775 mm  x [0.518, 0.8457]
+  iteration 14  best 138.775 mm  x [0.518, 0.8457]
+best x [0.518, 0.8457]: fit 139 raw / 37.6 debiased; held_out 134 raw / 42.2 debiased; cable_fit 179 raw / 38.9 debiased; cable_held_out 164 raw / 45.6 debiased
+best x [0.518, 0.8457]: fit 139 raw / 37.6 debiased; held_out 134 raw / 42.2 debiased; cable_fit 179 raw / 38.9 debiased; cable_held_out 164 raw / 45.6 debiased
+reproduced twice: True

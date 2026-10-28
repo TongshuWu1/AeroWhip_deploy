@@ -1,0 +1,11 @@
+820 segments of 1.0 s from 15 flights, 249 held out; 0 dropped (failed at the start point)
+start: 18.01 mm
+held out: 23.252 -> 23.253 mm
+best: 18.013 mm, x [-3.8521, -4.3823, 0.746, -0.7506, 0.6276, -0.7624, 0.6227, 0.6464, -1.1868, 1.0057, -0.9516, 2.9993] ± [0.1723, 0.2097, 0.1101, 0.0863, 0.2765, 0.6723, 0.6492, 0.3283, 0.6653, 0.6638, 0.2406, 8624.4695] (95 %); 45 evaluations, 0 with failed segments; reproduced twice: True
+  correlated: log10 Cb / log10 Cb saturation rate (rad/s) -0.92
+  correlated: static x P0 (0.01 N/m) / static x P1 (0.01 N/m) -0.99
+  correlated: static x P0 (0.01 N/m) / static x P2 (0.01 N/m) +0.97
+  correlated: static x P1 (0.01 N/m) / static x P2 (0.01 N/m) -0.98
+  correlated: static y P0 (0.01 N/m) / static y P1 (0.01 N/m) -0.97
+  correlated: static y P0 (0.01 N/m) / static y P2 (0.01 N/m) +0.91
+  correlated: static y P1 (0.01 N/m) / static y P2 (0.01 N/m) -0.97

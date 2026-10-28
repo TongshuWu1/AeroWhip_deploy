@@ -1,0 +1,22 @@
+level 3 m/s^2 (envelope clean max 3.0); 9 members; 14 parameters; 12 restarts + 3 x 8 offspring; 24 simulations of 60 s per candidate
+generation 0: 4/12 feasible, best score 1.767 (weakest static y P2 (0.01 N/m)), 123 s
+generation 1: 7/8 feasible, best score 1.789 (weakest motor_response_s), 207 s
+generation 2: 8/8 feasible, best score 1.789 (weakest motor_response_s), 290 s
+generation 3: 6/8 feasible, best score 1.819 (weakest static y P2 (0.01 N/m)), 375 s
+
+best: score 1.819, weakest parameter static y P2 (0.01 N/m), worst member rise -0.07 m, {'peak_speed': 0.8215702075874071, 'peak_acceleration': 2.9999999999999996, 'peak_vertical': 1.4992697159549964, 'extent': [0.56, 0.38, 0.71]} -> runs/planning/excitation_001.json
+  static y P2 (0.01 N/m)         1.82
+  static x P2 (0.01 N/m)         1.89
+  static y P1 (0.01 N/m)         2.14
+  static x P1 (0.01 N/m)         2.16
+  log10 Cb                       2.21
+  static x P0 (0.01 N/m)         2.36
+  Cd                             2.38
+  log10 linear drag              2.39
+  static y P0 (0.01 N/m)         2.50
+  log10 EI                       2.57
+  body_drag_xy_s_inv             2.77
+  motor_response_s               2.85
+  body_drag_z_s_inv              2.89
+  static z P0 (0.01 N/m)         2.91
+375 s

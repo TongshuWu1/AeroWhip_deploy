@@ -1,0 +1,35 @@
+level 3 m/s^2 (envelope clean max 3.0); 9 members; 14 parameters; 12 restarts + 3 x 8 offspring; 24 simulations of 60 s per candidate
+generation 0: 4/12 feasible, best score 1.767 (weakest static y P2 (0.01 N/m)), 122 s
+generation 1: 7/8 feasible, best score 1.789 (weakest motor_response_s), 208 s
+generation 2: 8/8 feasible, best score 1.789 (weakest motor_response_s), 292 s
+munmap_chunk(): invalid pointer
+a worker process died; repeating the evaluation on new workers (restart 1)
+free(): invalid pointer
+a worker process died; repeating the evaluation on new workers (restart 2)
+generation 3: 6/8 feasible, best score 1.819 (weakest static y P2 (0.01 N/m)), 387 s
+
+best: score 1.819, weakest parameter static y P2 (0.01 N/m), worst member rise -0.07 m, {'peak_speed': 0.8215702075874071, 'peak_acceleration': 2.9999999999999996, 'peak_vertical': 1.4992697159549964, 'extent': [0.56, 0.38, 0.71]} -> /home/tony-lab/Documents/PHD/AeroWhip_deploy/runs/planning/excitation_002.json
+  static y P2 (0.01 N/m)         1.82
+  static x P2 (0.01 N/m)         1.89
+  static y P1 (0.01 N/m)         2.14
+  static x P1 (0.01 N/m)         2.16
+  log10 Cb                       2.21
+  static x P0 (0.01 N/m)         2.36
+  Cd                             2.38
+  log10 linear drag              2.39
+  static y P0 (0.01 N/m)         2.50
+  log10 EI                       2.57
+  body_drag_xy_s_inv             2.77
+  motor_response_s               2.85
+  body_drag_z_s_inv              2.89
+  static z P0 (0.01 N/m)         2.91
+coupled estimates (|correlation| > 0.8): 
+  static y P0 (0.01 N/m) ~ static y P1 (0.01 N/m): -0.99
+  static x P0 (0.01 N/m) ~ static x P1 (0.01 N/m): -0.99
+  log10 EI ~ static z P0 (0.01 N/m): +0.89
+  static x P1 (0.01 N/m) ~ static x P2 (0.01 N/m): -0.88
+  static y P1 (0.01 N/m) ~ static y P2 (0.01 N/m): -0.86
+  static x P0 (0.01 N/m) ~ static x P2 (0.01 N/m): +0.85
+  static y P0 (0.01 N/m) ~ static y P2 (0.01 N/m): +0.82
+  Cd ~ log10 linear drag: -0.81
+387 s

@@ -1,0 +1,6 @@
+fit segments                       position   51.1 mm  tilt  1.35 deg  shape   26.4 mm  tip   43.9 mm  failed 0  reproduced True
+held_out segments                  position   48.3 mm  tilt  1.02 deg  shape   35.1 mm  tip   56.1 mm  failed 0  reproduced True
+fit segments, bias cancelled       position   51.9 mm  tilt  1.43 deg  shape   24.7 mm  tip   41.1 mm  failed 0  reproduced True
+held_out segments, bias cancelled  position   48.7 mm  tilt  0.99 deg  shape   28.8 mm  tip   46.1 mm  failed 0  reproduced True
+fit      stroke test (45 strokes): tip peak speed ratio median 0.944 (IQR 0.878-0.992), peak shift +1 frames; tip path 25.7 mm, drone position 28.8 mm, tilt 1.41 deg
+held_out stroke test (26 strokes): tip peak speed ratio median 0.904 (IQR 0.787-0.973), peak shift +1 frames; tip path 31.7 mm, drone position 25.7 mm, tilt 1.10 deg
