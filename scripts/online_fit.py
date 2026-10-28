@@ -135,13 +135,15 @@ def main():
         state_path = running.STATE if (not args.replay and running.is_real_flight(folder)) else None
     elif args.state != 'none':
         state_path = Path(args.state)
+    before = None
     if state_path is not None and not args.start:
-        started = running.start_from(estimator, running.load(state_path))
+        before = running.load(state_path)
+        started = running.start_from(estimator, before)
         print(f"running model: {state_path} ({'continued' if started else 'new, from the offline fits'})", flush=True)
         log.write(json.dumps(dict(kind='state', path=str(state_path), continued=started,
                                   start={n: float(v) for n, v in zip(space.names, estimator.theta)}))+'\n')
 
-    unusable = []
+    unusable, records = [], []
 
     def update():
         try:
@@ -156,6 +158,7 @@ def main():
             return
         record = estimator.step(flight, stream.params, has_cable=stream.has_cable_labels)
         record['kind'] = 'update'
+        records.append(record)
         if state_path is not None:
             running.save(state_path, estimator, flight=folder)
         log.write(json.dumps(record)+'\n')
@@ -196,8 +199,20 @@ def main():
                 if time.monotonic()-quiet_since > 2.:
                     break
             time.sleep(.05)
+    failed = None                    # the user's rule: a take that failed is not used at all
+    result = running.load(folder/'result.json')
+    if result is not None and not result.get('completed'):
+        failed = f"take failed: {result.get('failure') or 'not completed'}"
+    touched = [r for r in records if any(str(f.get('reason', '')).startswith('cable touching') for f in r['families'].values())]
+    if touched:
+        failed = f"cable touched the drone at {touched[0]['stamp']-t_start:.1f} s"
     if state_path is not None:
-        running.save(state_path, estimator, flight=folder, finished=True)
+        if failed:
+            running.reject_flight(state_path, before, folder, failed)
+            print(f'running model: flight rejected ({failed}); back to the state before it', flush=True)
+        else:
+            running.save(state_path, estimator, flight=folder, finished=True)
+    log.write(json.dumps(dict(kind='verdict', used=failed is None, reason=failed))+'\n')
     summary = estimator.summary()
     estimator.close()
     log.write(json.dumps(dict(kind='summary', **summary))+'\n')

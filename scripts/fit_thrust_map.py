@@ -139,7 +139,8 @@ def main():
     mass_thrust, v0 = float(firmware['ctrlMel']['massThrust']), float(firmware['reference_voltage_v'])
     m = manifest()
     data, per_flight = [], {}
-    for f in m.flights('cf_2_nocable', roles=('fit', 'held_out', 'hover')):
+    from aerowhip.fitting.calibration_set import usable
+    for f in usable(m, m.flights('cf_2_nocable', roles=('fit', 'held_out', 'hover'))):   # never a failed take
         if 'motors.jsonl' not in f.get('logs', []):
             continue
         s = samples(m.folder(f), model, args.span, args.lag)

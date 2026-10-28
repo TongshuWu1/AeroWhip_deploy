@@ -273,3 +273,21 @@ unless asked (`--state`); "Reset to the offline fit" keeps the old file under a 
 A change in the estimate counts only if it lowers the error of the window it is applied on; the
 motor response and body drag are bounded to physically possible values. Flights captured at
 rates other than 100 or 200 Hz are refused with a message (the fitting windows need one of them).
+
+## Failed takes and cable contact
+
+A take is a failure, and is used by nothing that learns from data (offline fits, validation, the
+online fit and its running model), when it did not complete (interrupted, landed early) or when the
+cable touched the drone. The cable rising above the clamp without touching the drone is allowed.
+Contact (`aerowhip.takes.contact`): the drone is stacked cylinders in its body frame (the battery,
+radius 4 cm, from the clamp; the arms and plates from the CAD meshes, 7.6 cm; the propeller guard
+ring, 11.4 cm, to 2 cm above the marker plane); the cable is its labelled markers and the chords
+between seen neighbours, without its first 4 cm; contact is any of it within 1 cm of the drone in
+3 frames in a row. The verdict is computed from the recorded marker cloud with the in-flight
+labeller and cached as `contact.json` in the flight folder. The planner requires every model's cable
+to stay at least 5 cm from the drone (from the first marker on). The online fit skips windows with
+contact and, after a failed take, restores the running model to its state before the flight.
+
+The Online page shows each window's error over all ten cable markers before the window updates the
+model (a prediction), against the offline model on the same window, per marker and as the running
+improvement: the measure of whether the online fit is learning.

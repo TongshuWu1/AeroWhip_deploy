@@ -50,11 +50,11 @@ def main():
     model = Model(adopted)
     out = args.output or args.trajectory.with_name(args.trajectory.stem+'_preview.npz')
     np.savez_compressed(out, t=r['marker_t'][:n], position=np.asarray(r['position'])[every][:n], rotation=r['rotation'][:n],
-                        nodes=r['nodes'], reference=r['reference'], rise=r['rise'][every][:n], tilt=r['tilt'][every][:n],
+                        nodes=r['nodes'], reference=r['reference'], rise=r['rise'][every][:n], clearance=r['clearance'][every][:n], tilt=r['tilt'][every][:n],
                         motor=r['motor'][every][:n], tip_speed=r['tip_speed'][every][:n], command=np.asarray(r['command'])[every][:n],
                         marker_indices=np.asarray(model.marker_indices), attachment=np.asarray(model.attachment_tracking),
                         failed=str(r['failed'] or ''), source=str(args.trajectory))
-    print(f'{n} frames over {r["marker_t"][n-1]:.1f} s; peak cable rise {r["rise"].max():+.3f} m, peak tilt {r["tilt"].max():.0f} deg, '
+    print(f'{n} frames over {r["marker_t"][n-1]:.1f} s; cable closest to the drone {r["clearance"].min()*100:.0f} cm, peak tilt {r["tilt"].max():.0f} deg, '
           f'smallest motor {r["motor"].min():.2f}; {"FAILED: "+r["failed"] if r["failed"] else "completed"} -> {out} ({time.time()-t0:.0f} s)')
 
 

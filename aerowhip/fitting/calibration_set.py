@@ -6,6 +6,10 @@ the days they were flown: one model for all of them, with the per-flight conditi
 measured (battery voltage) as inputs. Role 'fit' flights are fitted, 'held_out' flights are scored
 only with the final parameters, 'hover' flights serve the motor identification, 'excluded' ones are
 not used. Usable spans (`usable.until_t_s`, `usable.exclude_phases`) trim a flight.
+
+A failed take is never used, whatever its role or spans (the user's rule, 2026-10-28): one that did not
+complete (`completed: false`: interrupted, landed early), or one in which the cable touched the drone
+(aerowhip.takes.contact, from the recorded marker cloud, cached as contact.json in the flight folder).
 """
 from pathlib import Path
 
@@ -19,6 +23,31 @@ DEFAULT_ROOT = Path('/home/tony-lab/Documents/PHD/Crazyflie/crazyswarm2_jazzy_wh
 
 def manifest(root=DEFAULT_ROOT):
     return Manifest(root)
+
+
+_FAILED = {}
+
+
+def failed_take(m, entry):
+    """None if the take may be used, else why not (cached per folder)."""
+    folder = m.folder(entry)
+    if entry.get('completed') is False:
+        return 'did not complete'
+    if str(folder) not in _FAILED:
+        reason = None
+        if not str(entry.get('setup', '')).endswith('_nocable') and (folder/'cloud.jsonl').exists():
+            from aerowhip.physics.model_configuration import DEFAULT_MODEL, fit_configuration, load_model_configuration
+            from aerowhip.takes.contact import flight_contact
+            verdict = flight_contact(folder, fit_configuration(load_model_configuration(DEFAULT_MODEL)))
+            if verdict.get('contact'):
+                reason = f"the cable touched the drone at {verdict.get('first_t_s')} s"
+        _FAILED[str(folder)] = reason
+    return _FAILED[str(folder)]
+
+
+def usable(m, entries):
+    """The entries that are not failed takes."""
+    return [f for f in entries if failed_take(m, f) is None]
 
 
 def named(entries):
@@ -40,14 +69,14 @@ def folders(setup=None, root=DEFAULT_ROOT, roles=('fit', 'held_out')):
     without; None: the manifest's vehicle with the cable)."""
     m = manifest(root)
     setup = m.default_setup() if setup is None else setup
-    return {name: m.folder(f) for name, f in named(m.flights(setup, roles=roles)).items()}
+    return {name: m.folder(f) for name, f in named(usable(m, m.flights(setup, roles=roles))).items()}
 
 
 def held_out(setup=None, root=DEFAULT_ROOT):
     """Names (as in `folders`) of the flights held out of every fit."""
     m = manifest(root)
     setup = m.default_setup() if setup is None else setup
-    return tuple(name for name, f in named(m.flights(setup)).items() if f['role'] == 'held_out')
+    return tuple(name for name, f in named(usable(m, m.flights(setup))).items() if f['role'] == 'held_out')
 
 
 def is_held_out(folder, root=DEFAULT_ROOT):
@@ -86,7 +115,7 @@ def split(setup, *, root=DEFAULT_ROOT, cable=True, **kwargs):
     """({name: windows} for fitting, {name: windows} held out)."""
     train, held = {}, {}
     m = manifest(root)
-    for name, f in named(m.flights(setup)).items():
+    for name, f in named(usable(m, m.flights(setup))).items():
         target = held if f['role'] == 'held_out' else train
         target[name] = flight_windows(m.folder(f), root=root, cable=cable, **kwargs)
     return train, held

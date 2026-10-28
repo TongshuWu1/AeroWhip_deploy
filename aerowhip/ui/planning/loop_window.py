@@ -326,7 +326,7 @@ class LoopWindow(QtWidgets.QMainWindow):
         tiles.setSpacing(8)
         self.tiles = {}
         for k, (key, caption) in enumerate((('level', 'peak horizontal accel'), ('length', 'flight length'),
-                                            ('rise', 'cable top, worst model'), ('motor', 'smallest motor, worst model'),
+                                            ('rise', 'cable to drone, worst model'), ('motor', 'smallest motor, worst model'),
                                             ('speed', 'peak speed'), ('weakest', 'teaches least about'))):
             self.tiles[key] = Tile(caption)
             tiles.addWidget(self.tiles[key], k//2, k % 2)
@@ -336,7 +336,7 @@ class LoopWindow(QtWidgets.QMainWindow):
         cg = QtWidgets.QGridLayout(cursor)
         cg.setContentsMargins(12, 8, 12, 8)
         self.readout = {}
-        for k, (key, caption) in enumerate((('height', 'height'), ('tilt', 'tilt'), ('rise', 'cable top'),
+        for k, (key, caption) in enumerate((('height', 'height'), ('tilt', 'tilt'), ('rise', 'cable to drone'),
                                             ('motor', 'smallest motor'), ('tip', 'tip speed'), ('accel', 'planned accel'))):
             cg.addWidget(label(caption, 'tileLabel', wrap=False), k//2, (k % 2)*2)
             self.readout[key] = label('—', None, wrap=False)
@@ -429,7 +429,7 @@ class LoopWindow(QtWidgets.QMainWindow):
     def _check_page(self, lay):
         lay.addWidget(label('Check', 'heading'))
         lay.addWidget(label('The coupled validation on held-out flights (Model Fit, last stage): stroke tip path, tip peak '
-                            'speed, cable rise. When the held-out score stops improving for two rounds, freeze the model, '
+                            'speed, cable distance from the drone. When the held-out score stops improving for two rounds, freeze the model, '
                             'rebuild the reset bank and train.', 'muted'))
         open_fit = button('Open Model Fit', primary=True)
         open_fit.clicked.connect(self.open_model_fit)
@@ -541,8 +541,8 @@ class LoopWindow(QtWidgets.QMainWindow):
                               f"score {d.get('score', 0):.2f} · extent {' × '.join(f'{v:.2f}' for v in s.get('extent', []))} m")
         self.tiles['level'].set(f"{d.get('level', 0):g} m/s²")
         self.tiles['length'].set(f"{d['t'][-1]:.0f} s")
-        rise = d.get('worst_rise')
-        self.tiles['rise'].set('—' if rise is None else f'{rise*100:+.0f} cm', None if rise is None else (GOOD if rise < -.06 else WARN))
+        clear = d.get('worst_clearance')            # older plans checked the height instead: shown as not computed
+        self.tiles['rise'].set('—' if clear is None else f'{clear*100:.0f} cm', None if clear is None else (GOOD if clear >= .07 else WARN))
         self.tiles['motor'].set('—' if motor is None else f'{motor:.2f}', None if motor is None else (GOOD if motor > .15 else WARN))
         self.tiles['speed'].set(f"{s.get('peak_speed', 0):.2f} m/s")
         weakest = str(d.get('weakest', '—'))
@@ -623,12 +623,12 @@ class LoopWindow(QtWidgets.QMainWindow):
         t = float(pr['t'][i])
         self.time_label.setText(f"{t:5.1f} / {pr['t'][-1]:.1f} s")
         self.strip.set_cursor(t)
-        rise = float(pr['rise'][i])
+        clear = float(pr['clearance'][i]) if 'clearance' in pr else float('nan')
         r = self.readout
         r['height'].setText(f"{pr['position'][i][2]:.2f} m")
         r['tilt'].setText(f"{pr['tilt'][i]:.0f}°")
-        r['rise'].setText(f'{rise*100:+.0f} cm')
-        r['rise'].setStyleSheet(f'color: {GOOD if rise < -.06 else (WARN if rise < 0 else BAD)};')
+        r['rise'].setText('—' if clear != clear else f'{clear*100:.0f} cm')
+        r['rise'].setStyleSheet(f'color: {GOOD if clear >= .07 else (WARN if clear >= .05 else BAD)};' if clear == clear else '')
         r['motor'].setText(f"{pr['motor'][i]:.2f}")
         r['tip'].setText(f"{pr['tip_speed'][i]:.1f} m/s")
         if self.data is not None:

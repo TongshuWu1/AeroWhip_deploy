@@ -8,7 +8,7 @@ from aerowhip.ui.plotting import PlotCanvas
 from aerowhip.ui.style import PALETTE, ROLE
 
 GOOD, BAD, WARN, MUTED = '#2fbf8f', '#ff7a59', '#E69F00', '#93a0ad'
-RISE_LIMIT_M = -.04          # the optimiser's margin: the cable's highest node this far below the attachment
+from aerowhip.takes.contact import PLANNING_MARGIN_M as CLEARANCE_M    # every model's cable this far from the drone
 
 
 def label(text='', name=None, wrap=True):
@@ -67,11 +67,11 @@ class Strip(PlotCanvas):
             ax.plot(t, a[:, 2], color=PALETTE['sky'], linewidth=.8, alpha=.8, label='vertical accel (m/s²)')
             ax.set_xlim(t[0], t[-1]+2)
             ax.set_xlabel('time (s)')
-            if preview is not None:
+            if preview is not None and 'clearance' in preview:
                 rx = ax.twinx()
-                rx.plot(preview['t'], preview['rise']*100, color='#f2f2f2', linewidth=1., label='cable top above clamp (cm, right)')
-                rx.axhline(RISE_LIMIT_M*100, color=BAD, linewidth=.8, linestyle='--')
-                rx.set_ylabel('cable top (cm)')
+                rx.plot(preview['t'], preview['clearance']*100, color='#f2f2f2', linewidth=1., label='cable distance from the drone (cm, right)')
+                rx.axhline(CLEARANCE_M*100, color=BAD, linewidth=.8, linestyle='--')
+                rx.set_ylabel('cable to drone (cm)')
                 rx.grid(False)
                 rx.spines['right'].set_visible(True)
                 lines = ax.get_lines()+rx.get_lines()[:1]
@@ -165,22 +165,22 @@ class SafetyView(QtWidgets.QWidget):
         layout.setContentsMargins(18, 14, 18, 14)
         layout.addWidget(label('Is it safe on every model we might have?', 'heading'))
         layout.addWidget(label('Each member of the ensemble (samples of the fitted model, and the brackets that reach the '
-                               'measured cable flip) flown closed loop on this trajectory. Cable top: the highest cable node '
-                               f'above the clamp, must stay below {RISE_LIMIT_M*100:.0f} cm. Motor: the smallest motor as a '
-                               'share of its hover share, must stay above 0.05.', 'muted'))
-        self.table = table(['model', 'cable top (cm)', 'tilt (deg)', 'tracking error (cm)', 'smallest motor', 'verdict'])
+                               'measured cable flip) flown closed loop on this trajectory. Cable to drone: the cable\'s smallest '
+                               f'distance from the drone, at least {CLEARANCE_M*100:.0f} cm (it may rise above the clamp). Motor: '
+                               'the smallest motor as a share of its hover share, at least 0.05.', 'muted'))
+        self.table = table(['model', 'cable to drone (cm)', 'tilt (deg)', 'tracking error (cm)', 'smallest motor', 'verdict'])
         layout.addWidget(self.table, 1)
 
     def show(self, data, report):
         rows = (data or {}).get('member_rows') or ((report or {}).get('best') or {}).get('members') or []
         out, colours = [], {}
         for i, m in enumerate(rows):
-            rise = None if m.get('rise') is None else m['rise']*100
+            clear = None if m.get('clearance') is None else m['clearance']*100     # older plans: not computed
             err = None if m.get('error') is None else m['error']*100
-            out.append([m['label'], rise, m.get('tilt'), err, m.get('motor'), 'safe' if m['ok'] else m.get('reason', '')])
+            out.append([m['label'], clear, m.get('tilt'), err, m.get('motor'), 'safe' if m['ok'] else m.get('reason', '')])
             colours[(i, 5)] = GOOD if m['ok'] else BAD
-            if rise is not None:
-                colours[(i, 1)] = GOOD if rise < RISE_LIMIT_M*100-2 else WARN
+            if clear is not None:
+                colours[(i, 1)] = GOOD if clear >= CLEARANCE_M*100+2 else WARN
         fill(self.table, out, colours)
 
 
@@ -193,7 +193,7 @@ class EnvelopeView(QtWidgets.QWidget):
         layout.addWidget(label('What the real cable did', 'heading'))
         self.note = label('', 'muted')
         layout.addWidget(self.note)
-        self.table = table(['kind', 'heading', 'level (m/s²)', 'flights', 'clean', 'failed', 'cable top (cm)', 'frames over', 'max tilt'])
+        self.table = table(['kind', 'heading', 'level (m/s²)', 'flights', 'clean', 'not clean', 'cable to drone (cm)', 'touched', 'max tilt'])
         layout.addWidget(self.table, 1)
 
     def show(self, env):
@@ -201,18 +201,17 @@ class EnvelopeView(QtWidgets.QWidget):
             self.note.setText('No envelope yet: Update envelope after the first flight.')
             fill(self.table, [])
             return
-        threshold = env['rise_threshold_m']
-        self.note.setText(f'Worst of all flights per kind, heading and level, from the raw marker clouds of the recorded '
-                          f'parts (hover start to hover end). Cable over the drone: a point more than {threshold*100:.0f} cm '
-                          'above the clamp.')
+        self.note.setText('Worst of all flights per kind, heading and level, from the raw marker clouds of the recorded '
+                          'parts (hover start to hover end). Clean: the flight completed and the cable never touched the drone '
+                          '(within 1 cm in 3 frames in a row); rising above the clamp is allowed.')
         rows, colours = [], {}
         for i, r in enumerate(env['summary']):
-            rise = None if r.get('max_rise_m') is None else r['max_rise_m']*100
-            rows.append([r['kind'], r.get('heading'), r.get('level'), r['flights'], r['clean'], r['failed'], rise,
-                         r.get('max_over_fraction'), r.get('max_tilt_deg')])
+            clear = None if r.get('min_clearance_m') is None else r['min_clearance_m']*100
+            rows.append([r['kind'], r.get('heading'), r.get('level'), r['flights'], r['clean'], r['failed'], clear,
+                         r.get('contact', 0), r.get('max_tilt_deg')])
             colours[(i, 5)] = BAD if r['failed'] else GOOD
-            if rise is not None:
-                colours[(i, 6)] = BAD if rise > threshold*100 else (WARN if rise > RISE_LIMIT_M*100 else GOOD)
+            if clear is not None:
+                colours[(i, 6)] = BAD if clear < 1 else (WARN if clear < CLEARANCE_M*100 else GOOD)
         fill(self.table, rows, colours)
 
 
@@ -249,6 +248,11 @@ class OnlineView(QtWidgets.QWidget):
         self.model_table = table(['parameter', 'offline fit', 'running model', 'from offline', 'planner uses'])
         self.model_table.setMaximumHeight(210)
         layout.addWidget(self.model_table)
+        layout.addWidget(label('Cable error on all 10 markers, each window before it updates the model (a prediction), '
+                               'against the offline model on the same window', 'section'))
+        self.error_canvas = PlotCanvas(dark=True, minimum=(600, 250))
+        self.error_canvas.setMaximumHeight(270)
+        layout.addWidget(self.error_canvas)
         self.canvas = PlotCanvas(dark=True, minimum=(600, 430))
         layout.addWidget(self.canvas, 1)
         layout.addWidget(label('Not used (newest first)', 'section'))
@@ -337,7 +341,9 @@ class OnlineView(QtWidgets.QWidget):
         header = next((r for r in rows if r.get('kind') == 'header'), None)
         updates = [r for r in rows if r.get('kind') == 'update']
         done = any(r.get('kind') == 'summary' for r in rows)
+        verdict = next((r for r in rows if r.get('kind') == 'verdict'), None)
         self.draw(header, updates)
+        self.draw_error(updates)
         if header is None:
             self.status.setText('')
             return
@@ -347,6 +353,8 @@ class OnlineView(QtWidgets.QWidget):
                 counts.setdefault(f, {}).setdefault(r['status'], 0)
                 counts[f][r['status']] += 1
         state = 'finished' if done else ('LIVE' if header.get('live') else 'replaying')
+        if verdict is not None and not verdict.get('used'):
+            state += f" · NOT USED ({verdict.get('reason')})"
         self.status.setText(f"{state} · {header['flight']} · {len(updates)} updates · "
                             + ' · '.join(f"{f}: " + ', '.join(f'{v} {k}' for k, v in c.items()) for f, c in counts.items()))
         lines = []
@@ -355,6 +363,40 @@ class OnlineView(QtWidgets.QWidget):
                 if r['status'] != 'accepted' and len(lines) < 10:
                     lines.append(f"{u['stamp']-updates[0]['stamp']:6.1f} s  {f:5s}  {r['status']:8s}  {r.get('reason', '')}")
         self.events.setText('\n'.join(lines) or 'every window used')
+
+    def draw_error(self, updates):
+        c = self.error_canvas
+        c.reset()
+        rows = [u for u in updates if (u['families'].get('cable') or {}).get('error', {}).get('now') is not None]
+        if not rows:
+            c.draw_idle()
+            return
+        t0 = updates[0]['stamp']
+        t = np.array([u['stamp']-t0 for u in rows])
+        now = np.array([u['families']['cable']['error']['now'] for u in rows])
+        off = np.array([u['families']['cable']['error']['offline'] for u in rows])
+
+        def smooth(x, n=5):
+            return np.array([x[max(0, i-n+1):i+1].mean() for i in range(len(x))])
+        with c.style():
+            grid = c.figure.add_gridspec(1, 3, width_ratios=(2.2, 1.2, 1.4))
+            ax = c.figure.add_subplot(grid[0, 0])
+            ax.plot(t, off, color=MUTED, lw=.6, alpha=.5); ax.plot(t, smooth(off), color=MUTED, lw=1.5, label='offline model')
+            ax.plot(t, now, color=PALETTE['sky'], lw=.6, alpha=.5); ax.plot(t, smooth(now), color=PALETTE['sky'], lw=1.8, label='running model')
+            ax.set_xlabel('flight time (s)'); ax.set_ylabel('mm'); ax.set_title('10-marker error per window'); ax.legend(loc='upper left', fontsize=7)
+            bx = c.figure.add_subplot(grid[0, 1])
+            gain = 100*(1-smooth(now)/np.maximum(smooth(off), 1e-9))
+            bx.plot(t, gain, color=GOOD, lw=1.5); bx.axhline(0, color=MUTED, lw=.8, ls='--')
+            bx.set_title(f'better than offline: {gain[-1]:+.0f} %'); bx.set_xlabel('flight time (s)'); bx.set_ylabel('%')
+            mx = c.figure.add_subplot(grid[0, 2])
+            last = rows[-10:]
+            per_now = np.nanmean([[np.nan if v is None else v for v in u['families']['cable']['error']['markers_now']] for u in last], 0)
+            per_off = np.nanmean([[np.nan if v is None else v for v in u['families']['cable']['error']['markers_offline']] for u in last], 0)
+            k = np.arange(1, 11)
+            mx.bar(k-.2, per_off, .4, color=MUTED, label='offline'); mx.bar(k+.2, per_now, .4, color=PALETTE['sky'], label='running')
+            mx.set_xticks(k); mx.set_xlabel('marker (1 = at the drone, 10 = tip)'); mx.set_ylabel('mm')
+            mx.set_title('per marker, last 10 windows'); mx.legend(loc='upper left', fontsize=7); mx.grid(axis='x', visible=False)
+        c.draw_idle()
 
     def draw(self, header, updates):
         self.canvas.reset()

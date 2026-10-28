@@ -6,7 +6,7 @@ flight script flies (`acceleration_circle_cf2.py --trajectory FILE`) and a repor
 Per candidate: (1) the trajectory is normalised to the peak horizontal acceleration `--level`
 (default: the highest level flown cleanly in the envelope plus --step, or --first-level);
 (2) constraints: every ensemble member is flown closed loop (aerowhip.planning.simulate), the
-cable's highest node must stay --rise-margin below the attachment, tilt below --tilt-limit,
+cable must stay --clearance (5 cm) from the drone (it may rise above the clamp), tilt below --tilt-limit,
 position error below --error-limit, motors above --motor-floor; (3) for feasible candidates the
 Fisher information about the fitted parameters (aerowhip.planning.information: one simulation per
 parameter on the adopted model), scored by the weakest parameter. Random restarts, then a (1+lambda)
@@ -34,6 +34,7 @@ from aerowhip.planning.ensemble import Ensemble, load_fit
 from aerowhip.planning.information import fisher, parameter_set, perturbed_configs, scores
 from aerowhip.planning.simulate import FLIGHT_STACK, simulate_motion
 from aerowhip.planning.trajectory import FourierTrajectory
+from aerowhip.takes.contact import PLANNING_MARGIN_M
 from plan_flight import ARCHIVE, envelope_table, flown_gains  # noqa: E402
 
 
@@ -71,12 +72,13 @@ def evaluate(thetas, T, members, ensemble, params, firmware, stack, limits):
                 member_rows.append(dict(label=label, ok=False, reason=(r or {}).get('failed', 'no result')))
                 continue
             rise, tilt, err, motor = float(r['rise'].max()), float(r['tilt'].max()), float(r['error'].max()), float(r['motor'].min())
+            clear = float(r['clearance'].min())
             reasons = []
-            if rise > -limits['rise_margin']: reasons.append(f'rise {rise:+.2f}')
+            if clear < limits['clearance']: reasons.append(f'cable {clear*100:.0f} cm from the drone')
             if tilt > limits['tilt']: reasons.append(f'tilt {tilt:.0f}')
             if err > limits['error']: reasons.append(f'error {err:.2f}')
             if motor < limits['motor']: reasons.append(f'motor {motor:.2f}')
-            member_rows.append(dict(label=label, ok=not reasons, reason='; '.join(reasons), rise=rise, tilt=tilt, error=err, motor=motor))
+            member_rows.append(dict(label=label, ok=not reasons, reason='; '.join(reasons), rise=rise, clearance=clear, tilt=tilt, error=err, motor=motor))
         feasible = all(m['ok'] for m in member_rows)
         info = None
         base, rest = rs[len(members)], rs[len(members)+1:]
@@ -84,7 +86,8 @@ def evaluate(thetas, T, members, ensemble, params, firmware, stack, limits):
             info = scores(fisher(base, rest, params), params)
         out.append(dict(theta=np.asarray(th).tolist(), feasible=feasible, members=member_rows, information=info,
                         score=info['score'] if (feasible and info) else -1e9, summary=T.summary(th),
-                        worst_rise=max((m.get('rise', -9.) for m in member_rows), default=None)))
+                        worst_rise=max((m.get('rise', -9.) for m in member_rows), default=None),
+                        worst_clearance=min((m.get('clearance', 9.) for m in member_rows), default=None)))
     return out
 
 
@@ -103,7 +106,8 @@ def main():
     p.add_argument('--restarts', type=int, default=12, help='random candidates in the first generation')
     p.add_argument('--generations', type=int, default=3, help='(1+lambda) refinement rounds after the restarts')
     p.add_argument('--offspring', type=int, default=8)
-    p.add_argument('--rise-margin', type=float, default=.04)
+    p.add_argument('--clearance', type=float, default=PLANNING_MARGIN_M,
+                   help='every model\'s cable at least this far from the drone (m); it may rise above the clamp')
     p.add_argument('--tilt-limit', type=float, default=50.)
     p.add_argument('--error-limit', type=float, default=.5)
     p.add_argument('--motor-floor', type=float, default=.05)
@@ -131,7 +135,7 @@ def main():
     members += [(n, c) for n, c in ensemble.brackets() if n in wanted]
     params = parameter_set(ensemble)
     T = FourierTrajectory(terms=args.terms, duration=args.duration, name=args.output.stem)
-    limits = dict(rise_margin=args.rise_margin, tilt=args.tilt_limit, error=args.error_limit, motor=args.motor_floor)
+    limits = dict(clearance=args.clearance, tilt=args.tilt_limit, error=args.error_limit, motor=args.motor_floor)
     rng = np.random.default_rng(args.seed)
     print(f'level {level:g} m/s^2 (envelope clean max {max(clean.values()) if clean else None}); {len(members)} members; '
           f'{len(params)} parameters; {args.restarts} restarts + {args.generations} x {args.offspring} offspring; '
@@ -163,8 +167,9 @@ def main():
                                                    marginal_log10=best['information']['marginal_log10'], coupled=best['information']['coupled'],
                                                    parameters=[p[0] for p in params], correlation=best['information']['correlation'],
                                                    members=[n for n, _ in members], member_rows=best['members'],
-                                                   worst_rise=best['worst_rise'], summary=best['summary']))
-    print(f'\nbest: score {best["score"]:.3f}, weakest parameter {best["information"]["weakest"]}, worst member rise {best["worst_rise"]:+.2f} m, '
+                                                   worst_rise=best['worst_rise'], worst_clearance=best['worst_clearance'], summary=best['summary']))
+    print(f'\nbest: score {best["score"]:.3f}, weakest parameter {best["information"]["weakest"]}, closest cable to the drone '
+          f'{best["worst_clearance"]*100:.0f} cm (every model), '
           f'{best["summary"]} -> {args.output}')
     for name, v in sorted(best['information']['marginal_log10'].items(), key=lambda kv: kv[1]):
         print(f'  {name:28s} {v:6.2f}')

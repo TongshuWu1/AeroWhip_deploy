@@ -2708,3 +2708,39 @@ model_state.json was not created by any test. Not done: a real flight.
 The 3D view shows the plain floor and grid again: the lab scan is not loaded and the Lab button is
 gone. The scan files, `configs/lab_scan.yaml`, `scripts/clean_lab_scan.py` and `scene.add_lab` are
 kept for later, unchanged.
+
+## Dated change note — 2026-10-28 failed takes and cable contact (user's rule)
+
+User's rule: the cable touching the drone, or an interrupted take, makes the whole take a failure,
+not used at all; the cable may rise above the clamp. Decisions (user): contact = within 1 cm of the
+drone, 3 frames in a row; in flight, land within 5 cm of the drone (instead of 5 cm above the
+clamp); planner: every model's cable at least 5 cm from the drone. Audit before the change: collection
+already excluded non-completed takes automatically (collect_series.record_manifest); the online fit
+added any take to the running model; 8 failed cf_2 takes had been partly used through usable spans
+(vertical/001, circle/001, whip/001, line_star_xy/001, figure8_xy/002 and three no-cable ones;
+decay/003 held out) and are in the archived cf_2 fits that are today's prior. Implemented:
+- `aerowhip/takes/contact.py`: the drone as stacked cylinders (battery 4 cm from the clamp to the
+  arms; arms/plates 7.6 cm from the CAD meshes; guard ring 11.4 cm to 2 cm above the markers; a plain
+  10.7 cm cylinder from the clamp called a cable passing under the propellers contact), cable markers
+  plus chords without the first 4 cm, contact events, `flight_contact` (live labeller over the cloud,
+  cached contact.json). On the recordings: contact on cf_6 mix_a/001 and /002 (25.2 s), cf_2
+  vertical/001, /002, whip/001, line_star_xy/001 (all failed takes) and **cf_2 whip/002 (73.2 s, a
+  completed take used in the cf_2 fits)**; none on the normal flights (closest 1.1 cm).
+- Fits (`calibration_set.usable`, also fit_thrust_map): a take with completed false, or with contact,
+  is dropped whatever its role or spans.
+- Online fit: windows with contact gated ('cable touching the drone'); after a failed take or any
+  contact the running model is restored to its pre-flight state and the flight listed as rejected
+  (`state.reject_flight`). Checked on mix_a/002: restored exactly, history marks it.
+- Planner: `simulate_motion` returns the clearance (cable from 8 cm arc on); optimize_trajectory and
+  plan_flight require 5 cm (`--clearance`), replacing the height margin. Round 1 (excitation_002)
+  re-checked on 9 models: closest 6.8 cm (damping/3), feasible; stored in the plan file.
+- Flight stack: near-contact landing (raw cloud, ≥2 points within 5 cm for 0.15 s; on the recordings
+  it fired on every flip, about 0.2 s after first contact, and on no normal flight); the drone's own
+  markers are learned (cf_6 has one 8 cm out, outside the old 7 cm exclusion) and merged-marker
+  ghosts in the marker plane ignored; envelope clean = completed without contact (raw: a point
+  within 1 cm, 3 frames; it also counts mix_a/002's 3 m/s² part, a first marker 7–10 mm under an arm);
+  the early-landing message no longer says "link loss" for every reason.
+- UI: distance from the drone in the strip, tiles, cursor, Safety and Envelope pages; the Online
+  page's 10-marker error panel (synthetic flight: 54 % better than the offline model by the end).
+Not done: refitting cf_2 without its failed takes (cf_2 is retired; it is the current prior);
+writing contact.json touched the cf_6 hover_start/001 flight folder (a cache file only).

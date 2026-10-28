@@ -54,6 +54,26 @@ def save(path, estimator, *, flight=None, finished=False):
     os.replace(tmp, path)
 
 
+def reject_flight(path, before, flight, reason):
+    """A failed take (the user's rule: the cable touched the drone, or the take was interrupted) is not
+    used at all: the running model goes back to its state from before the flight (`before`, the file's
+    content then, or None if there was none), and the flight is listed in the history as rejected."""
+    path = Path(path)
+    entry = dict(flight=str(flight), finished=datetime.now().isoformat(timespec='seconds'), rejected=reason)
+    if before is None:
+        rejected = path.with_name('model_state_rejected.jsonl')
+        with rejected.open('a') as f:
+            f.write(json.dumps(entry)+'\n')
+        if path.exists():
+            path.unlink()                          # it only held this flight's estimate
+        return
+    data = dict(before, flights=before.get('flights', [])+[entry], current_flight=None,
+                updated=datetime.now().isoformat(timespec='seconds'))
+    tmp = path.with_suffix('.tmp')
+    tmp.write_text(json.dumps(data, indent=1)+'\n')
+    os.replace(tmp, path)
+
+
 def start_from(estimator, state):
     """Start the estimator from a saved running model (same parameters), else leave the prior."""
     if not state or state.get('parameters') != estimator.space.names:

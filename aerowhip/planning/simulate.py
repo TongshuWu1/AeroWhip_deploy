@@ -50,7 +50,8 @@ def simulate_part(config, firmware, spec, voltage=7.6, stack=FLIGHT_STACK):
 
 def simulate_motion(config, firmware, motion, voltage=7.6, stack=FLIGHT_STACK, markers_every=10, nodes=False):
     """Fly a motion closed loop. Returns dict of arrays over the steps from the motion's start to
-    HOVER_AFTER_S after it ends: t, phase (list), error (m), tilt (deg), rise (m), tip (3), tip_speed,
+    HOVER_AFTER_S after it ends: t, phase (list), error (m), tilt (deg), rise (m), clearance (m: the cable's
+    smallest distance from the drone, aerowhip.takes.contact), tip (3), tip_speed,
     motor (min force / hover share), command (3), position (3); every `markers_every` steps also
     markers (M, 10, 3) and rotation (M, 3, 3) for the sensitivities, with `nodes=True` also every cable
     node (M, n, 3) and the reference (M, 3) at the same steps, for display; and `failed` (None or a reason)."""
@@ -85,7 +86,11 @@ def simulate_motion(config, firmware, motion, voltage=7.6, stack=FLIGHT_STACK, m
     end = start+args.motion.duration+HOVER_AFTER_S
     origin = np.zeros(3)
     n = len(model.rest)+1
-    out = dict(t=[], phase=[], error=[], tilt=[], rise=[], tip=[], tip_speed=[], motor=[], command=[], position=[])
+    out = dict(t=[], phase=[], error=[], tilt=[], rise=[], clearance=[], tip=[], tip_speed=[], motor=[], command=[], position=[])
+    from aerowhip.takes.contact import PLANNING_FROM_ARC_M, envelope_distance
+    arc_nodes = np.r_[0., np.cumsum(model.rest)]
+    far = arc_nodes >= PLANNING_FROM_ARC_M              # the cable from the first marker on (the hanging first link is clear)
+    attachment_z = float(np.asarray(model.attachment_tracking)[2])
     markers, rotations, cable_nodes, references = [], [], [], []
     index = np.asarray(model.marker_indices)[1:]
     sent = command(trim)
@@ -114,6 +119,7 @@ def simulate_motion(config, firmware, motion, voltage=7.6, stack=FLIGHT_STACK, m
         out['t'].append(t-start); out['phase'].append(phase)
         out['error'].append(float(np.linalg.norm(ref-p))); out['tilt'].append(tilt)
         out['rise'].append(float((q[1:, 2]-q[0, 2]).max()))
+        out['clearance'].append(float(envelope_distance((q[far]-p)@R, attachment_z).min()))
         out['tip'].append(q[-1].copy()); out['tip_speed'].append(float(np.linalg.norm(qv[-1])))
         out['motor'].append(float(min(controller.motors(s, sent))/hover_share))
         out['command'].append(sent[6:9].copy()); out['position'].append(p.copy())

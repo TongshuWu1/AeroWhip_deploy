@@ -68,3 +68,26 @@ def test_a_change_that_keeps_happening_is_adopted():
     statuses = [window(est, A, new, rng.normal(size=200)*.05)['status'] for _ in range(12)]
     assert 'change' in statuses
     assert np.allclose(est.theta, new, atol=.5)
+
+
+def test_contact_is_touching_the_drone_not_rising_above_the_clamp():
+    from aerowhip.takes.contact import clearance, contact_events
+    arc = np.cumsum([.0832, .1001, .0993, .1017, .1003, .0989, .1012, .0989, .1001, .0969])
+    att = np.array([0., 0., -.055])
+    I = np.eye(3)[None]
+    hanging = np.array([[[0., 0., -.055-a] for a in arc]])
+    assert clearance(hanging, np.zeros((1, 3)), I, att, arc)[0] > .03          # the hanging cable is clear
+    # swung out under the propellers and up past the guard, well above the clamp: allowed
+    high = hanging.copy()
+    high[0, 0] = [.06, 0., -.112]                 # the first link points down and out from the clamp
+    for k in range(1, 10):
+        high[0, k] = [.20+.06*(k-1), 0., .0+.03*(k-1)]
+    assert clearance(high, np.zeros((1, 3)), I, att, arc)[0] > .02
+    # folded up against the propellers: contact
+    folded = hanging.copy()
+    folded[0, 1] = [.09, 0., -.02]
+    c = clearance(np.repeat(folded, 4, 0), np.zeros((4, 3)), np.repeat(I, 4, 0), att, arc)
+    assert c[0] < .01 and contact_events(c) == [0]
+    # one frame alone (a wrong label) is not contact
+    c1 = np.r_[.2, c[0], .2, .2]
+    assert contact_events(c1) == []

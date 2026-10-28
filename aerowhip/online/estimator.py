@@ -28,7 +28,7 @@ window is not used.
 
 Robust filter (the user's rule: a flip or a sudden change counts only if it keeps happening):
   gated   the window is not used: outside the recorded motion (takeoff, landing, settling, safety
-          landings), cable over the drone (a marker above the attachment), drone tilt over 60 deg, too
+          landings), the cable touching the drone (aerowhip.takes.contact), drone tilt over 60 deg, too
           few markers (no window), a failed replay;
   outlier the window's step is improbable under the current uncertainty (Mahalanobis distance
           above the 99.9 % chi-square bound) or the model cannot explain it (its residual is more
@@ -163,6 +163,23 @@ def drone_residual(config, firmware, window, flight, coupled=True):
     return np.r_[(position[s]/POSITION_SCALE_M).ravel(), (tilt[s]/TILT_SCALE_RAD).ravel()]
 
 
+def window_error(name, now, offline):
+    """The error of a window at the estimate it arrived to (a prediction: the window has not updated it
+    yet) and at the offline model, on the same samples. cable: RMS 3-D marker error over every seen
+    marker, mm, overall and per marker 1..10; drone: the normalised residual's RMS."""
+    now, offline = np.asarray(now, float), np.asarray(offline, float)
+    if name == 'cable':
+        a, b = now.reshape(-1, 10, 3), offline.reshape(-1, 10, 3)
+        both = np.isfinite(a).all(2) & np.isfinite(b).all(2)
+        def rms(e, sel):
+            return float(np.sqrt(np.mean(np.sum(e[sel]**2, axis=-1))))*1000 if sel.any() else None
+        return dict(unit='mm', now=rms(a, both), offline=rms(b, both),
+                    markers_now=[rms(a[:, k], both[:, k]) for k in range(10)],
+                    markers_offline=[rms(b[:, k], both[:, k]) for k in range(10)])
+    both = np.isfinite(now) & np.isfinite(offline)
+    return dict(unit='', now=float(np.sqrt(np.mean(now[both]**2))), offline=float(np.sqrt(np.mean(offline[both]**2))))
+
+
 class FamilyState:
     def __init__(self, index):
         self.index = index
@@ -205,12 +222,13 @@ class OnlineEstimator:
         tilt = np.degrees(np.arccos(np.clip(window.rotation[:, 2, 2], -1, 1))).max()
         if tilt > 60:
             return f'tilt {tilt:.0f} deg'
-        if has_cable:
+        if has_cable:                      # the user's rule: the cable touching the drone (not rising above the clamp)
+            from aerowhip.takes.contact import clearance, contact_events
             attachment = np.asarray(self.space.base['attachment']['position_tracking_m'], float)
-            roots = window.position+np.einsum('nij,j->ni', window.rotation, attachment)
-            rise = np.nanmax(window.markers[:, :, 2]-roots[:, None, 2])
-            if np.isfinite(rise) and rise > 0.:
-                return f'cable over the drone ({rise*100:+.0f} cm)'
+            arc = np.cumsum(self.space.base['cable']['marker_interval_lengths_m'])
+            clear = clearance(window.markers, window.position, window.rotation, attachment, arc)
+            if contact_events(clear):
+                return f'cable touching the drone ({np.nanmin(clear)*100:+.0f} cm)'
         return None
 
     # ------------------------------------------------------------------ one update
@@ -244,9 +262,14 @@ class OnlineEstimator:
                     def submit(th):
                         return self.pool.submit(drone_residual, self.space.config(th, cable=has_cable), firmware, window, flight, has_cable)
                 thetas = [self.theta]+[self.theta+np.eye(len(self.theta))[k]*self.space.parameters[k].step for k in fam.index]
-                jobs[name] = (submit, [submit(th) for th in thetas])
-            for name, (submit, futures) in jobs.items():
+                offline = np.array([q.value for q in self.space.parameters])
+                jobs[name] = (submit, [submit(th) for th in thetas], submit(offline))
+            for name, (submit, futures, reference) in jobs.items():
                 record['families'][name] = self._update(name, futures, submit)
+                try:                       # the window's error before it updates anything, and the offline model's
+                    record['families'][name]['error'] = window_error(name, futures[0].result(), reference.result())
+                except Exception:
+                    pass
             for name in self.families:
                 if name not in record['families']:
                     record['families'][name] = dict(status='skipped', reason='no cable on this flight')
