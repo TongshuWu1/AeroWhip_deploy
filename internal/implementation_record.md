@@ -2247,3 +2247,17 @@ the residual it holds to 0.75 mm. The residual is cf_2's and will be refitted. (
 test_parallel_environment and test_native_estimator: `runs/reset_bank/whip.npz` (cf_2 cable states)
 is rejected by the engine (cable length mismatch after the centre-of-mass change); rebuild with
 `scripts/build_reset_bank.py` (awaiting the user's go-ahead), keeping the old bank dated.
+
+## Dated change note — 2026-10-28 fresh start on cf_6: earlier data and results archived
+
+On the user's decision ("fresh start, first tune the drone"), everything recorded or fitted with
+cf_2 was moved, not deleted: flights, tuning flights, bench ramps and the old manifest to
+`crazyswarm2_jazzy_whipping/calibration_data/archive/cf_2_2026-10-28/`; flight-stack logs to
+`crazyswarm2_jazzy_whipping/logs/archive_cf_2_2026-10-28/`; every result under `runs/` (fits,
+diagnostics, reset bank, PPO runs) to `runs/archive_cf_2_2026-10-28/`. Run paths cited in this
+record before this note are relative to that archive folder now. The manifest starts again with the
+cf_6 vehicle entry, the stage definitions (setups cf_6 / cf_6_nocable) and no flights, bench data or
+adopted results. The model configuration keeps cf_2's fitted values as placeholders until cf_6's
+fits replace them. Tests that read `runs/reset_bank/whip.npz` now fail for want of a bank; it is
+rebuilt from cf_6 recordings before training. Tuning plans for cf_6 in the flight stack's
+`config/tuning.yaml`, in order: cf6_baseline, cf6_estimator, cf6_stiffness, cf6_damping, cf6_integral.
