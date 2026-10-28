@@ -7,8 +7,9 @@
     "parallel_environments": 64,
     "evaluation_actor_batch": 128,
     "training_episodes": 25600,
-    "evaluation_interval_episodes": 512,
-    "evaluation_episodes": 200
+    "evaluation_interval_episodes": 1024,
+    "evaluation_episodes": 200,
+    "environment_workers": 24
   },
   "environment": {
     "duration_s": 5,
@@ -195,6 +196,7 @@
     "max_grad_norm": 0.5,
     "target_kl": 0.02,
     "post_step_kl_trials": 8,
+    "kl_check_states": 2048,
     "entropy": {
       "initial_weight": 0.02,
       "final_weight": 0.001,

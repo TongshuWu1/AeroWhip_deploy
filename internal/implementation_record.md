@@ -1883,3 +1883,32 @@ User's request: one systematic, automated data collection with a single calibrat
   figure8_xy 30.1 -> 35.0, line_star_xy/001 24.0 -> 27.3, vertical 21.4 -> 23.9 mm got worse; reproduced
   twice. Both are effective values for this model (10-segment cable mesh, firmware law). Each run had one
   worker process die (memory fault) and repeated the evaluation. Logged in runs/fits/adoptions.jsonl.
+
+## Dated change note — 2026-10-28 training throughput, phase A (worker processes, KL sample)
+
+- **Measured** (single core, per simulated lane-second): physics 382 ms (80 %), sensor + estimator +
+  cable filter 71 ms (15 %), task 10 ms, recording 15 ms. In one process only the physics ran in
+  parallel (OpenMP); the sensor and task ran lane by lane. 24 single-threaded processes: 32.5 simulated
+  lane-seconds per second (8: 13.6, 16: 24.1). The learner's post-step KL safeguard re-scored all
+  ~16,000 cohort states after each of ~300 gradient steps (~19,000 network passes per collection);
+  one encoder gradient step costs 1.7 ms on the RTX 4080, so the network was not the cost.
+- [envs/parallel_environment.py](../aerowhip/envs/parallel_environment.py) (`ParallelEnvironment`):
+  the cohort's lanes in `run.environment_workers` (24) spawned worker processes, each a complete
+  `BatchEnvironment` over a contiguous slice (native physics single-threaded); the learner steps them
+  in lockstep sub-step by sub-step (`begin_decision` / `substep` / `end_decision` split out of
+  `BatchEnvironment.step`), so the cohort stops exactly when its last lane ends. Every random draw is
+  per global lane (`lane_offset`, `total_lanes`; model groups over the whole cohort), so lanes are
+  bit-identical to one process (`tests/test_parallel_environment.py`: two randomised cohorts with
+  reference starts, and slices ending at different times). `make_batch_environment` chooses it when
+  `environment_workers` > 0 and there is more than one lane; the in-process path is unchanged.
+- PPO: `ppo.kl_check_states` (2048): the post-step KL safeguard scores a fixed random subset of the
+  cohort's states per update (own generator; the learner's random stream unchanged); the final KL
+  after the update is still over every state. Evaluation every 1024 training episodes.
+- Command delay: the environment's 100 Hz record of commands in flight uses the delay rounded up;
+  the runtime applies the exact delay, so `check_model` no longer requires the 10 ms grid (the
+  adopted 5 ms delay and the randomised delays are off it).
+- **Result** (one collection of 64 episodes + 64-episode evaluation, RTX 4080): collection 35 → 6 s,
+  pre-update statistics 5 → 2 s, update 45 → 7.4 s (final cohort KL 0.0194 within 0.02), evaluation
+  29 → 6 s. Full strike run estimate ~11 h → ~1.9 h. 107 tests pass; two physics tests fail with the
+  model adopted the same day (hover drift 3.1 mm > 2.5 mm; free-fall momentum 1.8e-11 > 1e-12 with EI
+  5.7e-4), not with these changes; reported to the session that adopted it, tolerances not changed.

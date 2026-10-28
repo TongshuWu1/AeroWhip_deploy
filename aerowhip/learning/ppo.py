@@ -345,8 +345,15 @@ class PPO:
         stopped_kl = False
         stop_kl = None
         guard = c.post_step_kl_trials
+        # The post-step KL safeguard scores a fixed random subset of the cohort's states (its own
+        # generator: the learner's random stream is unchanged); the final KL uses every state.
+        kl_episode, kl_step = episode, step
+        if guard is not None and c.kl_check_states is not None and len(episode) > c.kl_check_states:
+            generator = torch.Generator().manual_seed(1_000_003*(self.collections+1))
+            pick = torch.randperm(len(episode), generator=generator)[:c.kl_check_states].sort().values.to(episode.device)
+            kl_episode, kl_step = episode[pick], step[pick]
         if guard is not None:
-            self._kl_inputs = self.prepare_kl_inputs(r,episode,step)
+            self._kl_inputs = self.prepare_kl_inputs(r,kl_episode,kl_step)
         trial_count = backtracked = rejected = 0
         minimum_factor = 1.
         maximum_accepted_kl = 0.
@@ -384,7 +391,7 @@ class PPO:
                             self.actor_optimizer.step()
                         else:
                             outcome = bounded_actor_step(self.actor.parameters(), self.actor_optimizer,
-                                lambda: self.cohort_policy_kl(r, episode, step),
+                                lambda: self.cohort_policy_kl(r, kl_episode, kl_step),
                                 c.target_kl, guard)
                             trial_records.append(dict(accepted_update_index=self.updates+1, **outcome))
                             trial_count += len(outcome['trials'])
@@ -435,7 +442,8 @@ class PPO:
             value_mse_before=before['value_mse'], value_mse=after['value_mse'])
         if stopped_kl: result['stop_kl'] = stop_kl
         if guard is not None:
-            result.update(post_step_kl_trials=trial_count, post_step_kl_backtracked_updates=backtracked,
+            self._kl_inputs = None      # the cached prefixes belong to the subset
+            result.update(post_step_kl_states=len(kl_episode), post_step_kl_trials=trial_count, post_step_kl_backtracked_updates=backtracked,
                 post_step_kl_rejected_updates=rejected, post_step_kl_minimum_lr_factor=minimum_factor,
                 post_step_kl_maximum_accepted=maximum_accepted_kl,
                 post_step_kl_final=self.cohort_policy_kl(r, episode, step),

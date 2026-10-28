@@ -329,6 +329,9 @@ def run(directory):
         traceback.print_exc()
         raise
     finally:
+        for e in [*locals().get('environments', {}).values(), locals().get('evaluation_env')]:
+            if e is not None and hasattr(e, 'close'):
+                e.close()
         lock.unlink()
 
 

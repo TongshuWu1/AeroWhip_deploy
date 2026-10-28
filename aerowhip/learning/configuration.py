@@ -17,6 +17,7 @@ class RunConfig:
     evaluation_episodes: int
     training_episodes: int
     evaluation_interval_episodes: int
+    environment_workers: int      # worker processes running the lanes (0: all lanes in the learner process)
 
     @classmethod
     def from_dict(cls, raw):
@@ -30,6 +31,7 @@ class RunConfig:
         for name in ('parallel_environments', 'evaluation_actor_batch', 'evaluation_episodes', 'training_episodes',
                      'evaluation_interval_episodes'):
             integer(name, getattr(self, name))
+        integer('environment_workers', self.environment_workers, 0)
 
     @property
     def collections(self):
@@ -62,7 +64,8 @@ class EntropySchedule:
 @dataclass(frozen=True)
 class PPOConfig:
     """Clipped PPO with an asymmetric critic. post_step_kl_trials enables the cohort-KL
-    acceptance check (up to that many halved learning-rate trials); None disables it.
+    acceptance check (up to that many halved learning-rate trials); None disables it. The check
+    scores kl_check_states random states of the cohort (None: every state).
     action_noise_correlation_s sets AR(1) exploration noise; None uses independent noise."""
     learning_rate: float
     batch_size: int
@@ -77,6 +80,7 @@ class PPOConfig:
     max_grad_norm: float
     target_kl: float
     post_step_kl_trials: int | None
+    kl_check_states: int | None
     entropy: EntropySchedule
     action_noise_correlation_s: float | None
 
@@ -97,6 +101,8 @@ class PPOConfig:
             raise ValueError('initial_log_std must lie in [-5, 2]')
         if self.discount > 1 or self.gae_lambda > 1 or self.clip_ratio >= 1:
             raise ValueError('Require discount and GAE lambda in (0, 1], clip ratio in (0, 1)')
+        if self.kl_check_states is not None:
+            integer('kl_check_states', self.kl_check_states)
         if self.post_step_kl_trials is not None and not 1 <= integer('post_step_kl_trials', self.post_step_kl_trials) <= 12:
             raise ValueError('post_step_kl_trials must lie in 1..12')
         if self.action_noise_correlation_s is not None:

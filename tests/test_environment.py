@@ -12,7 +12,7 @@ from helpers import ENVIRONMENT, EXPERIMENT, SCENE, SNAPSHOT, TASK
 
 
 def make(lanes=1):
-    return make_batch_environment(EXPERIMENT, SNAPSHOT, SCENE, lanes=lanes, device='cpu')
+    return make_batch_environment(EXPERIMENT, SNAPSHOT, SCENE, lanes=lanes, device='cpu', workers=0)   # in-process internals
 
 
 def run(env, actions=None):

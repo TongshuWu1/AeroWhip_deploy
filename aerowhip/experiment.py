@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 
-from aerowhip.envs.configuration import EnvironmentConfig, OBSERVATION_PERIOD_S
+from aerowhip.envs.configuration import EnvironmentConfig
 from aerowhip.paths import ROOT, project_path
 from aerowhip.physics.configuration import load_configuration
 from aerowhip.physics.model_configuration import load_model_configuration
@@ -48,7 +48,9 @@ class Experiment:
 
 
 def check_model(experiment, model):
-    """Model-dependent limits: the tasks' ten-link mesh, positive thrust and a 100 Hz command delay."""
+    """Model-dependent limits: the tasks' ten-link mesh and positive thrust. The command delay may take
+    any value: the native runtime applies it exactly (the environment's 100 Hz record of commands in
+    flight rounds it up)."""
     if model['simulation']['segments_per_marker_interval'] != [1]*10:
         raise ValueError('The tasks require the ten-link mesh (one segment per marker interval)')
     if model['residual']['status'] != 'unfitted':
@@ -57,9 +59,8 @@ def check_model(experiment, model):
     trim = -(mass+model['cable']['total_mass_kg'])*model['simulation']['gravity_world_m_s2'][2]/mass
     if experiment.environment.acceleration_limit_mps2[2] >= trim:
         raise ValueError('Downward acceleration limit must keep desired vertical force positive')
-    delay = model['controller']['command_delay_s']
-    if abs(delay/OBSERVATION_PERIOD_S-round(delay/OBSERVATION_PERIOD_S)) > 1e-8:
-        raise ValueError('Command delay must lie on the 100 Hz grid')
+    if model['controller']['command_delay_s'] < 0:
+        raise ValueError('The command delay must not be negative')
 
 
 def load(source=DEFAULT):

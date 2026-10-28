@@ -94,7 +94,7 @@ class BatchEnvironment:
     @torch.no_grad()
     def __init__(self, config, task_config, model, scene, *, device, lanes, actor_batch=1,
                  firmware=None, battery_voltage=None, sensing_seed=0, randomised=False, randomisation_seed=None,
-                 reference_states=True, **unused):
+                 reference_states=True, lane_offset=0, total_lanes=None, **unused):
         """config: EnvironmentConfig; task_config: typed task settings; model: resolved model dict.
 
         actor_batch is the actor batch layout used by policy_action() for one-lane evaluation.
@@ -105,10 +105,18 @@ class BatchEnvironment:
         randomised: draw the model, voltage and bias per reset from config.randomisation (a
         function of (randomisation_seed, cohort)); reference_states: start the task's reference
         fraction of lanes from its reference bank (training only).
+        lane_offset, total_lanes: this batch holds lanes lane_offset .. lane_offset+lanes-1 of a cohort of
+        total_lanes (a slice run in one worker process of envs.parallel_environment). Every random draw
+        of a lane is a function of the seeds, the cohort and its global lane number, and model groups
+        are formed over the whole cohort, so a lane is bit-identical however the cohort is split.
         `unused` accepts the tensor environment's GPU options (capture, conditional); ignored.
         """
         self.config, self.scene = config, scene
         self.device, self.batch, self.actor_batch = device, lanes, actor_batch
+        self.lane_offset = int(lane_offset)
+        self.total_lanes = lanes if total_lanes is None else int(total_lanes)
+        if not 0 <= self.lane_offset <= self.total_lanes-lanes:
+            raise ValueError('The lane slice must lie inside the cohort')
         self.model_config = model
         self.native = native_module()
         self.model = m = Model(model, load_weights=False)
@@ -148,7 +156,9 @@ class BatchEnvironment:
         yaw = float(np.arctan2(rotation[1, 0], rotation[0, 0]))
         self.yaw = yaw
         self.hold = torch.tensor([0., 0., 0., yaw], dtype=torch.float64, device=device)
-        self.delay = round(model['controller']['command_delay_s']/OBSERVATION_PERIOD_S)
+        # 100 Hz record of the commands still in flight (history and critic input): the delay rounded up
+        # to whole samples. The runtime itself applies the exact delay, including randomised ones.
+        self.delay = math.ceil(model['controller']['command_delay_s']/OBSERVATION_PERIOD_S-1e-9)
         if list(m.marker_indices) != list(range(n)) or n != MARKERS+1:
             raise ValueError('The sensing model expects the attachment node and the ten marker nodes')
         # Frame layout and actor columns: envs.observation (shared with the flight node).
@@ -158,7 +168,8 @@ class BatchEnvironment:
         self.sensing = config.sensing
         arc = np.cumsum(model['cable']['marker_interval_lengths_m'])
         attachment = np.asarray(model['attachment']['position_tracking_m'], float)
-        self.sensors = [OptiTrackSensor(config.sensing, arc, attachment, np.random.default_rng([int(sensing_seed), lane]))
+        self.sensors = [OptiTrackSensor(config.sensing, arc, attachment,
+                                        np.random.default_rng([int(sensing_seed), self.lane_offset+lane]))
                         for lane in range(lanes)]
         self.length = float(rest.sum())
         # Critic physical vector: drone (18) then the free cable nodes and their velocities.
@@ -236,15 +247,24 @@ class BatchEnvironment:
         self.runtime = runtimes[0] if len(runtimes) == 1 else RuntimeGroup(runtimes)
         self.execution_backend = f'native_batch_openmp_{self.native.BatchRuntime.threads()}_threads'
 
+    def _lanes(self):
+        """Global lane numbers of this batch."""
+        return self.lane_offset+np.arange(self.batch)
+
     def _draw(self):
-        """This cohort's randomisation: per-lane voltage and bias, per-group model variants."""
-        r, rng = self.randomisation, np.random.default_rng([self.randomisation_rng_seed, self.cohort])
-        self.voltage = rng.uniform(*r.battery_voltage_v, self.batch)
-        self.bias = rng.normal(0., 1., (self.batch, 3))*np.asarray(r.acceleration_bias_sd_mps2)
-        groups = min(r.groups, self.batch)
-        sizes = [len(part) for part in np.array_split(np.arange(self.batch), groups)]
+        """This cohort's randomisation: per-lane voltage and bias (one generator per global lane),
+        per-group model variants (groups split the whole cohort; one generator per group)."""
+        r, seed = self.randomisation, self.randomisation_rng_seed
+        lanes = [np.random.default_rng([seed, self.cohort, int(lane)]) for lane in self._lanes()]
+        self.voltage = np.array([g.uniform(*r.battery_voltage_v) for g in lanes])
+        self.bias = np.array([g.normal(0., 1., 3) for g in lanes])*np.asarray(r.acceleration_bias_sd_mps2)
+        groups = min(r.groups, self.total_lanes)
+        group_of = np.concatenate([np.full(len(part), k) for k, part in
+                                   enumerate(np.array_split(np.arange(self.total_lanes), groups))])[self._lanes()]
+        mine, sizes = np.unique(group_of, return_counts=True)
         models, draws = [], []
-        for _ in range(groups):
+        for group in mine:
+            rng = np.random.default_rng([seed, self.cohort, 1_000_003, int(group)])
             drag = math.exp(rng.uniform(*np.log(r.body_drag_scale))) if r.body_drag_scale[0] > 0 else 1.
             damping = math.exp(rng.uniform(*np.log(r.bending_damping_scale))) if r.bending_damping_scale[0] > 0 else 1.
             response = rng.uniform(*r.motor_response_s)
@@ -258,7 +278,7 @@ class BatchEnvironment:
             draws.append(dict(body_drag_scale=drag, bending_damping_scale=damping, motor_response_s=float(response),
                               command_delay_s=float(delay)))
         self.variant_draws = draws
-        self._build_runtime(models, sizes)
+        self._build_runtime(models, [int(n) for n in sizes])
 
     def set_curriculum_stage(self, stage):
         """Workspace radius and the task's target/threshold for the next cohorts (strike task)."""
@@ -295,18 +315,19 @@ class BatchEnvironment:
     def _inside(self, p):
         return self.workspace.contains(torch.as_tensor(p[:, None]), self.origin.cpu().expand(self.batch, 3))[:, 0].numpy()
 
-    def _initial_states(self, rng):
+    def _initial_states(self):
         """Per-lane initial state rows: the hover seed, or a reference-bank state for the
-        reference fraction of the lanes (translated to the scene origin)."""
+        reference fraction of the lanes (translated to the scene origin); one generator per global lane."""
         rows = np.tile(self.seed, (self.batch, 1))
         self.reference_lanes[:] = False
         if self.reference is None:
             return rows
-        chosen = rng.random(self.batch) < self.reference_fraction
-        picks = rng.integers(0, len(self.reference['states']), self.batch)
-        for lane in np.flatnonzero(chosen):
-            rows[lane] = translate_state(self.reference['states'][picks[lane]], self.origin_np, self.nodes-1)
-            self.reference_lanes[lane] = True
+        for lane, number in enumerate(self._lanes()):
+            rng = np.random.default_rng([self.randomisation_rng_seed, self.cohort, 7, int(number)])
+            if rng.random() < self.reference_fraction:
+                pick = int(rng.integers(0, len(self.reference['states'])))
+                rows[lane] = translate_state(self.reference['states'][pick], self.origin_np, self.nodes-1)
+                self.reference_lanes[lane] = True
         return rows
 
     def _start(self, rows):
@@ -336,7 +357,6 @@ class BatchEnvironment:
     @torch.no_grad()
     def reset(self):
         self.cohort += 1
-        rng = np.random.default_rng([self.randomisation_rng_seed, self.cohort, 7])
         if self.randomised:
             self._draw()
         self.index, self.decision = 0, 0
@@ -359,7 +379,7 @@ class BatchEnvironment:
         self.history = {name: torch.zeros((self.batch, self.samples, *shape), dtype=torch.float64)
                         for name, shape in shapes.items()}
         self.numerical_valid = torch.zeros((self.batch, self.samples), dtype=torch.bool)
-        observation, sensed = self._start(self._initial_states(rng))
+        observation, sensed = self._start(self._initial_states())
         self.sensing_latency_frames = np.array([s.latency for s in self.sensors])
         p, v, R, w, q, cv = observation
         envelope = self._envelope(q, R)
@@ -461,63 +481,80 @@ class BatchEnvironment:
 
     @torch.no_grad()
     def step(self, action):
-        if self.decision >= self.decisions or not self.active_np.any():
+        """One policy decision: the action held for `stride` 10 ms sub-steps; the cohort stops early
+        when every lane has ended."""
+        self.begin_decision(action)
+        for _ in range(self.stride):
+            self.substep()
+            if not self.active_np.any():
+                break
+        return self.end_decision()
+
+    # A decision in parts, so that envs.parallel_environment can step worker slices sub-step by
+    # sub-step and stop all of them exactly when the whole cohort has ended.
+    def begin_decision(self, action, *, cohort_active=None):
+        running = self.active_np.any() if cohort_active is None else cohort_active
+        if self.decision >= self.decisions or not running:
             raise RuntimeError('Cohort finished')
         if action.shape != (self.batch, 3) or not bool(torch.isfinite(action).all()) or bool((action.abs() > 1.000001).any()):
             raise ValueError('Expected normalized finite acceleration actions')
         action = action.detach().clamp(-1, 1)
-        was_decision = self.active_np.copy()
+        self._was_decision = self.active_np.copy()
         self.actions[:, self.decision] = torch.where(self.active[:, None], action, 0.)
         self.previous_action = torch.where(self.active[:, None], action, self.previous_action)
-        action_np = action.double().cpu().numpy()
-        acceleration = action_np*self.action_limit_np
-        requested = np.concatenate((acceleration, np.full((self.batch, 1), self.yaw)), 1)   # policy part, as recorded
-        sent = acceleration+self.hover_trim
+        self._action_np = action.double().cpu().numpy()
+        acceleration = self._action_np*self.action_limit_np
+        self._requested = np.concatenate((acceleration, np.full((self.batch, 1), self.yaw)), 1)   # policy part, as recorded
+        self._sent = acceleration+self.hover_trim
+
+    def substep(self):
+        """One 10 ms sample of the current decision."""
+        requested, sent, action_np = self._requested, self._sent, self._action_np
         terminate = self.config.terminate_on_violation
-        for _ in range(self.stride):
-            was = self.active_np.copy()
-            applied = self.queue[:, 0].copy() if self.delay else requested
-            if self.delay:
-                self.queue[was] = np.concatenate((self.queue[was][:, 1:], requested[was][:, None]), 1)
-            self.runtime.step(self._command(sent))
-            observation = self._observe()
-            p, v, R, w, q, cv = observation
-            lost = np.asarray(self.runtime.failed, bool)
-            failed = was & lost
-            self.index += 1
-            inside = self._inside(p)
-            observed = was & ~lost
-            safe = self._envelope(q, R)
-            self.workspace_breached_np |= observed & ~inside
-            self.physical_violation_np |= observed & ~safe
-            self.minimum_observed_cable_height = np.where(observed, np.minimum(self.minimum_observed_cable_height,
-                                                                              q[:, :, 2].min(-1)), self.minimum_observed_cable_height)
-            self.maximum_observed_tilt = np.where(observed, np.maximum(self.maximum_observed_tilt,
-                np.degrees(np.arccos(np.clip(R[:, 2, 2], -1, 1)))), self.maximum_observed_tilt)
-            self.failed_np |= failed
-            self.active_np = was & ~lost
-            self._record(observation, self._sense(observation, observed), requested, applied, was & ~failed, ~inside)
-            elapsed = self.index*OBSERVATION_PERIOD_S
-            for lane in np.flatnonzero(was):
-                if lost[lane]:
-                    reward = self.task.fail(lane, elapsed)
-                    self._end(lane, elapsed, 'numerical_failure', p[lane])
-                else:
-                    reward = self.task.observe(lane, elapsed, dict(cable_positions=q[lane], cable_velocities=cv[lane],
-                                                                   drone_positions=p[lane], action=action_np[lane]))
-                    if terminate and not safe[lane] and not self.task.done(lane):
-                        reward += self.task.fail(lane, elapsed, 'envelope_violation')
-                        self._end(lane, elapsed, 'envelope_violation', p[lane])
-                    elif self.task.done(lane):
-                        self.active_np[lane] = False
-                        self.terminal_times[lane] = self.task.end_time(lane)
-                self.ledger[lane, self.decision] += reward
-            self.executed_np += was
-            if not self.active_np.any():
-                break
-        self.lengths += torch.as_tensor(was_decision, device=self.device).long()
+        was = self.active_np.copy()
+        applied = self.queue[:, 0].copy() if self.delay else requested
+        if self.delay:
+            self.queue[was] = np.concatenate((self.queue[was][:, 1:], requested[was][:, None]), 1)
+        self.runtime.step(self._command(sent))
+        observation = self._observe()
+        p, v, R, w, q, cv = observation
+        lost = np.asarray(self.runtime.failed, bool)
+        failed = was & lost
+        self.index += 1
+        inside = self._inside(p)
+        observed = was & ~lost
+        safe = self._envelope(q, R)
+        self.workspace_breached_np |= observed & ~inside
+        self.physical_violation_np |= observed & ~safe
+        self.minimum_observed_cable_height = np.where(observed, np.minimum(self.minimum_observed_cable_height,
+                                                                          q[:, :, 2].min(-1)), self.minimum_observed_cable_height)
+        self.maximum_observed_tilt = np.where(observed, np.maximum(self.maximum_observed_tilt,
+            np.degrees(np.arccos(np.clip(R[:, 2, 2], -1, 1)))), self.maximum_observed_tilt)
+        self.failed_np |= failed
+        self.active_np = was & ~lost
+        self._record(observation, self._sense(observation, observed), requested, applied, was & ~failed, ~inside)
+        elapsed = self.index*OBSERVATION_PERIOD_S
+        for lane in np.flatnonzero(was):
+            if lost[lane]:
+                reward = self.task.fail(lane, elapsed)
+                self._end(lane, elapsed, 'numerical_failure', p[lane])
+            else:
+                reward = self.task.observe(lane, elapsed, dict(cable_positions=q[lane], cable_velocities=cv[lane],
+                                                               drone_positions=p[lane], action=action_np[lane]))
+                if terminate and not safe[lane] and not self.task.done(lane):
+                    reward += self.task.fail(lane, elapsed, 'envelope_violation')
+                    self._end(lane, elapsed, 'envelope_violation', p[lane])
+                elif self.task.done(lane):
+                    self.active_np[lane] = False
+                    self.terminal_times[lane] = self.task.end_time(lane)
+            self.ledger[lane, self.decision] += reward
+        self.executed_np += was
+        self._observation = observation
+
+    def end_decision(self):
+        self.lengths += torch.as_tensor(self._was_decision, device=self.device).long()
         self.decision += 1
-        self._record_critic_state(observation)
+        self._record_critic_state(self._observation)
         return self.frames, self.indices(), not self.active_np.any()
 
     @torch.no_grad()
@@ -637,9 +674,16 @@ def load_reference_bank(path, width):
     return dict(states=states, source=str(bank['source']) if 'source' in bank else '', count=len(states))
 
 
-def make_batch_environment(experiment, snapshot, scene, *, lanes=None, device=None, **kwargs):
-    """Environment for a typed Experiment and its frozen snapshot (model dict)."""
-    return BatchEnvironment(experiment.environment, experiment.task, snapshot['model'], scene,
-        device=device or experiment.run.device,
-        lanes=experiment.run.parallel_environments if lanes is None else lanes,
-        actor_batch=experiment.run.evaluation_actor_batch, **kwargs)
+def make_batch_environment(experiment, snapshot, scene, *, lanes=None, device=None, workers=None, **kwargs):
+    """Environment for a typed Experiment and its frozen snapshot (model dict): lanes in worker
+    processes (envs.parallel_environment) when run.environment_workers > 0 and there is more than
+    one lane, else in this process."""
+    lanes = experiment.run.parallel_environments if lanes is None else lanes
+    workers = experiment.run.environment_workers if workers is None else workers
+    arguments = (experiment.environment, experiment.task, snapshot['model'], scene)
+    options = dict(device=device or experiment.run.device, lanes=lanes, actor_batch=experiment.run.evaluation_actor_batch,
+                   **kwargs)
+    if workers > 0 and lanes > 1:
+        from aerowhip.envs.parallel_environment import ParallelEnvironment
+        return ParallelEnvironment(*arguments, workers=workers, **options)
+    return BatchEnvironment(*arguments, **options)
