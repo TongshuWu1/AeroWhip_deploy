@@ -216,7 +216,10 @@ struct BatchRuntime {
         }
     }
 };
+void bind_estimator(py::module_& m);   // native/estimator_bindings.cpp
+
 PYBIND11_MODULE(_native, m) {
+    bind_estimator(m);
     m.doc()="Native float64 coupled drone/DDER plant and event runtime; Python owns control.";
     m.attr("api_version")=12;
     py::class_<Actuator>(m,"Actuator")

@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(aerowhip_physics LANGUAGES CXX)
-add_library(aerowhip_physics STATIC engine.cpp runtime.cpp actuator.cpp)
+add_library(aerowhip_physics STATIC engine.cpp runtime.cpp actuator.cpp estimator.cpp)
 target_include_directories(aerowhip_physics PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(aerowhip_physics PUBLIC cxx_std_17)
 if(MSVC)

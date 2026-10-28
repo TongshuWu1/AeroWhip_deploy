@@ -1944,3 +1944,26 @@ User's request: one systematic, automated data collection with a single calibrat
 - Installed by building aside and renaming into place (processes holding the old library keep it).
   109 tests pass. Phases A + B, 64 lanes × 2 s: 18.2 (in process) → 50.0 simulated lane-seconds per
   second with 24 worker processes.
+
+## Dated change note — 2026-10-28 training throughput, phase C (native flight estimator)
+
+- [native/estimator.hpp](../native/estimator.hpp), [estimator.cpp](../native/estimator.cpp),
+  [estimator_bindings.cpp](../native/estimator_bindings.cpp): `FrameClock`, `CableFilter` (association,
+  chain check, re-acquisition, budgeted chain search, projection, get/set state, override) and
+  `Observer` (frame clock, 5-pose velocity and body-rate fits, cable filter on the candidates),
+  ported statement by statement with the same floating-point order wherever a label is decided
+  (NumPy's `(x²+y²)+z²` norms, its pairwise mean of ten values, Python's ties-to-even round).
+  `deployment.cable_filter.CableFilter/FrameClock/cable_candidates` and `deployment.observer.Observer`
+  are now the native classes, used in flight, in training (`envs.sensing`) and offline (`cable_labels`);
+  the Python implementations remain as `ReferenceCableFilter`, `ReferenceFrameClock`,
+  `reference_cable_candidates`, `ReferenceObserver`.
+- **Checks** ([tests/test_native_estimator.py](../tests/test_native_estimator.py)): recorded whip/002
+  (8,701 frames): identical labels on every frame, positions, velocities, confidence and quality
+  bit-identical, candidates identical; state round trip and override; simulated sensor streams
+  (6 lanes, 2,999 frames in the development check, 3 lanes in the test): identical labels and cable
+  states, drone velocity and body rate within 5e-14 (the quadratic fit is solved in frame units by
+  normal equations instead of NumPy's least squares). Filter 0.082 → 0.005 ms per recorded frame.
+  Per simulated lane-second on one core the sensor costs 9.5 ms (was 71). 112 tests pass. Built
+  aside and installed by rename while a cable fit ran (the physics code in the new library is
+  unchanged from phase B). A first build hit a gcc internal compiler error (machine instability
+  recorded 2026-10-28); the rebuild succeeded.

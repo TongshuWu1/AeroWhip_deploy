@@ -7,12 +7,16 @@ The frame clock (deployment.cable_filter.FrameClock) turns the jittered stamps i
 times. The drone's velocity and body rate are the endpoint derivatives of a quadratic fitted to
 the last `history` frame poses (position, and the rotation's log relative to the newest pose).
 The cable is the live CableFilter on the cloud, drone markers and duplicates removed.
+
+`Observer` is the native implementation (native/estimator.cpp); `ReferenceObserver` is the Python
+reference it follows (identical cable states; drone velocity and body rate agree to ~1e-13, the
+quadratic fit being solved in frame units instead of by NumPy's least squares).
 """
 import math
 
 import numpy as np
 
-from .cable_filter import MARKERS, CableFilter, FrameClock, cable_candidates
+from .cable_filter import MARKERS, ReferenceCableFilter, ReferenceFrameClock, reference_cable_candidates
 
 
 def endpoint_derivative(time, values):
@@ -32,14 +36,14 @@ def rotation_log(R):
     return v if angle < 1e-9 else v*angle/math.sin(angle)
 
 
-class Observer:
+class ReferenceObserver:
     def __init__(self, arc, attachment_body, *, dt=.01, history=5):
         """arc: marker distances along the cable (m); attachment_body: tracking origin to the cable
         attachment, body frame (m); history: frames in the velocity fit (5 = 40 ms span)."""
         self.attachment = np.asarray(attachment_body, float)
         self.dt, self.history = dt, history
-        self.filter = CableFilter(arc, dt=dt)
-        self.clock = FrameClock(dt)
+        self.filter = ReferenceCableFilter(arc, dt=dt)
+        self.clock = ReferenceFrameClock(dt)
         self.reset()
 
     def reset(self):
@@ -60,7 +64,7 @@ class Observer:
         root = p+R@self.attachment
         root_velocity = velocity+R@np.cross(omega, self.attachment)
         # The filter gets frame times: its own clock then sees exact frames.
-        state = self.filter.observe(frame_time, root, cable_candidates(cloud, p))
+        state = self.filter.observe(frame_time, root, reference_cable_candidates(cloud, p))
         positions = state['positions']
         if not state['initialized'] or not np.isfinite(positions).all():
             # No labelled cable yet: markers at the attachment, zero confidence (the policy is
@@ -72,3 +76,17 @@ class Observer:
                     angular_velocity=omega, root=root, root_velocity=root_velocity, cable_positions=positions,
                     cable_velocities=velocities, confidence=confidence, labelled=state['index'] >= 0,
                     initialized=bool(state['initialized']))
+
+
+from aerowhip.physics._native import Observer as _NativeObserver  # noqa: E402
+
+
+class Observer(_NativeObserver):
+    """The flight estimator (native; the Python reference is ReferenceObserver)."""
+
+    def __init__(self, arc, attachment_body, *, dt=.01, history=5):
+        super().__init__([float(a) for a in np.asarray(arc, float)], np.asarray(attachment_body, float), dt, history)
+
+    def observe(self, stamp, position, rotation, cloud):
+        return super().observe(float(stamp), np.asarray(position, float), np.asarray(rotation, float),
+                               np.asarray(cloud, float).reshape(-1, 3))

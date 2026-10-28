@@ -12,7 +12,11 @@ below the attachment) re-labels the cable from the cloud: it recovers a cable th
 faster than the prediction, e.g. folding in a whip snap. The same code runs offline over a recorded cloud (`cable_labels`)
 and live, so what is validated on recordings is what flies.
 
-No learned components. Costs per frame are O(markers x points) NumPy operations.
+`CableFilter`, `FrameClock` and `cable_candidates` are the native implementation
+(native/estimator.cpp: about 16 times faster); it follows the Python reference kept here
+(`ReferenceCableFilter`, `ReferenceFrameClock`, `reference_cable_candidates`) statement by statement and is
+checked against it on recorded flights (tests/test_native_estimator.py: identical labels and states).
+No learned components.
 """
 import math
 
@@ -23,7 +27,7 @@ DRONE_RADIUS_M = .07        # points this close to the tracking origin are the d
 DUPLICATE_RADIUS_M = .01    # points this close together are one marker
 
 
-def cable_candidates(points, drone_position, *, drone_radius_m=DRONE_RADIUS_M, duplicate_radius_m=DUPLICATE_RADIUS_M):
+def reference_cable_candidates(points, drone_position, *, drone_radius_m=DRONE_RADIUS_M, duplicate_radius_m=DUPLICATE_RADIUS_M):
     """The cloud points that may be cable markers: not the drone's own markers (within
     drone_radius_m of the tracking origin), duplicates merged (the first of points closer than
     duplicate_radius_m is kept). Same preprocessing offline (cable labels) and in simulation."""
@@ -37,7 +41,7 @@ def cable_candidates(points, drone_position, *, drone_radius_m=DRONE_RADIUS_M, d
     return np.array(kept, float).reshape(-1, 3)
 
 
-class FrameClock:
+class ReferenceFrameClock:
     """The cameras' frame time from host receipt stamps. OptiTrack delivers exactly one frame per
     `dt`, but the stamps are receipt times, jittered by a few ms and occasionally stalled: each
     stamp advances the clock by the whole number of frames it is ahead (at least one; a dropped
@@ -61,7 +65,7 @@ class FrameClock:
         return step
 
 
-class CableFilter:
+class ReferenceCableFilter:
     def __init__(self, arc, *, dt=.01, gate_m=.06, gate_growth_m=.5, noise_m=.004, length_tolerance_m=.015,
                  start_tolerance_m=.02, start_minimum=6, max_hidden_s=.5, projection_iterations=3,
                  max_speed_mps=12., reacquire_m=.05, search_limit=4000, prediction_weight=.25):
@@ -86,7 +90,7 @@ class CableFilter:
         self.confidence = np.zeros(MARKERS)
         self.initialized = False
         self.time = None
-        self.clock = FrameClock(self.dt)
+        self.clock = ReferenceFrameClock(self.dt)
         self.root = None
         self.root_velocity = np.zeros(3)
         self.quality = 0.                                # 0 unreliable .. 1 all markers seen
@@ -362,3 +366,33 @@ class CableFilter:
         self.initialized = True
         self._update_quality()
 
+
+
+# ---------------------------------------------------------------------- native implementation
+from aerowhip.physics._native import CableFilter as _NativeCableFilter, FrameClock, cable_candidates as _native_candidates  # noqa: E402
+
+
+def cable_candidates(points, drone_position, *, drone_radius_m=DRONE_RADIUS_M, duplicate_radius_m=DUPLICATE_RADIUS_M):
+    """The cloud points that may be cable markers (see reference_cable_candidates); native."""
+    return _native_candidates(np.asarray(points, float).reshape(-1, 3), np.asarray(drone_position, float),
+                              drone_radius_m, duplicate_radius_m)
+
+
+class CableFilter(_NativeCableFilter):
+    """The live cable filter (native; the Python reference is ReferenceCableFilter)."""
+
+    def __init__(self, arc, **settings):
+        super().__init__([float(a) for a in np.asarray(arc, float)], **settings)
+
+    def observe(self, time_s, root, points, root_velocity=None):
+        return super().observe(float(time_s), np.asarray(root, float), np.asarray(points, float).reshape(-1, 3))
+
+    def override(self, root, points, index):
+        super().override(np.asarray(root, float), np.asarray(points, float).reshape(-1, 3), np.asarray(index))
+
+    def _project(self, root, positions):
+        """In place, as the reference's projection."""
+        positions[:] = self.project(np.asarray(root, float), np.asarray(positions, float))
+
+
+__all__ = ['MARKERS', 'DRONE_RADIUS_M', 'DUPLICATE_RADIUS_M', 'CableFilter', 'FrameClock', 'cable_candidates', 'ReferenceCableFilter', 'ReferenceFrameClock', 'reference_cable_candidates']

@@ -44,7 +44,11 @@ gaps, never filled in the labels.
 
 The live filter (`aerowhip.deployment.cable_filter`), which must be causal, labels the same
 clouds frame by frame and is scored against these labels; its output is kept beside them
-(`cable_labels_filter.npz`). `python scripts/label_cable.py <folders>` opens the review
+(`cable_labels_filter.npz`). The filter and the observer around it (drone velocity and body rate
+from the last poses) run as native code (`native/estimator.cpp`), the same in flight, in the
+training environment and offline; they follow the Python reference implementations kept beside them
+(`ReferenceCableFilter`, `ReferenceObserver`) statement by statement, and on a recorded whip flight
+(8,701 frames) give identical labels and bit-identical marker states, about 16 times faster. `python scripts/label_cable.py <folders>` opens the review
 window to inspect either labelling and correct it by hand.
 
 The recorded stamps are host receipt times: the cameras deliver exactly one frame per 10 ms
