@@ -2261,3 +2261,24 @@ adopted results. The model configuration keeps cf_2's fitted values as placehold
 fits replace them. Tests that read `runs/reset_bank/whip.npz` now fail for want of a bank; it is
 rebuilt from cf_6 recordings before training. Tuning plans for cf_6 in the flight stack's
 `config/tuning.yaml`, in order: cf6_baseline, cf6_estimator, cf6_stiffness, cf6_damping, cf6_integral.
+
+## Dated change note — 2026-10-28 flight script: a lost link lands the drone (user's decision)
+
+After five emergency drops on 2026-10-28 (three on cf_2, two on cf_6: tune_cf6_estimator/001 at
+~0.5 m during take-off when OptiTrack stopped, /002 at ~1.4 m when the drone's downlink stopped after
+81 s) the user decided that a lost link must land the drone normally. crazyswarm2 (commit after
+deda6b6): pose gaps up to 0.4 s are flown through on the planned acceleration; longer gaps start a
+blind landing (steady 0.3 m/s descent without braking, a press onto the floor, motors stopped), which
+becomes a closed-loop landing if poses return; a quiet status link (2.5 s) or a host stall over 0.5 s
+starts a closed-loop landing straight down; genuine bound violations still cut. Checked on a
+simulated point-mass drone through the real flight loop (`scripts/tests/test_link_loss_landing.py`,
+7 pass: short gap flown through, long gap lands blind and stays on the floor, poses returning close
+the loop, quiet status and host stall land, a shove off the path still cuts). Not yet flown. The
+older flight-script unit tests have 9 failures that predate this change (flight-area check against
+their test start position).
+
+Estimator on cf_6 (tune_cf6_estimator/002, all six sets flown before the downlink cut):
+extQuatStdDev 0.05 gives a 1.74° hover offset and 1.60° stroke error, 0.02 0.82° / 1.21°, 0.01
+0.13–0.17° / 0.77–1.13°, 0.005 0.05° / 1.00°, 0.0025 0.02° / 0.80°; jitter (~3,500) and lag
+(115 ms) unchanged: 0.01 kept, as on cf_2. cf_6 baseline (tune_cf6_baseline/001): effective mass
+0.1545 kg, horizontal trim [0.144, 0.443] m/s² (body), now in physical.yaml.
