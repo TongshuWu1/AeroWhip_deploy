@@ -1850,3 +1850,17 @@ User's request: one systematic, automated data collection with a single calibrat
   columns; the saved-motion replay reads the task direction from `target_direction_world` and draws
   the strike target with its hit radius (`replay_data.target`). Checked on screen with the smoke run
   (`runs/ppo/20261027-195823-610845`, 2 collections). 107 tests pass.
+- **Drone replay diagnostics** (same day, scratch analyses; not retained artifacts, regenerate before
+  citing): (1) segment-restart check, acceleration error over the 100 ms after command changes at a
+  segment start vs mid-segment: x 0.09/0.09 (small) and 0.42/0.47 m/s² (large changes), y 0.32/0.17 and
+  0.44/0.45, z 0.17/0.13 and 1.06/0.48. A per-flight controller acceleration bias (attitude-estimate
+  offset) and a motor warm start from the measured history did not reduce the start excess (y
+  0.35-0.38, z 1.01-1.07; segment error 53.49 -> 53.7 mm) and were reverted. (2) Measured vs simulated
+  responses to the largest command changes (drone-only flights with motor logs, delay 30 ms fit),
+  averaged over 52-56 events per axis: acceleration peaks measured 3.10/3.54/3.57, simulated
+  2.84/3.30/3.33 m/s²; mean PWM 27,750 vs 27,850; simulated roll/pitch and motor PWM lag the measured
+  by about 20-30 ms. Over 0-300 ms after the change the acceleration error is mostly event-to-event
+  (x 0.57 of 0.66, y 1.44 of 1.47, z 0.62 of 0.66 m/s²), the roll/pitch error mostly systematic (x 3.0
+  of 3.5°, y 2.6 of 3.5°). `FlightController.step` (advancing the firmware state) is now bound to
+  Python. The repository was repaired after a power cut by the other session; the scratch outputs of
+  these analyses were lost with /tmp.

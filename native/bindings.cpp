@@ -289,7 +289,8 @@ PYBIND11_MODULE(_native, m) {
         .def("reset",&FlightController::reset)
         .def_property_readonly("law",[](const FlightController& c){return c.law()==FlightLaw::firmware?"firmware":"identified";})
         .def("motors",[](const FlightController& c,Array s,Array command){return c.motors(vector(s),vector(command));})
-        .def("__call__",[](const FlightController& c,Array s,Array command){return c(vector(s),vector(command));});
+        .def("__call__",[](const FlightController& c,Array s,Array command){return c(vector(s),vector(command));})
+        .def("step",[](FlightController& c,Array s,Array command){return c.step(vector(s),vector(command));});
     // The firmware port alone, with the harness layout of tests/test_firmware_port.py:
     // in (23): sp_pos sp_vel sp_acc sp_yaw_deg pos vel quat_xyzw gyro_deg_s; out (9): thrust roll pitch yaw pwm1..4 capped.
     py::class_<mellinger::Controller>(m,"Mellinger")
