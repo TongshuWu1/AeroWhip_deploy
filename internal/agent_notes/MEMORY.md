@@ -12,3 +12,4 @@
 - [No heavy compute during flight](no-heavy-compute-during-flight.md) — CPU-heavy jobs on the flight computer stalled OptiTrack and dropped the drone (2026-10-28); only light reads between flights
 - [cf_6 replaces cf_2, redo fits](new-airframe-redo-fits.md) — 2026-10-28: cf_2 retired; cf_6 (156 g, props 1.5 cm, clamp 5.5 cm below markers) is the drone now; all fits to redo
 - [Safe planned identification](online-identification-rethink.md) — 2026-10-28: series stopped; bench-measure what can be measured, plan flights over a horizon with cable-angle chance constraints; design in internal/safe_planned_identification.md
+- [Planning tools built](planning-tools-built.md) — 2026-10-28: the loop's tools exist (plan/optimise, fly, envelope, fit, check); run it, don't redesign
