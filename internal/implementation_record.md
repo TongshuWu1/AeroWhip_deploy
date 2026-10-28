@@ -2361,3 +2361,17 @@ return stroke 5 s after the first pumps the remaining swing. With the cable the 
 sharp stops at 4.5 m/s² with 8 s holds, strokes 5, whips 4–5, lines 6 and random 5 (crazyswarm2
 4e8912b); drone-only levels unchanged. A simulated screening of each planned part for cable
 flip-over (the model's cable rising above the clamp) before flying is proposed.
+
+## Dated change note — 2026-10-28 the simulator does not reproduce the cable flip-over; data collection paused
+
+`scripts/mix_prescreen.py` flies a planned mixed flight in the simulator (configured model, firmware
+law at the flown gains, host PID) and reports per part the cable's rise above the clamp and the
+first link's angle. On the part that flipped the real cable (`cf_6/mix_a/001`, `/002`: sharp stop at
+6 m/s² on x, 5 s hold) it gives 33° and no rise, while the raw cloud of both flights (points within
+1.1 m of the drone, i.e. the cable) shows the cable at 162–175° from hanging, 21–45 cm above the
+drone, within 1 s of the FIRST stroke (not pumped by the return); at 3 m/s² 59° real against 21°
+simulated. The configured cable (cf_2's stage-3 fit, with its residual) underpredicts the response
+to sharp strokes severely; the stroke-window previews of 2026-10-28 (tip peak speed 0.90 of
+measured) pointed the same way at smaller amplitude. Consequence: the simulator cannot screen for
+flip-over, and the cable model is wrong where the whip task lives. The user paused data collection
+to rethink the approach (see `internal/online_identification_proposal.md`).
