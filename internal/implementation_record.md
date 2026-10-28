@@ -1928,3 +1928,21 @@ through the simulated host law match real flights.
 - random_high/005–008 lost the radio link 10–17 s after arming while hovering (the drone stopped
   answering; dongle on USB and server process fine), with and without the alignment; a 30 s hover
   (link_test/001) and random_high/009 and /010 were clean after a battery change. Not diagnosed.
+
+## Dated change note — 2026-10-28 coupling diagnostics; fitting and adaptation design
+
+- `scripts/stroke_diagnostics.py`: stroke windows (from the scripted reference acceleration of the
+  decay, strokes and whip phases) replayed open loop in both setups; results in `runs/diagnostics/`.
+  Findings: the coupling is right (drone error with cable ≤ without; coupled stroke loss insensitive
+  to inertia, arm, motor response, CoM); the simulated tip peaks 5–8 % slow; the cable error is a
+  steady lean present at rest (model equilibrium 2.3° off the measured hanging shape, 40 mm at the
+  tip), the same in every speed bin; the measured cable has 2–3° kinks at every joint and edge lengths
+  83.2 … 96.9 mm against the configured 85/100. Numbers and sources in
+  [internal/fitting_and_adaptation_design.md](fitting_and_adaptation_design.md).
+- `scripts/residual_targets.py`: per-frame force targets (measured minus model acceleration, tension
+  part removed). Kept as evidence that such targets are unusable here: the model's stiffness reacts to
+  the label-noise kinks with 6–20 m/s², against measured accelerations of 2–7 m/s².
+- The fitting process, the compact rollout-fitted cable residual, the bias-corrected coupled
+  validation with a stroke test, and the two adaptation loops (big: simulator; small: per-action
+  correction) with their switching rules are written in the design note. Nothing of it is
+  implemented yet; stages 1–2 are unchanged.
