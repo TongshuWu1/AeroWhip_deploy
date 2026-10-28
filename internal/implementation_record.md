@@ -1912,3 +1912,16 @@ User's request: one systematic, automated data collection with a single calibrat
   29 → 6 s. Full strike run estimate ~11 h → ~1.9 h. 107 tests pass; two physics tests fail with the
   model adopted the same day (hover drift 3.1 mm > 2.5 mm; free-fall momentum 1.8e-11 > 1e-12 with EI
   5.7e-4), not with these changes; reported to the session that adopted it, tolerances not changed.
+- **Coupled validation of the adopted model** (`runs/fits/coupled/20261027-204526.json`; the same
+  script, data and code at the commit before the adoption gives the "before"; full model driven by
+  the sent commands, 2 s windows, 21 cable flights, every number reproduced twice): mean drone debiased
+  29.6 -> 26.6 mm (raw 177 -> 177), cable shape 46.5 -> 40.4 mm, tip 80.6 -> 67.6 mm; fast flights (whip,
+  strokes, random_high) shape 57.4 -> 47.5, tip 103.3 -> 81.5 mm; tip better on 18 of 21 flights.
+- **Two tests had bounds that the measured cable broke; both bounds are now derived in the test:**
+  `test_zero_action_holds_hover` drifts 3.13 mm, purely vertical and growing as t² (PWM rounding,
+  2.5-4e-4 m/s²); its bound assumed a 4 s episode (episodes are 5 s) and passed before only through
+  the old vertical drag (0.85, now 0.48 s⁻¹): bound now ½·3e-4·T² with T from the episode.
+  `test_bending_cable_conserves_momentum_and_lengths_in_free_fall`: momentum error grows with EI
+  (2.6e-15 at EI 1e-6, 3.3e-13 at 1e-5, 2.2e-11 at 1e-4, 1.1e-10 kg m/s at 5.7e-4; edge error stays
+  1e-16), i.e. the implicit solver's stopping rule (velocity change < 2e-11 relative per step), not a
+  conservation failure: bound now steps × 2e-11 × |momentum|. 109 tests pass.

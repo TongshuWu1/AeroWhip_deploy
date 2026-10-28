@@ -8,6 +8,7 @@ import pytest
 import torch
 
 from aerowhip.envs.batch_environment import make_batch_environment
+from aerowhip.envs.configuration import OBSERVATION_PERIOD_S
 from helpers import ENVIRONMENT, EXPERIMENT, SCENE, SNAPSHOT, TASK
 
 
@@ -66,10 +67,12 @@ def test_schedule_and_real_plant_step(env):
 def test_zero_action_holds_hover():
     env = make(2)
     returns, valid, _ = run(env)
-    drift = (env.history['drone_positions']-env.history['drone_positions'][:, :1]).norm(dim=-1).max()
+    positions = env.history['drone_positions']
+    drift = (positions-positions[:, :1]).norm(dim=-1).max()
     # The firmware commands integer PWM: one count is ~4e-5 of the hover thrust, up to 3e-4 m/s^2
-    # of residual acceleration, i.e. up to ~2.5 mm over the 4 s episode.
-    assert float(drift) < 2.5e-3 and bool(valid.all())
+    # of residual acceleration, i.e. at most a t^2/2 over the episode (no credit for air drag).
+    duration = (positions.shape[1]-1)*OBSERVATION_PERIOD_S
+    assert float(drift) < .5*3e-4*duration**2 and bool(valid.all())
 
 
 def test_runs_are_reproducible_and_lanes_independent():
