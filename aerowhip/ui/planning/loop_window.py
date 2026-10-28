@@ -543,6 +543,9 @@ class LoopWindow(QtWidgets.QMainWindow):
         self.command.setPlainText(self.flight_command(path, True)+'\n\n'+self.flight_command(path, False))
 
     def poll(self):
+        latest = ld.Job.latest()                 # a job started from a terminal shows here too
+        if latest is not None and (self.job is None or latest.log != self.job.log) and latest.running:
+            self.job, self.was_running = latest, True
         self.flying = ld.flight_running()
         set_pill(self.flight_pill, 'FLIGHT RUNNING · computing locked' if self.flying else 'No flight running', BAD if self.flying else MUTED)
         busy = self.job is not None and self.job.running
