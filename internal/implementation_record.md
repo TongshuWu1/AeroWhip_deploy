@@ -2175,3 +2175,37 @@ tilt lag of 120 ms and a gain of 0.76, against 100–140 ms and 0.71–0.83 meas
 ×1.5 gives 90 ms and 0.85; the integral sets of the `integral` plan are stable. The tuning mode was
 checked for plan parsing and timing and the report on an old flight relabelled as four sets; it has
 not been flown. Nothing in the model changed.
+
+## Dated change note — 2026-10-28 lab: firmware 2026.08 flown; attitude-loop tuning; cf_2 motor/ESC failure
+
+Real flights, cf_2 without cable, all in `crazyswarm2_jazzy_whipping/calibration_data/cf_2_nocable/tune_*`
+(reports: `scripts/tuning_report.py <folder>`; the `tune_*` flights are not calibration data).
+
+- Firmware 2026.08 (commit 54f31e24, unmodified) flashed and flown: arming and the full-state
+  acceleration path unchanged; baseline (tune_baseline/001) tilt lag 115–120 ms, gain 0.77, as on
+  2023.11 and as the simulator pre-screen predicts (120 ms, 0.76).
+- `locSrv.extQuatStdDev` 0.05 → **0.01** (crazyswarm2 YAML 57d52de): onboard estimate error against
+  OptiTrack during strokes 1.0–1.1 → 0.7–0.8°, hover offset 0.9–1.3 → ~0.1°, no rise in motor
+  jitter or lag (tune_estimator/002, tune_estimator_fine/001; below 0.01 no consistent gain).
+- `ctrlMel.kR_xy` (kw_xy kept at 20000): tilt lag 115 → 85 → 70 → 60 → 55 ms at kR 70000 /
+  109375 / 133000 / 157500 / 175000, tilt reached 0.78 → 0.96 of commanded, overshoot below 1, motor
+  jitter flat (~6,200); raising kw_xy with it raised the jitter (+26–100 %) and was dropped
+  (tune_stiffness/001, tune_stiffness2/001, tune_stiffness3/001). Chosen 157500; in the YAML at
+  3514546, commented out again at 2a1fc69 while a take-off failure was investigated. Not yet
+  re-enabled. The attitude integral (ki_m_xy) has not been flown.
+- Take-off failures (tune_stiffness4/001, /002, tune_takeoff_check): propellers spinning, no lift,
+  also at the default kR; the cause was hardware: one motor failed after the third emergency drop
+  of the day; a replacement motor does not spin either (motor_spin_test.py), so its ESC channel is
+  the suspect. cf_2 is out of service; a colleague will repair it or another Bolt will be used.
+- Three emergency motor stops today dropped the drone from ~1.3 m while it was flying normally:
+  drone telemetry stopped for 2.5 s with commands still arriving (tune_estimator/001); a host
+  stall during a simulator run on this computer (tune_estimator_fine/001); a single 0.17 s
+  OptiTrack gap at 16° tilt (tune_stiffness3/001). A change of the abort rule (hold through short
+  pose gaps, land instead of cutting on stale status) is proposed, not approved, not implemented.
+- OptiTrack set to 150 Hz by the user; `aerowhip/takes/calibration_flights.py` handles 100 and
+  200 Hz only (150 Hz would be read as 200 Hz) — calibration data must be recorded at 100/200 Hz or
+  the loader extended first.
+
+Tools added in crazyswarm2 today: --tune (in-air gain sets), tuning_report.py (incl. ringing),
+flash_firmware.py, motor_spin_test.py, firmware commit recorded with every flight. Nothing in the
+model changed; the stage 1–4 fits remain those of cf_2 and will be redone on the tuned drone.
