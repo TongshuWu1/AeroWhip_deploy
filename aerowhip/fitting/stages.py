@@ -202,8 +202,9 @@ class Cable(Stage):
     def _segments_summary(self, r):
         """Least squares on short segments (scripts/fit_cable_segments.py)."""
         start, best, u = r['start'], r['best'], r['uncertainty']
-        sd = u['standard_deviation']
-        ci = [f'×/÷ {10**(1.96*sd[0]):.3g}', f'×/÷ {10**(1.96*sd[1]):.3g}', f'± {1.96*sd[2]:.2g}', f'×/÷ {10**(1.96*sd[3]):.3g}']
+        sd = dict(zip(r['parameters'], u['standard_deviation']))
+        physics = ('log10 EI', 'log10 Cb', 'Cd', 'log10 linear drag')
+        ci = [('held fixed' if n not in sd else f'± {1.96*sd[n]:.2g}' if n == 'Cd' else f'×/÷ {10**(1.96*sd[n]):.3g}') for n in physics]
         rows = [[name, _mm(start['per_flight_rms_m'].get(name)), _mm(value)] for name, value in best['per_flight_rms_m'].items()]
         headline = [('marker error, 1 s segments (mm)', _mm(start['rms_m']), _mm(best['rms_m']))]
         if best.get('held_out'):
@@ -211,8 +212,9 @@ class Cable(Stage):
         strong = [f'{a} / {b} {c:+.2f}' for a, b, c in _strong(u)]
         parameters = [(n, start['values'][k], best['values'][k], c) for n, k, c in zip(self.current(), self.KEYS, ci)]
         names = r['parameters']
-        for i in range(len(self.KEYS), len(names)):          # residual terms, in their search units
-            parameters.append((names[i], r['start']['x'][i], best['x'][i], f'± {1.96*sd[i]:.2g}'))
+        for i, n in enumerate(names):                         # residual terms, in their search units
+            if n not in physics:
+                parameters.append((n, r['start']['x'][i], best['x'][i], f'± {1.96*sd[n]:.2g}'))
         notes = [f'Loss: {r["loss"]}.', 'Intervals: 95 %, clustered by flight, linearised.' +
                  (f' Strongly correlated: {"; ".join(strong)}.' if strong else ''),
                  f"Failed segment replays during the search: {r['counts']['failed_segment_replays']}; "

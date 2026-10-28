@@ -43,11 +43,20 @@ LEGENDRE = np.array([[1., 0., 0.], [-1., 2., 0.], [1., -6., 6.]])
 
 
 class Parameters:
-    """The search vector: the four physical parameters, then the residual terms asked for."""
+    """The search vector: the four physical parameters, then the residual terms asked for, without the
+    ones held fixed (`fixed`: names held at their start value; vertical='constant': the vertical static
+    force is P0 only, its P1 and P2 held at zero)."""
 
-    def __init__(self, terms, frame):
+    def __init__(self, terms, frame, fixed=(), vertical='quadratic'):
         self.terms, self.frame = terms, frame
-        self.names = list(PHYSICS)+(list(STATIC) if 'static' in terms else [])+(list(DRAG) if 'drag' in terms else [])
+        self.full = list(PHYSICS)+(list(STATIC) if 'static' in terms else [])+(list(DRAG) if 'drag' in terms else [])
+        self.zeroed = {'static z P1 (0.01 N/m)', 'static z P2 (0.01 N/m)'} if vertical == 'constant' and 'static' in terms else set()
+        unknown = set(fixed)-set(self.full)
+        if unknown:
+            raise SystemExit(f'cannot fix {sorted(unknown)}: not among {self.full}')
+        self.held = set(fixed) | self.zeroed
+        self.names = [n for n in self.full if n not in self.held]
+        self.fixed_values = {}
 
     def bounds(self):
         lower, upper = [-9., -7., 0., -4.], [-3., -1., 6., .5]
@@ -55,11 +64,17 @@ class Parameters:
             lower += [-5.]*9; upper += [5.]*9
         if 'drag' in self.terms:
             lower += [math.log(.3)]*2+[0.]*2; upper += [math.log(3.)]*2+[3.]*2
-        return np.array(lower), np.array(upper)
+        keep = [n in self.names for n in self.full]
+        return np.array(lower)[keep], np.array(upper)[keep]
 
-    def start(self, config, previous=None):
+    def expand(self, x):
+        """{name: value} of every parameter, the held ones included."""
+        return dict(self.fixed_values, **dict(zip(self.names, map(float, x))))
+
+    def start(self, config, previous=None, override=None):
         """The configuration's values (residual terms from its `cable.residual` if present), overridden
-        by any parameter of the same name in a previous result (warm start)."""
+        by any parameter of the same name in a previous result (warm start), then by `override`.
+        Records the values of the held parameters; returns the free ones."""
         cable = config['cable']
         x = dict(zip(PHYSICS, [math.log10(cable['EI_n_m2']), math.log10(cable['Cb_n_m2_s']),
                                cable['normal_drag_coefficient'], math.log10(cable['external_drag_s_inv'])]))
@@ -73,16 +88,21 @@ class Parameters:
             x.update(zip(DRAG, [b[0], b[0]+b[1], c[0], c[0]+c[1]]))
         if previous is not None:
             x.update({n: v for n, v in zip(previous['parameters'], previous['best']['x']) if n in x})
+        x.update({n: v for n, v in (override or {}).items() if n in x})
+        x.update({n: 0. for n in self.zeroed})
+        self.fixed_values = {n: float(x[n]) for n in self.held}
         return np.array([x[n] for n in self.names], float)
 
     def physics(self, x):
-        return dict(EI_n_m2=10**x[0], Cb_n_m2_s=10**x[1], normal_drag_coefficient=float(x[2]), external_drag_s_inv=10**x[3])
+        v = self.expand(x)
+        return dict(EI_n_m2=10**v[PHYSICS[0]], Cb_n_m2_s=10**v[PHYSICS[1]], normal_drag_coefficient=float(v[PHYSICS[2]]),
+                    external_drag_s_inv=10**v[PHYSICS[3]])
 
     def residual(self, x):
         """The `cable.residual` entry for x (None without residual terms)."""
         if not self.terms:
             return None
-        values = dict(zip(self.names, map(float, x)))
+        values = self.expand(x)
         r = dict(frame=self.frame)
         if 'static' in self.terms:
             legendre = np.array([values[n] for n in STATIC]).reshape(3, 3)*STATIC_UNIT
@@ -161,17 +181,22 @@ def main():
     parser.add_argument('--terms', default='', help="residual terms fitted with the physics: '', 'static' or 'static,drag'")
     parser.add_argument('--frame', choices=('body', 'world'), default='body', help='frame of the static residual force')
     parser.add_argument('--start', type=Path, help='warm start from a previous result of this stage')
+    parser.add_argument('--fix', nargs='+', default=[], help='parameter names held at their start value, e.g. "log10 EI"')
+    parser.add_argument('--set', nargs='+', default=[], metavar='NAME=VALUE', help='start values (search units), applied after --start')
+    parser.add_argument('--vertical', choices=('quadratic', 'constant'), default='quadratic',
+                        help='shape of the vertical static force along the cable')
     args = parser.parse_args()
     t0 = time.time()
     config = load_model_configuration(DEFAULT_MODEL)
     terms = tuple(t for t in args.terms.split(',') if t)
     if set(terms)-{'static', 'drag'}:
         raise SystemExit(f'unknown residual terms {terms}')
-    parameters = Parameters(terms, args.frame)
+    parameters = Parameters(terms, args.frame, args.fix, args.vertical)
     NAMES = parameters.names
     now = {k: float(config['cable'][k]) for k in KEYS}
     previous = json.loads(args.start.read_text()) if args.start else None
-    x_now = parameters.start(config, previous)
+    override = {n: float(v) for n, v in (s.rsplit('=', 1) for s in args.set)}
+    x_now = parameters.start(config, previous, override)
     lower, upper = parameters.bounds()
     progress = Progress(args.output, stage='cable', parameters=list(NAMES), x0=x_now, unit='m')
     # loading weighs about three residual evaluations; the final check is two passes
@@ -226,6 +251,7 @@ def main():
     args.output.write_text(json.dumps(dict(
         method='least_squares', stage='cable', model='der_twist_free_kelvin_voigt_v2, measured drone pose drives the clamp',
         data='manifest flights, setup cf_2 (cable labels)', parameters=list(NAMES), terms=list(terms), frame=args.frame,
+        held=parameters.fixed_values, vertical=args.vertical,
         warm_start=str(args.start) if args.start else None,
         segments=dict(horizon_s=args.horizon, fit={n: len(v) for n, v in residuals.groups.items()},
                       held_out={n: len(v) for n, v in held.items()}, dropped_at_start=dropped, seen_marker_frames=seen),
