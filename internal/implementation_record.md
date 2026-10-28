@@ -2065,3 +2065,15 @@ zero action, 0.2 s): no start transient; the node acceleration difference is the
 push (median 0.80 m/s² in the first 30 ms, 0.42 at 90–200 ms; ~1.75 m/s² at a clamp node), and the
 tip separates smoothly (median 1.3 mm at 0.1 s, 4.3 mm at 0.2 s). The recorded cables already carry
 the lean.
+
+## Dated change note — 2026-10-28 drone refit on 27 drone-only flights (not adopted)
+
+`runs/fits/drone/20261028-022418.json` (18 fit, 9 held-out flights, after the role reassignment that
+holds out the last flight of each category): delay 5 ms (grid minimum, as adopted), motor response
+18.0 ms (±14), body drag 0.610 (±0.042) horizontal and 0.503 (±0.25) vertical; roll/pitch inertia
+not identified (scale ±1.04). Every value lies inside its interval around the adopted fit
+(`20261027-201939`: 19.6 ms, 0.588, 0.477), and the held-out flights score 55.0 mm / 0.96°. Not
+adopted: it confirms stage 2. Measured the same day from the attitude logs of five drone-only
+flights: the onboard estimate wanders 0.5–0.9° about its flight mean (0.08–0.15 m/s² of thrust
+direction) with a correlation time of 0.5–0.8 s; training does not represent this yet (proposed as a
+randomisation axis, awaiting approval).
