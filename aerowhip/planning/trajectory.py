@@ -11,7 +11,9 @@ import numpy as np
 class FourierTrajectory:
     """Per axis K terms: p(t) = w(t) sum_k A_k sin(2 pi f_k t + phi_k), with w the quintic fade in and
     out over `fade` s. theta is the flat vector [A, f, phi] x 3 axes x K terms."""
-    def __init__(self, terms=4, duration=60., fade=4., f_range=(.1, 2.5), amplitude_max=(.6, .6, .3), name='excitation'):
+    def __init__(self, terms=4, duration=60., fade=4., f_range=(.1, 1.2), amplitude_max=(.6, .6, .3), name='excitation'):
+        # f_range: the cable's pendulum mode is ~0.5 Hz and the drone's attitude loop ~2 Hz; horizontal
+        # terms above ~1.2 Hz drive a motor to zero in the simulation (attitude torques at low throttle).
         self.K, self.duration, self.fade, self.f_range = terms, float(duration), float(fade), f_range
         self.amplitude_max = np.asarray(amplitude_max, float)
         self.name = name
@@ -30,9 +32,10 @@ class FourierTrajectory:
     def random(self, rng, scale=.5):
         lo, hi = self.bounds()
         theta = lo+(hi-lo)*rng.uniform(0., 1., self.size)
-        for axis in range(3):                        # amplitudes: smaller on average, falling with frequency
+        for axis in range(3):
             k = axis*3*self.K
-            theta[k:k+self.K] *= scale*rng.uniform(.2, 1., self.K)
+            theta[k:k+self.K] *= scale*rng.uniform(.2, 1., self.K)          # amplitudes: smaller on average
+            theta[k+self.K:k+2*self.K] = np.exp(rng.uniform(np.log(self.f_range[0]), np.log(self.f_range[1]), self.K))  # frequencies log-uniform
         return theta
 
     def unpack(self, theta):
@@ -65,7 +68,7 @@ class FourierTrajectory:
             p[:, axis] = w*q; v[:, axis] = dw*q+w*dq; a[:, axis] = ddw*q+2*dw*dq+w*ddq
         return t, p, v, a
 
-    def normalise(self, theta, level, vertical_max=3., speed_max=3.):
+    def normalise(self, theta, level, vertical_max=2., speed_max=3.):
         """Scale the horizontal amplitudes so the peak horizontal acceleration equals `level` (m/s^2),
         the vertical ones so the vertical acceleration stays within `vertical_max`, then all so the
         speed stays within `speed_max`."""
