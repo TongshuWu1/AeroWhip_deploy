@@ -2375,3 +2375,17 @@ to sharp strokes severely; the stroke-window previews of 2026-10-28 (tip peak sp
 measured) pointed the same way at smaller amplitude. Consequence: the simulator cannot screen for
 flip-over, and the cable model is wrong where the whip task lives. The user paused data collection
 to rethink the approach (see `internal/online_identification_proposal.md`).
+
+## Dated change note — 2026-10-28 the flip stroke replayed from the measured clamp motion
+
+`cf_6/mix_a/002`, both strokes labelled (`label_sequence.py`: 9.74 markers/frame; during the flip
+5–8 markers labelled and the first marker's label unreliable). The configured cable driven by the
+**measured** drone motion (as stage 3 fits it): 3 m/s² stroke, first-link angle 24° model against
+28° measured, no rise; the stroke that flipped the cable (planned 6 m/s², the host PID's command
+peaked at 8.8 m/s², drone tilt 37°): the model's cable DOES rise above the clamp, +0.13 m at 1.4 s,
+against +0.29 m in the raw cloud; the first link stays below 40° in both (the fold is at the tip,
+which goes over the drone while the first link hangs: the first-link angle is the wrong safety
+measure, the highest cable node above the clamp is the right one). So with the real drone motion
+the model reproduces the flip qualitatively and underestimates its size by ~2×; the earlier 33°
+came from the simulated closed-loop drone stroke being much gentler than the real one. Centre of
+mass set to 0.025 m below the marker plane (user's assumption; cbcf6d0). Nothing fitted.
