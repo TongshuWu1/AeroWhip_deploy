@@ -116,7 +116,7 @@ class DroneReplay:
             qv.append(qv[-1]+relative-t*(t@relative))
         return np.array(q), np.array(qv)
 
-    def run(self, window, flight, *, markers=False, scale=1., pipeline=False, centred=False, attitude=False):
+    def run(self, window, flight, *, markers=False, scale=1., pipeline=False, centred=False, attitude=False, bias=None):
         """Simulated tracking positions (N, 3); with markers, also the marker positions and
         velocities (N, 10, 3) each. scale multiplies the policy part of the sent commands (the
         vertical trim is kept), for stress tests beyond the recorded motion.
@@ -127,7 +127,9 @@ class DroneReplay:
         controller-tick timing otherwise; the default keeps the earlier behaviour of retained results.
         centred: start velocities from `centred_state` instead of the causal history.
         attitude: also return the simulated body rotations (N, 3, 3) (with markers: positions,
-        rotations, markers, marker velocities)."""
+        rotations, markers, marker velocities).
+        bias: a constant world acceleration (m/s^2) added to the sent commands by the flight controller
+        (the per-flight bias of the drone fit, with its sign reversed, cancels it)."""
         hp, hR, ht = window.history_position, window.history_rotation, window.history_time
         v, w = centred_state(window) if centred else (endpoint_velocity(ht, hp), body_rate(ht, hR))
         q = qv = None
@@ -156,6 +158,8 @@ class DroneReplay:
         inside = (command_time > -.5) & (command_time < window.time[-1])
         voltage = float(np.nanmedian(battery[inside])) if battery is not None and np.isfinite(battery[inside]).any() else self.firmware['reference_voltage_v']
         controller = self.native.FlightController(self.firmware, self.config, voltage)
+        if bias is not None:
+            controller.acceleration_bias = np.asarray(bias, float)
         yaw = math.atan2(hR[-1][1, 0], hR[-1][0, 0])
         def command(a):
             c = np.zeros(13); c[6:9] = a; c[9] = yaw; return c
@@ -204,11 +208,11 @@ class DroneReplay:
         p, R = self.run(window, flight, pipeline=pipeline, attitude=True)
         return np.column_stack([p-window.position[1:], tilt_error(R, window.rotation[1:])])
 
-    def coupled_errors(self, window, flight, *, pipeline=False):
+    def coupled_errors(self, window, flight, *, pipeline=False, bias=None):
         """The full model from the measured drone state and markers: (N, 15) = position error (3, m),
         tilt error (2, rad), cable shape error (10, m: each marker relative to the drone's tracking
         origin, simulated minus measured, NaN where the marker was not seen)."""
-        p, R, markers, _ = self.run(window, flight, pipeline=pipeline, markers=True, attitude=True)
+        p, R, markers, _ = self.run(window, flight, pipeline=pipeline, markers=True, attitude=True, bias=bias)
         shape = np.linalg.norm((markers-p[:, None])-(window.markers[1:]-window.position[1:, None]), axis=2)
         shape[~window.seen[1:]] = np.nan
         return np.column_stack([p-window.position[1:], tilt_error(R, window.rotation[1:]), shape])

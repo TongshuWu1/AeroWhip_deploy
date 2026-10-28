@@ -68,9 +68,10 @@ def apply(config, **values):
 
 
 def _replay(parameters):
-    config, firmware = parameters
+    config, firmware, *rest = parameters
+    biases = rest[0] if rest else {}
     replay = flight_drone.DroneReplay(config, firmware)
-    return lambda item: replay.coupled_errors(*item[1], pipeline=True)
+    return lambda item: replay.coupled_errors(*item[1], pipeline=True, bias=biases.get(str(item[1][1].folder)))
 
 
 class Residuals:
@@ -82,6 +83,7 @@ class Residuals:
         self.items = [(name, i) for name in self.names for i in self.groups[name]]
         self.runner = ProcessRunner(self.items, _replay)
         self.scale = (1., 1., 1.)            # position (m), tilt (rad), shape (m)
+        self.biases = {}                      # {flight folder: world acceleration added to the commands}
 
     def set_scales(self, **values):
         """Scales that make each component's residuals sum to the frame count at this point, so the
@@ -94,7 +96,7 @@ class Residuals:
 
     def errors(self, **values):
         """{name: [(N, 15) or None]}, {name: [messages]}."""
-        results = self.runner((apply(self.config, **values), self.firmware))
+        results = self.runner((apply(self.config, **values), self.firmware, self.biases))
         errors, messages = {n: [] for n in self.names}, {n: [] for n in self.names}
         for (name, _), (e, message) in zip(self.items, results):
             errors[name].append(e)
@@ -108,12 +110,13 @@ class Residuals:
         errors, _ = self.errors(**values)
         sp, st, ss = self.scale
         pieces, failures = [], 0
-        report = {k: {} for k in ('per_flight_position_m', 'per_flight_tilt_deg', 'per_flight_shape_m', 'per_flight_tip_m')}
+        report = {k: {} for k in ('per_flight_position_m', 'per_flight_tilt_deg', 'per_flight_shape_m', 'per_flight_tip_m', 'bias_m_s2')}
         squares, frames, seen = np.zeros(3), 0, 0
         tip_squares, tip_seen = 0., 0
         for name in self.names:
             good = [e for e in errors[name] if e is not None]
-            profiled, _ = bias_profile([e[:, :3] for e in good])
+            profiled, b = bias_profile([e[:, :3] for e in good])
+            report['bias_m_s2'][name] = b.tolist()
             offset = np.concatenate([e[:, 3:5] for e in good]).mean(0) if good else np.zeros(2)
             tilts = [e[:, 3:5]-offset for e in good]
             shapes = [e[:, 5:] for e in good]

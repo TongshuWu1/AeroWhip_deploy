@@ -209,41 +209,71 @@ class Cable(Stage):
         if best.get('held_out'):
             headline.append(('held out (mm)', None, _mm(best['held_out']['rms_m'])))
         strong = [f'{a} / {b} {c:+.2f}' for a, b, c in _strong(u)]
-        return dict(
-            headline=headline,
-            parameters=[(n, start['values'][k], best['values'][k], c) for n, k, c in zip(self.current(), self.KEYS, ci)],
-            flights=dict(columns=['flight', 'error before', 'error after'], rows=rows),
-            notes=[f'Loss: {r["loss"]}.', 'Intervals: 95 %, clustered by flight, linearised.' +
-                   (f' Strongly correlated: {"; ".join(strong)}.' if strong else ''),
-                   f"Failed segment replays during the search: {r['counts']['failed_segment_replays']}; "
-                   f"reproduced twice: {best['reproduced_twice']}"])
+        parameters = [(n, start['values'][k], best['values'][k], c) for n, k, c in zip(self.current(), self.KEYS, ci)]
+        names = r['parameters']
+        for i in range(len(self.KEYS), len(names)):          # residual terms, in their search units
+            parameters.append((names[i], r['start']['x'][i], best['x'][i], f'± {1.96*sd[i]:.2g}'))
+        notes = [f'Loss: {r["loss"]}.', 'Intervals: 95 %, clustered by flight, linearised.' +
+                 (f' Strongly correlated: {"; ".join(strong)}.' if strong else ''),
+                 f"Failed segment replays during the search: {r['counts']['failed_segment_replays']}; "
+                 f"reproduced twice: {best['reproduced_twice']}"]
+        if r.get('terms'):
+            notes.insert(0, f"Residual terms {', '.join(r['terms'])} ({r['frame']} frame), fitted with the physics.")
+        if best.get('held_out') and best['held_out'].get('start_rms_m') is not None:
+            headline.append(('held out at the start (mm)', None, _mm(best['held_out']['start_rms_m'])))
+        return dict(headline=headline, parameters=parameters, flights=dict(columns=['flight', 'error before', 'error after'], rows=rows),
+                    notes=notes)
 
     def adopt(self, r):
+        """The physical values, and the residual exactly as fitted: a result without residual terms
+        removes any residual the configuration had, so the adopted model is the one that was scored."""
         physics = _json(PHYSICS)
         values = {k: float(r['best']['values'][k]) for k in self.KEYS}
         physics['cable'].update(values)
+        residual = r['adopt'].get('residual')
+        if residual is None:
+            physics['cable'].pop('residual', None)
+        else:
+            physics['cable']['residual'] = residual
         _write_json(PHYSICS, physics)
-        return values
+        return dict(values, **({'residual': residual} if residual else {}))
 
 
 class Coupled(Stage):
     def summary(self, r):
         """scripts/validate_coupled.py: pooled and per-flight errors, fit and held-out flights."""
         results = r['results']
+        corrected = r.get('bias_cancelled') or {}
         headline, rows = [], []
         for role, label in (('fit', 'fit flights'), ('held_out', 'held-out flights')):
-            s = results.get(role)
+            s, c = results.get(role), corrected.get(role)
             if not s:
                 continue
-            headline += [(f'{label}: drone position (mm)', None, _mm(s['position_m'])), (f'{label}: tilt (deg)', None, s['tilt_deg']),
-                         (f'{label}: cable shape (mm)', None, _mm(s['shape_m'])), (f'{label}: tip (mm)', None, _mm(s['tip_m']))]
-            for name, v in s['per_flight'].items():
+            # first column: as replayed; second: with the flight's drone bias cancelled
+            headline += [(f'{label}: drone position (mm)', _mm(s['position_m']), _mm(c['position_m']) if c else None),
+                         (f'{label}: tilt (deg)', s['tilt_deg'], c['tilt_deg'] if c else None),
+                         (f'{label}: cable shape (mm)', _mm(s['shape_m']), _mm(c['shape_m']) if c else None),
+                         (f'{label}: tip (mm)', _mm(s['tip_m']), _mm(c['tip_m']) if c else None)]
+            for name, v in (c or s)['per_flight'].items():
                 rows.append([f'{name} ({"held out" if role == "held_out" else "fit"})', _mm(v['position_m']), v['tilt_deg'],
                              _mm(v['shape_m']), _mm(v['tip_m'])])
+        stroke = (r.get('stroke_test') or {}).get('summary', {})
+        for role, label in (('fit', 'fit strokes'), ('held_out', 'held-out strokes')):
+            s = stroke.get(role)
+            if s:
+                headline += [(f'{label}: tip peak speed, simulated/measured', None, s['peak_ratio_median']),
+                             (f'{label}: tip error over the stroke (mm)', None, _mm(s['tip_path_m']))]
+        notes = [f'Nothing is fitted: the configured model on {r["horizon_s"]:g} s segments from the sent commands; '
+                 'drone position with one bias per flight removed, tilt with one offset per flight removed.']
+        if corrected:
+            notes.append('Headline columns: as replayed, then with each flight\'s drone bias cancelled in the flight '
+                         'controller (the flight table shows the latter). Stroke test: 0.6 s from each stroke onset of the '
+                         'decay, strokes and whip flights, bias cancelled.')
+        if r.get('cable_residual'):
+            notes.append(f"Cable residual in the model ({r['cable_residual'].get('frame', 'body')} frame).")
         return dict(headline=headline, parameters=[],
                     flights=dict(columns=['flight', 'drone position (mm)', 'tilt (deg)', 'cable shape (mm)', 'tip (mm)'], rows=rows),
-                    notes=[f'Nothing is fitted: the configured model on {r["horizon_s"]:g} s segments from the sent commands; '
-                           'drone position with one bias per flight removed, tilt with one offset per flight removed.'])
+                    notes=notes)
 
 
 STAGES = [
@@ -257,7 +287,8 @@ STAGES = [
           'drone pose driving the clamp and the cable starting from the measured markers.',
           'scripts/fit_cable_segments.py', [], 'cable flights', 'm'),
     Coupled('coupled', 'Coupled validation', 'The whole model on 1 s segments of the cable flights, from the sent '
-            'commands; nothing is fitted. Reported for fit and held-out flights.',
+            'commands, as replayed and with each flight\'s drone bias cancelled, and the stroke test; nothing is '
+            'fitted. Reported for fit and held-out flights.',
             'scripts/validate_coupled.py', [], 'cable flights', 'm', adoptable=False),
 ]
 BY_KEY = {s.key: s for s in STAGES}
