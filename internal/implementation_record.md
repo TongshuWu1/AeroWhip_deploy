@@ -2311,3 +2311,15 @@ in physical.yaml is now the 7.8 V value (effective mass 0.1536 kg). Logged per r
 they stay consistent; the training environment and the deployment node must apply the same host
 compensation as the flight script (the simulator's thrust map keeps its voltage term), to be added
 with the cf_6 refit.
+
+## Dated change note — 2026-10-28 battery compensation fitted on a hover-only battery run
+
+`battery_run_hover/001` (cf_6 without cable, 93 s of 20 s hovers, 7.77 → 7.30 V under load,
+compensated with the earlier 0.096/V, OptiTrack 100 Hz): the vertical acceleration the drone needed
+(sent, less the planned acceleration and the PID's position and velocity terms) was
+8.370 − 0.971·V m/s², rms 0.006 m/s² over 5 s bins, a quadratic no better: the law is linear over
+this range. New values in crazyswarm2's physical.yaml (c8a4ec2): 0.0915 per volt, 7.8 V weight trim
+0.1557 kg; the height held within 4.2 mm RMS through the run. A battery run with strokes
+(`battery_run/001`, 7.54 → 7.35 V) read a weaker slope because the strokes pull the voltage down and
+the hovers read it while recovering; hover-only runs are the ones to fit. Earlier estimates: 0.1095
+(47 mixed hover windows), 0.096 (one 60 s hover over 7.71–7.45 V).
