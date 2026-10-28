@@ -146,6 +146,8 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--horizon', type=float, default=1., help='segment length, s')
     parser.add_argument('--delays-ms', type=float, nargs='+', default=[0, 5, 10, 15, 20, 30, 40])
+    parser.add_argument('--estimator', type=float, nargs=3, metavar=('DELTA_DEG', 'GYRO_SCALE', 'TAU_S'),
+                        help='simulate the onboard attitude estimate (yaw misalignment, gyro scale, correction time constant)')
     parser.add_argument('--evaluations', type=int, default=20,
                         help='least-squares steps per delay (residual evaluations, Jacobian evaluations not counted)')
     args = parser.parse_args()
@@ -154,6 +156,9 @@ def main():
     firmware = tomllib.loads(FIRMWARE.read_text())
     if firmware.get('law') != 'firmware':
         raise SystemExit('The firmware law is required')
+    if args.estimator:
+        firmware = dict(firmware, estimator_misalignment_deg=args.estimator[0], estimator_gyro_scale=args.estimator[1],
+                        estimator_correction_s=args.estimator[2])
     J = base['drone']['inertia_body_about_com_kg_m2']
     drag = base['drone']['body_drag_s_inv']
     x_now = np.array([1., float(base['actuator']['response_time_s'][0]), float(drag[0]), float(drag[2])])
@@ -229,7 +234,8 @@ def main():
         print(f'  correlated: {a} / {b} {c:+.2f}', flush=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(dict(
-        method='least_squares', stage='drone', model='firmware law, measured motor arm, drone-only (one 2 cm 1 mg link)',
+        method='least_squares', stage='drone', model='firmware law, measured motor arm, drone-only (one 2 cm 1 mg link)'
+        +(f', onboard estimate model {args.estimator}' if args.estimator else ''),
         data='manifest flights, setup cf_2_nocable', parameters=list(NAMES), firmware=firmware,
         segments=dict(horizon_s=args.horizon, fit={n: len(v) for n, v in residuals.groups.items()},
                       held_out={n: len(v) for n, v in held.items()}, dropped_at_start=dropped),

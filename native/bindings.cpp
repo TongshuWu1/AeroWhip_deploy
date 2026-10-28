@@ -197,6 +197,17 @@ FlightController flight_controller(const py::dict& firmware,const py::dict& mode
         auto a=actuator(model_config["actuator"].cast<py::dict>());
         p.mixing=a.mixing();p.motor_minimum=a.minimum;p.motor_maximum=a.maximum;
     } else if(law!="identified") throw py::value_error("law must be 'identified' or 'firmware'");
+    // Onboard attitude estimate model: all three keys, or none (the controller then sees the truth).
+    const char* keys[]={"estimator_misalignment_deg","estimator_gyro_scale","estimator_correction_s"};
+    int present=0;for(auto k:keys)present+=firmware.contains(k);
+    if(present==3){
+        p.estimator=true;p.estimator_misalignment=firmware["estimator_misalignment_deg"].cast<double>()*M_PI/180.;
+        p.estimator_gyro_scale=firmware["estimator_gyro_scale"].cast<double>();p.estimator_correction=firmware["estimator_correction_s"].cast<double>();
+        p.controller_period=controller["controller_period_s"].cast<double>();
+        if(!(std::isfinite(p.estimator_misalignment)&&std::isfinite(p.estimator_gyro_scale)&&p.estimator_gyro_scale>-1.
+             &&std::isfinite(p.estimator_correction)&&p.estimator_correction>0.&&p.controller_period>0.))
+            throw py::value_error("Invalid estimator settings");
+    } else if(present) throw py::value_error("estimator_misalignment_deg, estimator_gyro_scale and estimator_correction_s go together");
     return FlightController(p,voltage);
 }
 // Independent lanes of one model, each with its own flight controller (battery voltage),
@@ -293,7 +304,10 @@ PYBIND11_MODULE(_native, m) {
         .def_property_readonly("law",[](const FlightController& c){return c.law()==FlightLaw::firmware?"firmware":"identified";})
         .def("motors",[](const FlightController& c,Array s,Array command){return c.motors(vector(s),vector(command));})
         .def("__call__",[](const FlightController& c,Array s,Array command){return c(vector(s),vector(command));})
-        .def("step",[](FlightController& c,Array s,Array command){return c.step(vector(s),vector(command));});
+        .def("step",[](FlightController& c,Array s,Array command){return c.step(vector(s),vector(command));})
+        .def_property_readonly("has_estimator",&FlightController::has_estimator)
+        .def_property("attitude_estimate",[](const FlightController& c){auto R=c.attitude_estimate();return array(Vector(R.begin(),R.end())).attr("reshape")(3,3);},
+                      [](FlightController& c,py::object R){c.set_attitude_estimate(fixed<9>(R,2));});
     // The firmware port alone, with the harness layout of tests/test_firmware_port.py:
     // in (23): sp_pos sp_vel sp_acc sp_yaw_deg pos vel quat_xyzw gyro_deg_s; out (9): thrust roll pitch yaw pwm1..4 capped.
     py::class_<mellinger::Controller>(m,"Mellinger")

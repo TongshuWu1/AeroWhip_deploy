@@ -9,12 +9,20 @@
 //               fallback): firmware thrust vector F = m_fw (a_sent + g z), desired body z = F/|F|,
 //               attitude alpha = kR e_R - kW omega, torque = J alpha + omega x J omega.
 //
+// Onboard attitude estimate (optional, both laws): the real controller acts on the Crazyflie's Kalman
+// attitude, not on the truth. Model fitted to the logged stateEstimate (2026-10-28): the IMU measures
+// body rates rotated by a yaw misalignment delta and scaled by (1+s) (w_m = (1+s) Rz(delta) w); the
+// estimate integrates w_m and is pulled toward the true attitude (OptiTrack, fused onboard) with time
+// constant tau: R_hat <- R_hat exp(dt w_m), then R_hat <- R_hat exp((1-e^(-dt/tau)) log(R_hat^T R)). The firmware
+// sees R_hat and w_m. The estimate starts at the true attitude at the first update after a reset.
+//
 // Both share the delivered-thrust map T = kappa (1 + beta (V - V0)) T_cmd^p identified on the same
 // flights (per motor in firmware mode: T_i = kappa'/4 (pwm_i / massThrust)^p, which reproduces the
 // collective map when the four motors are equal), and a constant world acceleration bias b added to
 // a_sent (domain randomization; the replay residual is a slowly varying bias of about 0.1 m/s^2).
 #include "engine.hpp"
 #include "firmware.hpp"
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
@@ -35,7 +43,30 @@ struct FlightControllerParameters {
     mellinger::Parameters firmware;      // ctrlMel.* of the flight
     std::array<double,16> mixing{};      // motor forces -> wrench (Actuator::mixing), firmware law
     Motors motor_minimum{}, motor_maximum{};
+    bool estimator=false;                // onboard attitude estimate model (above)
+    double estimator_misalignment=0.;    // delta, rad (yaw of the IMU axes against the tracked body axes)
+    double estimator_gyro_scale=0.;      // s
+    double estimator_correction=1.;      // tau, s
+    double controller_period=.002;       // s, one estimator update per controller update
 };
+
+namespace estimate {
+inline Mat3 product(const Mat3& A,const Mat3& B) {
+    Mat3 C{};for(int i=0;i<3;++i)for(int j=0;j<3;++j)for(int k=0;k<3;++k)C[3*i+j]+=A[3*i+k]*B[3*k+j];return C;
+}
+inline Mat3 transposed(const Mat3& A) {Mat3 T{};for(int i=0;i<3;++i)for(int j=0;j<3;++j)T[3*i+j]=A[3*j+i];return T;}
+inline Mat3 exp(Vec3 v) {             // Rodrigues
+    double a=std::sqrt(v[0]*v[0]+v[1]*v[1]+v[2]*v[2]);
+    Mat3 K{0.,-v[2],v[1],v[2],0.,-v[0],-v[1],v[0],0.},R{1.,0.,0.,0.,1.,0.,0.,0.,1.};
+    double s=a<1e-8?1.-a*a/6.:std::sin(a)/a,c=a<1e-8?.5-a*a/24.:(1.-std::cos(a))/(a*a);
+    Mat3 K2=product(K,K);for(int i=0;i<9;++i)R[i]+=s*K[i]+c*K2[i];return R;
+}
+inline Vec3 log(const Mat3& R) {
+    double c=std::clamp((R[0]+R[4]+R[8]-1.)/2.,-1.,1.),a=std::acos(c);
+    Vec3 v{(R[7]-R[5])/2.,(R[2]-R[6])/2.,(R[3]-R[1])/2.};
+    double f=a<1e-8?1.:a/std::sin(a);for(double& x:v)x*=f;return v;
+}
+}
 
 class FlightController {
 public:
@@ -58,20 +89,50 @@ public:
     Vec3 bias() const {return bias_;}
     const FlightControllerParameters& parameters() const {return p_;}
     FlightLaw law() const {return p_.law;}
-    void reset() {firmware_=mellinger::Controller(p_.firmware);}
+    void reset() {firmware_=mellinger::Controller(p_.firmware);estimate_ready_=false;}
+    // The onboard attitude estimate (true attitude until the first update after a reset).
+    bool has_estimator() const {return p_.estimator;}
+    Mat3 attitude_estimate() const {return estimate_;}
+    void set_attitude_estimate(const Mat3& R) {estimate_=R;estimate_ready_=true;}
     const mellinger::Controller& firmware() const {return firmware_;}
     double efficiency() const {return p_.thrust_scale*(1.+p_.voltage_slope*(voltage_-p_.reference_voltage));}
     double delivered_thrust(double firmware_thrust) const {
         return efficiency()*std::pow(std::max(firmware_thrust,0.),p_.thrust_exponent);
     }
     // One controller update (advances the firmware's integrators and derivative memory).
-    Wrench step(const Vector& s,const Command& c) {return evaluate(s,c,firmware_);}
+    Wrench step(const Vector& s,const Command& c) {
+        if(!p_.estimator) return evaluate(s,c,firmware_);
+        update_estimate(s);return evaluate(perceived(s),c,firmware_);
+    }
     // The wrench this state and command would produce, without advancing any memory.
-    Wrench peek(const Vector& s,const Command& c) const {auto copy=firmware_;return evaluate(s,c,copy);}
+    Wrench peek(const Vector& s,const Command& c) const {auto copy=firmware_;return evaluate(p_.estimator?perceived(s):s,c,copy);}
     Wrench operator()(const Vector& s,const Command& c) const {return peek(s,c);}
     // Motor forces (N) the firmware law commands for a state/command, without advancing memory.
-    Motors motors(const Vector& s,const Command& c) const {auto copy=firmware_;return firmware_motors(s,c,copy);}
+    Motors motors(const Vector& s,const Command& c) const {auto copy=firmware_;return firmware_motors(p_.estimator?perceived(s):s,c,copy);}
 private:
+    Vec3 measured_rate(const Vector& s) const {
+        double cz=std::cos(p_.estimator_misalignment),sz=std::sin(p_.estimator_misalignment),k=1.+p_.estimator_gyro_scale;
+        return {k*(cz*s[15]-sz*s[16]),k*(sz*s[15]+cz*s[16]),k*s[17]};
+    }
+    void update_estimate(const Vector& s) {
+        if(s.size()<18) throw std::invalid_argument("Flight controller state shape");
+        Mat3 R{};std::copy(s.begin()+3,s.begin()+12,R.begin());
+        if(!estimate_ready_){estimate_=R;estimate_ready_=true;return;}
+        Vec3 w=measured_rate(s);for(double& x:w)x*=p_.controller_period;
+        estimate_=estimate::product(estimate_,estimate::exp(w));
+        Vec3 e=estimate::log(estimate::product(estimate::transposed(estimate_),R));
+        double gain=-std::expm1(-p_.controller_period/p_.estimator_correction);    // exact first-order step, at most 1
+        for(double& x:e)x*=gain;
+        estimate_=estimate::product(estimate_,estimate::exp(e));
+    }
+    // The state as the firmware sees it: estimated attitude and measured body rates.
+    Vector perceived(const Vector& s) const {
+        if(s.size()<18) throw std::invalid_argument("Flight controller state shape");
+        Vector out=s;
+        if(estimate_ready_) std::copy(estimate_.begin(),estimate_.end(),out.begin()+3);
+        Vec3 w=measured_rate(s);std::copy(w.begin(),w.end(),out.begin()+15);
+        return out;
+    }
     static void check_shape(const Vector& s,const Command& c) {
         if(s.size()<18||(c.size()!=11&&c.size()!=13)) throw std::invalid_argument("Flight controller state/command shape");
     }
@@ -143,6 +204,7 @@ private:
     FlightControllerParameters p_;
     double voltage_;
     Vec3 bias_{};
+    Mat3 estimate_{};bool estimate_ready_=false;
     mellinger::Controller firmware_;
 };
 }

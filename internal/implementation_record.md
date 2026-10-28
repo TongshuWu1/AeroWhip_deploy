@@ -1983,3 +1983,19 @@ User's request: one systematic, automated data collection with a single calibrat
 - Noted for the user, not acted on: the drone fit's per-flight tilt offsets are about −4.0° in roll
   on every flight (a constant OptiTrack-body to drone-frame offset).
 - 112 tests pass; an 8-lane randomised environment builds and steps.
+- **Onboard attitude estimate** (2026-10-28, lab): the drone now logs `stateEstimate.roll/pitch/yaw` at
+  100 Hz (`attitude_estimate` log block, `attitude.jsonl`; no radio gaps). Two drone-only flights
+  (line_star_xy/002, random_high/003): estimate − OptiTrack 1.58° / 1.24° RMS (0.27 / 0.21 m/s²
+  equivalent); linear in the attitude: tilt scale +5.7/+6.2 % and +3.4/+3.9 %, antisymmetric
+  cross-coupling +4.3/−3.4 % and +4.3/−4.2 % (a yaw misalignment of the IMU against the rigid-body
+  axes), 0.6-0.75° left. A dynamic model (gyro rates rotated by δ, scaled by 1+s, integrated, pulled to
+  OptiTrack with time constant τ), fitted to both: δ −2.0°, s +5.5 %, τ 2.4 s (each flight alone: δ
+  −1.9/−2.3°, s +6.1/+3.6 %, τ 2.1/3.8 s), 0.76° RMS left. The thrust direction measured from positions
+  (line_star_xy) tilts 0.96× OptiTrack and 0.925× the estimate: OptiTrack is closer to the truth.
+  Implemented in the native FlightController (`estimator_*` keys in the firmware config, all or none;
+  absent = the controller sees the truth, bit-identical to before; exact first-order correction gain
+  1−e^(−dt/τ)); the C++ estimator reproduces the logged estimate as the Python model does (0.637/0.814
+  vs 0.629/0.804°). Not in the configuration. At the previous drone fit's parameters it makes the
+  drone errors worse (position 52.5 → 57.2 mm, tilt 1.39 → 1.51° on a fifth of the segments); a refit
+  with it (`fit_drone_segments.py --estimator -2.0 0.055 2.4`) decides. Motive and the drone setup
+  are unchanged (the user's decision: keep every recorded flight valid). 112 tests pass.
