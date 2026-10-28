@@ -1,5 +1,10 @@
 # Online identification: a proposal for discussion
 
+**Superseded in part (2026-10-28 evening) by `safe_planned_identification.md`:** the user asked
+for a bench-vs-flight split and for planning the commands over a horizon with safety constraints
+rather than online fitting; the per-flight loop and the during-flight analysis below remain as
+background.
+
 Written 2026-10-28 evening, after the user paused data collection. A proposal, not a design that
 is agreed or implemented. Facts it rests on are in the implementation record's notes of that date.
 
