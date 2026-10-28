@@ -165,7 +165,7 @@ class FamilyState:
         self.history = []            # statuses of the recent windows ('accepted', 'outlier', 'gated')
         self.pending = []            # held outliers: dict(window, theta, info, gradient, step)
         self.rms = []                # residual RMS at the estimate of recently accepted windows
-        self.counts = dict(accepted=0, outlier=0, change=0, gated=0)
+        self.counts = dict(accepted=0, outlier=0, change=0, no_gain=0, gated=0)
 
 
 class OnlineEstimator:
@@ -292,6 +292,14 @@ class OnlineEstimator:
         bound = CHI2_999[len(idx)]
         explained = len(fam.rms) < 3 or rms0 <= self.unexplained*math.sqrt(s2)
         out = dict(rms=rms0, noise=math.sqrt(s2), mahalanobis2=m2, samples=int(mask.sum()))
+        predicted = float(r0@r0-np.sum((r0+J@step)**2))/max(float(r0@r0), 1e-300)
+        if m2 <= bound and explained and predicted < .01:
+            # already at this window's best fit: it confirms the estimate (its information counts)
+            self._apply(idx, step, post)
+            fam.rms = (fam.rms+[rms0])[-50:]
+            self._push(fam, 'accepted')
+            out.update(status='accepted', step=step.tolist(), converged=True)
+            return out
         if m2 <= bound and explained:
             # the step must lower this window's own error (the full step or half of it), else the
             # linearisation does not hold here and the window is not used
@@ -310,8 +318,8 @@ class OnlineEstimator:
                     if rms < rms0 and (best is None or rms < best[1]):
                         best = (f, rms)
             if best is None:
-                self._push(fam, 'gated')
-                out.update(status='gated', reason='the step does not lower the window error')
+                self._push(fam, 'no_gain')
+                out.update(status='no gain', reason=f'the step promised {predicted*100:.0f} % less error and gave none')
                 return out
             f, rms1 = best
             self._apply(idx, f*step, post)

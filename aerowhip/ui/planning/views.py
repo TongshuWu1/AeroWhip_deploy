@@ -220,7 +220,7 @@ class OnlineView(QtWidgets.QWidget):
     """The online estimate of a flight (scripts/online_fit.py writes runs/online/*.jsonl): each
     parameter over the flight with its standard deviation, the prior (the offline fit) dashed, and
     what happened to every window: accepted, held as an outlier, applied as a change, or gated."""
-    STATUS = dict(accepted=(GOOD, '.'), outlier=(WARN, 'x'), change=(BAD, 'D'), gated=(MUTED, '|'))
+    STATUS = {'accepted': (GOOD, '.'), 'outlier': (WARN, 'x'), 'change': (BAD, 'D'), 'no gain': ('#b39ddb', 'v'), 'gated': (MUTED, '|')}
 
     def __init__(self, folder):
         super().__init__()

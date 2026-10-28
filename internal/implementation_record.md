@@ -2635,3 +2635,46 @@ Not done: a live run during a flight (the user is moving to the other computer);
 logged only, nothing feeds it into the model or the planner (adopting it is a model-selection
 decision). Test suite: 105 pass, the 11 known reset-bank failures; tests/test_native_estimator.py
 segfaults intermittently on this machine with and without these changes.
+
+## Dated change note — 2026-10-28 online fit tested further; radio; UI (user: make sure everything works)
+
+**Synthetic flights** (`scripts/synthetic_flight.py`): the closed-loop simulator flies excitation_002
+with known parameters and writes a flight folder in the flight script's format (parameters.json,
+flight.jsonl 50 Hz, poses.jsonl and cloud.jsonl 100 Hz with four drone markers and the cable markers,
+1 mm noise, trajectory.json, result.json), at real-time pace if asked.
+- Live: `online_fit.py --watch` picked up the new folder, followed it as written (59 updates, median
+  0.83 s on a shared, lowest-priority CPU) and stopped at result.json. Same estimates as the replay.
+- Known truth (EI +0.25 log, Cd ×1.3, motor response ×0.6, delay +6 ms): EI −3.592 (true −3.603),
+  motor response 11.4 ms (11.8), drag and Cb unchanged within 1 sd; Cd 1.045 (true 0.970, +8 %);
+  delay 2.0 ms (true 11.0).
+- Truth = prior: EI, Cb, drag, motor response stay within 0.5 prior sd; Cd 0.847 (true 0.746, +13 %);
+  delay 1.0 ms (true 5.0).
+Findings, not resolved:
+1. **The drone replay lags the closed-loop simulator by one 10 ms frame** (cross-correlation of the
+   attitude, every window; pipeline on or off; window length 1, 2, 4 s does not change it). The best
+   delay of the replay at the true parameters is then ~8–10 ms short. The offline drone fit uses
+   the same replay (its 5 ms is in the replay's convention) while the planner and previews simulate
+   closed loop with that delay: the simulated drone may react a frame early, a candidate part of the
+   closed-loop under-commanding (7.2 vs 8.9 m/s^2). Starting the replayed motors at the firmware's
+   commanded thrusts was tried and made the residual three times worse; reverted. Cause open.
+2. Cd is overestimated by ~10 % on synthetic flights (cable replay from noisy markers; a likely
+   cause is the initial cable velocity from 1 mm noise, which drag then absorbs). The offline fit
+   would share it.
+3. Near the optimum most drone steps do not lower the window error (48 of 60 windows, synthetic):
+   the delay acts in 2 ms ticks (a staircase), so its finite difference misleads. Such windows are
+   now labelled "no gain" (not gated); windows whose step predicts under 1 % gain count as
+   confirming the estimate. Remedy to try: profile the delay on a small grid, as the offline fit does.
+**Sweep** (`scripts/online_sweep.py`, every recorded flight replayed as live; runs/online/sweep_*/sweep.json):
+see the numbers below once complete.
+**Radio** (crazyswarm2 `scripts/radio_report.py`): on every cf_6 flight no log packet was lost; the
+downlink queue (receipt against the onboard clock) was 6/11 ms (median/99 %) on quiet hover flights
+and 20–32/65–85 ms on flights flown while this computer was loaded. Changes (config/crazyflies.yaml):
+the onboard `pose` topic off (no real-flight code reads it), `attitude_estimate` 100 -> 50 Hz (a
+diagnostic since the tune froze; tuning_report.py matches by stamp). Together about 40 % less
+downlink. Not flown yet. Larger option not taken: the C++ backend (backend:=cpp) instead of cflib.
+`online_fit.py --cpus auto` keeps it to the upper half of the cores (the window's button uses it).
+**UI**: the 3D view overlays the measured flight of a plan (newest flight whose trajectory.json
+names it: drone path and drone in white, the live-labelled cable markers in red, on the plan's
+timeline, cached as runs/planning/<plan>_flown_<NNN>.npz); the Online page marks "no gain".
+`simulate_motion` records every step with markers_every=1 (the old test skipped it; the same
+samples as before for every other value) and returns the trim.
