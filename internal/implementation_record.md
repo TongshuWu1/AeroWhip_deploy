@@ -2336,3 +2336,15 @@ RMS in its last 10 s). Not yet in AeroWhip: the simulator's firmware config stil
 attitude gains and no host battery compensation; both are set before the cf_6 drone fit, and the
 fitting code's setup default ('cf_2') becomes a setting. Next: the calibration series on cf_6 with
 OptiTrack at 100 Hz.
+
+## Dated change note — 2026-10-28 mixed calibration series for cf_6 (user's request)
+
+The calibration flights are regrouped into six mixed ~2 min flights per setup (crazyswarm2:
+`config/calibration_mixes.yaml`, `calibration_series_mixed.yaml`, `--mix`): five fit flights mixing
+sharp stops, strokes, whips, circles, figure-8s, lines, vertical oscillation and random motion over
+headings 0/90/±45° and levels 1–8 m/s² (6 with the cable for sharp stops), and one validation
+flight (`mix_val`, held out by assign_roles) with levels, headings and a random seed the fit flights
+do not use; ~11.5 min of flying per setup instead of ~20 min in 15 flights. Phases are named per part
+('decay 0 3', 'whip 45 4', ...). To check on the AeroWhip side before the cf_6 fits: the stroke
+windows (`scripts/stroke_diagnostics.py`) and anything selecting flights by take name (decay,
+strokes, whip) must select the corresponding parts of the mixed flights by phase.
