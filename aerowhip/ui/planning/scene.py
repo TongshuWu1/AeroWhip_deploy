@@ -97,9 +97,8 @@ class Scene3D(QtWidgets.QWidget):
         self._drone = []
         self._frame_index = 0
         self._room()
-        path = lab_scan_path()
-        self.lab = add_lab(p, path) if path is not None else []
-        self.set_lab_visible(bool(self.lab), render=False)
+        self.lab = []                 # the lab scan is not shown for now (user, 2026-10-28): plain floor
+        self.set_lab_visible(False, render=False)
         self._add_drone()
         self.cable_line = pv.lines_from_points(np.tile(self.hover, (11, 1))-np.linspace(0, 1, 11)[:, None]*[0, 0, 1])
         self.cable_actor = p.add_mesh(self.cable_line.tube(radius=.004), color=CABLE, smooth_shading=True, name='cable')

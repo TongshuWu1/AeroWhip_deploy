@@ -2702,3 +2702,9 @@ newer, and the Online page's running-model table with Reset. Checked: two synthe
 through a scratch state (the second continued from the first; EI sd 0.011 -> 0.008; history of 2),
 the preview planned with it (Cd flagged at 5.9 sd and held at 4, delay held); the real
 model_state.json was not created by any test. Not done: a real flight.
+
+## Dated change note — 2026-10-28 lab scan out of the 3D view (user)
+
+The 3D view shows the plain floor and grid again: the lab scan is not loaded and the Lab button is
+gone. The scan files, `configs/lab_scan.yaml`, `scripts/clean_lab_scan.py` and `scene.add_lab` are
+kept for later, unchanged.
