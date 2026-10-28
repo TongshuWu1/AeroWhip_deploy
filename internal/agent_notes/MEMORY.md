@@ -10,4 +10,4 @@
 - [Mesh decision after fitting](mesh-decision-after-fitting.md) — 10 vs 20 link chosen only after simulator + fitting are done, by full fits at both; 20 links 5× slower
 - [Tune drone before new data](tune-drone-before-new-data.md) — tune first, then re-fly and refit; status end of 2026-10-28: est 0.01 set, kR 157500 chosen, cf_2 grounded (ESC)
 - [No heavy compute during flight](no-heavy-compute-during-flight.md) — CPU-heavy jobs on the flight computer stalled OptiTrack and dropped the drone (2026-10-28); only light reads between flights
-- [New airframe, redo fits](new-airframe-redo-fits.md) — 2026-10-28: cf_2 retired, new lighter frame coming; all tuning and stages 0-4 redone on it; move to AMD 9950X
+- [cf_6 replaces cf_2, redo fits](new-airframe-redo-fits.md) — 2026-10-28: cf_2 retired; cf_6 (156 g, props 1.5 cm, clamp 5.5 cm below markers) is the drone now; all fits to redo

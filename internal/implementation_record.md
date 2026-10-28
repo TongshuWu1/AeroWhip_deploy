@@ -2219,3 +2219,31 @@ parameters of the new drone; every drone-dependent stage is redone on it (measur
 change — and the coupled validation). The cable's own properties may carry over if the same cable is
 used, but are refitted with the new drone. Work moves to the AMD 9950X computer
 (`internal/handoff_2026-10-28.md`). Nothing in the code or model changed.
+
+## Dated change note — 2026-10-28 drone cf_6 replaces cf_2 (model geometry and mass)
+
+Superseding the new-airframe note above: the user continues with cf_6, the same Bolt build as cf_2,
+weighed 0.156 kg with battery and clamp (cf_2 0.145), propeller plane 0.015 m below the marker plane
+(cf_2 0.010), cable attachment 0.055 m below it (unchanged), everything else as cf_2 (same cable and
+clamp). The frame is identical, so the markers sit 5 mm higher on it: the centre of mass is taken
+0.023 m below the tracking origin (cf_2 0.018, nominal on both), keeping the propellers 0.008 m above
+it (user's choice). Changed: `configs/physics/drone_cable.json` mass 0.156, centre of mass
+(0, 0, −0.023), nominal inertia scaled by 0.156/0.145; `configs/actuators/drone.json` note;
+`docs/simulation_model.md`. Unchanged and still cf_2's fits: thrust map, delay, motor response,
+body drag, cable EI/Cb/Cd/drag and the cable residual — all to be refitted on cf_6 flights.
+
+Flight stack (crazyswarm2): cf_6 enabled in `crazyflies.yaml` (cf_2 disabled); the host scripts take
+the robot from the single enabled entry (`scripts/robot.py`), so ROS names, the OptiTrack rigid-body
+name and the radio URI follow it; `physical.yaml` entries cf_6 / cf_6_nocable (provisional
+effective masses scaled from cf_2's, zero horizontal offset, until cf_6's first hover);
+`model_calibration.yaml` vehicle entry cf_6. The AeroWhip fitting code still defaults to the cf_2
+setups (`folders('cf_2')` and similar in `aerowhip/fitting/` and `scripts/`): to be made a setting
+before the first cf_6 fit.
+
+Checks (pytest, 2026-10-28): 110 pass, 3 fail, none relaxed. (1) test_zero_action_holds_hover_with_the_cable_residual:
+with cf_2's residual on cf_6's geometry the zero-action hover drifts 7 mm sideways (settling, slowly
+returning) and climbs 3 mm over the 5 s episode, 9.8 mm in all against the 5 mm end bound; without
+the residual it holds to 0.75 mm. The residual is cf_2's and will be refitted. (2, 3)
+test_parallel_environment and test_native_estimator: `runs/reset_bank/whip.npz` (cf_2 cable states)
+is rejected by the engine (cable length mismatch after the centre-of-mass change); rebuild with
+`scripts/build_reset_bank.py` (awaiting the user's go-ahead), keeping the old bank dated.
