@@ -98,10 +98,12 @@ state sampled along the recorded scripted whips instead of hover:
 0.1 s inside the whip strokes of the `whip` calibration flights (drone pose, causal velocities,
 the labelled cable projected onto the configured lengths), moved so the flight's hover origin is
 at zero with zero yaw. The current bank, `runs/reset_bank/whip.npz`, holds 1,302 states from
-whip/001 and whip/002 (tip speeds up to 4.2 m/s). A reference state the cable filter cannot
-label from its first frame, or that the engine rejects, falls back to hover and is counted
-(`reference_fallbacks` in the provenance). The workspace origin and the target stay those of the
-hover start. Evaluation never uses reference starts.
+whip/001 and whip/002 (tip speeds up to 4.2 m/s), built for the configured cable lengths; it must be
+rebuilt whenever the cable lengths or the attachment change. A reference state the engine rejects is
+an error that says so: the bank does not match the model. A reference state the cable filter cannot
+label from its first frame falls back to hover and is counted (`reference_unlabelled` in the
+provenance); on 128 lanes, 9 of 50 reference picks (about 18 %). The workspace origin and the target
+stay those of the hover start. Evaluation never uses reference starts.
 
 ## Domain randomisation
 

@@ -201,9 +201,10 @@ class BatchEnvironment:
         curriculum = getattr(task_config, 'curriculum', None)
         if reference_states and curriculum is not None and curriculum.reference_state_fraction > 0:
             self.reference = load_reference_bank(curriculum.reference_bank, self.seed.shape[0])
+            self.reference_source = str(curriculum.reference_bank)
             self.reference_fraction = curriculum.reference_state_fraction
         self.reference_lanes = np.zeros(lanes, bool)
-        self.reference_fallbacks = 0
+        self.reference_unlabelled = 0     # reference starts the cable filter could not label: hover instead
         self._build_runtime([model], [lanes])
         self.reset()
         if not bool(self.active.all()):
@@ -344,20 +345,25 @@ class BatchEnvironment:
         return rows
 
     def _start(self, rows):
-        """Reinitialize the lanes; a reference state the engine rejects or the cable filter cannot
-        label falls back to the hover seed (counted). Returns the observation and the sensed frames."""
+        """Reinitialize the lanes; a reference state the cable filter cannot label from its first
+        frame falls back to the hover seed (counted in `reference_unlabelled`); one the engine rejects
+        is an error (the bank does not match the model). Returns the observation and the sensed frames."""
         self.runtime.reinitialize(rows)
         self.runtime.set_voltage(self.voltage)
         self.runtime.set_bias(self.bias)
         for sensor in self.sensors:
             sensor.reset()
         rejected = np.asarray(self.runtime.failed, bool)
+        if (self.reference_lanes & rejected).any():
+            error = next(e for e, r in zip(self.runtime.errors, self.reference_lanes & rejected) if r)
+            raise ValueError(f'The engine rejects reference states of {self.reference_source}: {error}. The bank does not '
+                             'match the model (its cable lengths or attachment); rebuild it with scripts/build_reset_bank.py')
         observation = self._observe()
         sensed = self._sense(observation, ~rejected)
         complete = np.array([s is not None and bool((s['confidence'] == 1.).all()) for s in sensed])
-        fallback = self.reference_lanes & (rejected | ~complete)
+        fallback = self.reference_lanes & ~complete
         if fallback.any():
-            self.reference_fallbacks += int(fallback.sum())
+            self.reference_unlabelled += int(fallback.sum())
             rows = rows.copy(); rows[fallback] = self.seed
             self.reference_lanes &= ~fallback
             return self._start(rows)
@@ -660,7 +666,7 @@ class BatchEnvironment:
                     firmware=self.firmware, battery_voltage_v=self.voltage.tolist(),
                     hover_trim_mps2=self.hover_trim.tolist(), randomised=self.randomised,
                     model_variants=list(self.variant_draws), curriculum_stage=stage,
-                    reference_starts=int(self.reference_lanes.sum()), reference_fallbacks=self.reference_fallbacks,
+                    reference_starts=int(self.reference_lanes.sum()), reference_unlabelled=self.reference_unlabelled,
                     sensing=dict(latency_frames=list(self.sensing.latency_frames), position_noise_m=self.sensing.position_noise_m,
                                  dropout_hazard=[list(row) for row in self.sensing.dropout_hazard],
                                  reappear_probability=self.sensing.reappear_probability,

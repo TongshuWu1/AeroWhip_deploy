@@ -2039,3 +2039,29 @@ tilt 2.6°, shape 64 mm, tip 102 mm, stroke tip error 56 mm; this week's model b
 measured: the residual improves the cable's path but its tip peaks slower; the drag correction that
 might address this was not identified on 1 s segments, so a stroke-window drag fit is the next
 candidate. 112 tests pass.
+
+## Dated change note — 2026-10-28 reference-state bank rebuilt; rejected reference starts are an error
+
+Bug: from 00c5fcc (stage 0, marker intervals from the labels, ~23:35 on 2026-10-27) until this fix,
+training had no reference-state starts. `runs/reset_bank/whip.npz` (built 2026-10-27 19:43) held
+cables projected onto the ruler intervals (85 + 9 × 100 mm); the engine rejects edge lengths off by
+more than 1 µm, and `BatchEnvironment._start` fell back to the hover seed for every rejected
+reference start, only counting it. Measured: 32 lanes, 13 reference picks, 0 starts, 13 fallbacks.
+No training run was affected: the only run, `runs/ppo/20261027-195823`, started at 19:58, before
+00c5fcc.
+
+Fix, on the user's approval: the old bank is kept as `runs/reset_bank/whip_20261027-1943_ruler.npz`
+and `runs/reset_bank/whip.npz` rebuilt with `scripts/build_reset_bank.py` on the current model (same
+1,302 states, the current lengths; identical to the bank checked first in `tmp/bank_check/`, not
+filtered). `BatchEnvironment._start` now raises on any reference start the engine rejects, naming the
+bank and saying to rebuild it; starts the cable filter cannot label still fall back to hover, counted
+as `reference_unlabelled` in the provenance (was `reference_fallbacks`, which also counted the
+rejections). With the rebuilt bank, 128 lanes: 50 picks, 41 starts, 9 unlabelled, the same as the
+old bank with the model before stage 0 (50 / 41 / 9). New test: a bank whose cable is 2 % long
+raises.
+
+Reference starts under the cable residual (adopted model against the same without it, 60 starts,
+zero action, 0.2 s): no start transient; the node acceleration difference is the residual's steady
+push (median 0.80 m/s² in the first 30 ms, 0.42 at 90–200 ms; ~1.75 m/s² at a clamp node), and the
+tip separates smoothly (median 1.3 mm at 0.1 s, 4.3 mm at 0.2 s). The recorded cables already carry
+the lean.

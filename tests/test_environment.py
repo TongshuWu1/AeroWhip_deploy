@@ -167,3 +167,22 @@ def test_numerical_failure_stops_lane_and_charges_remaining_time(env):
 def test_rejects_unnormalized_actions(env):
     with pytest.raises(ValueError):
         env.step(torch.full((1, 3), 1.5))
+
+
+def test_a_bank_that_does_not_match_the_model_raises():
+    """A reference state whose cable lengths differ from the model's must stop the environment,
+    not fall back to hover silently (the bank is rebuilt with scripts/build_reset_bank.py)."""
+    import dataclasses
+    from aerowhip.physics.model import Model, pack_state, unpack_state
+    from helpers import project_temporary
+    model = Model(SNAPSHOT['model'])
+    state = unpack_state(model.native.initial_state(np.zeros(3), np.eye(3), np.zeros(3), np.zeros(3), None, None))
+    root = state.position_com+np.asarray(model.attachment_tracking)-np.asarray(model.com_tracking)
+    stretched = dataclasses.replace(state, free_positions=root+1.02*(state.free_positions-root))   # every edge 2 % long
+    with project_temporary() as folder:
+        bank = f'{folder}/wrong_lengths.npz'
+        np.savez(bank, states=np.repeat(pack_state(stretched)[None], 4, 0))
+        curriculum = dataclasses.replace(TASK.curriculum, reference_bank=bank, reference_state_fraction=.99)
+        experiment = dataclasses.replace(EXPERIMENT, task=dataclasses.replace(TASK, curriculum=curriculum))
+        with pytest.raises(ValueError, match='rebuild it with scripts/build_reset_bank.py'):
+            make_batch_environment(experiment, SNAPSHOT, SCENE, lanes=8, device='cpu', workers=0)

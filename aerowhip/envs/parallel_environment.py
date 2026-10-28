@@ -306,6 +306,6 @@ class ParallelEnvironment:
                      hover_trim_mps2=[v for r in records for v in r['hover_trim_mps2']],
                      model_variants=[v for r in records for v in r['model_variants']],
                      reference_starts=sum(r['reference_starts'] for r in records),
-                     reference_fallbacks=sum(r['reference_fallbacks'] for r in records),
+                     reference_unlabelled=sum(r['reference_unlabelled'] for r in records),
                      unique_initial_states=sum(r['unique_initial_states'] for r in records))
         return first
