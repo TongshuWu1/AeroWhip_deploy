@@ -2450,3 +2450,28 @@ see the flip from the planned reference. Mitigations in place: 'drone slower' br
 protection near the limit. The fix is the drone refit on cf_6's own flights (delay, response,
 drag), which the first planned flights provide; the rise measure runs from −0.085 (hanging) to 0
 (first link horizontal), so --rise-margin 0.04 keeps every member below ~60°.
+
+## Dated change note — 2026-10-28 optimised excitation trajectories (replaces the primitive catalogue as step 1)
+
+On the user's objection that choosing among set shapes is not smart: step 1 of the plan now optimises
+a free trajectory. `aerowhip/planning/trajectory.py`: a sum of sines per axis under a quintic
+window (at rest at both ends), amplitudes normalised so the peak horizontal acceleration equals the
+chosen level, vertical capped at 2 m/s², speed at 3 m/s, frequencies 0.1–1.2 Hz.
+`aerowhip/planning/information.py`: Fisher information of a trajectory about the fitted parameters
+(cable search vector and the drone's response and drag; inertia left out) from finite-difference
+sensitivities of the simulated markers (every 0.1 s) and thrust axis, in relative units; scored
+by the weakest parameter's marginal information (1/(F⁻¹)ᵢᵢ). `scripts/optimize_trajectory.py`:
+random restarts then a (1+λ) evolution strategy; every candidate flown closed loop on every ensemble
+member (constraints as the planner's) and, if feasible, 1+n simulations for the information; writes
+the trajectory file for `--trajectory` and a report. The flight stack flies such files
+(`TrajectoryFile`, crazyswarm2 8c8ae47). `simulate_motion` now returns markers and rotations for
+the sensitivities. Trial (20 s, 2 terms, level 2, 4 members, 14 parameters, 8 candidates): 50 s;
+the first feasible best was a small wiggle whose weakest parameter was Cd (little speed), as
+expected before the optimiser has run long.
+Motor-floor finding (clean sinusoids, adopted model, flown gains): horizontal 2 m/s² at 1.5 Hz
+drives the smallest simulated motor to 0.15 of its hover share, vertical 3 m/s² at 0.2 Hz to 0.36;
+random Fourier candidates with 3 m/s² vertical plus fast horizontal terms reached 0.00. The
+planner's random parts failed the same constraint (not a scoring bug: fast attitude torques at
+low throttle). Hence the frequency and vertical caps above; the motor-floor constraint stays.
+The plan's step 1 is `optimize_trajectory.py`; `plan_flight.py` (primitives) remains the
+warm start and the fallback.
