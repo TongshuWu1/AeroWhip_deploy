@@ -2126,3 +2126,20 @@ removed from both, 57 / 120 / 129 / 37 / 197 → 43 / 89 / 87 / 23 / 146 mm. Cor
 error with the estimate-induced drift 0.54 (x), 0.42 (y). Conclusion: the estimate error is a real
 part of the drone's unpredictability (about a quarter to a third of the window-debiased error) but
 does not explain most of the slow drift; the rest is not identified. Nothing changed.
+
+## Dated change note — 2026-10-28 controller settings checked against the flight logs (diagnostic)
+
+Recorded on every flight (`parameters.json`): onboard Mellinger with its translation gains zeroed,
+attitude gains at the firmware defaults (kR_xy 70000, kw_xy 20000, as in
+`configs/controllers/crazyflie_firmware.toml`), ctrlMel.mass 0.144 kg against 0.157 kg measured,
+extQuatStdDev 0.05; host PID KP 4, KD 3, KI 0.6 (integral limit 1.5 m/s²) with a fixed body-frame
+offset trim [0.129, −0.241] m/s². From all 58 calibration flights (`runs/diagnostics/loop_check_20261028.py`
+and inline checks): the host loop never saturated; tracking 15–20 mm in hover, 40–80 mm horizontal in
+motion, 125–160 mm vertical on the vertical and line_star flights; the PID integral wanders 0.03–0.06
+m/s² within a flight (time scale 2–9 s). The total horizontal bias (trim + integral mean) moved from
+about [0.15, −0.25] on the first sessions to about [0.1, 0.0] m/s² on the later ones, so the fixed
+trim is now stale in y by ~0.2 m/s² and the integral carries it. Commanded against OptiTrack tilt:
+the drone follows with a lag of 120–140 ms and 0.71–0.83 of the commanded tilt (50 Hz log; includes
+radio and OptiTrack latency). The simulator reproduces this response (tilt error ~1° in stage 2);
+the slow response is a property of the default attitude gains on this airframe, not a model error.
+Nothing changed.
