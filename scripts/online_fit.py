@@ -84,7 +84,7 @@ def main():
     p.add_argument('--period', type=float, default=1., help='seconds of flight between updates')
     p.add_argument('--window', type=float, default=2.)
     p.add_argument('--threads', type=int, default=8)
-    p.add_argument('--cpus', help='pin to these cores, e.g. 8-15 (live: keep the flight stack\'s cores free)')
+    p.add_argument('--cpus', help="pin to these cores, e.g. 8-15, or 'auto' (the upper half): keep the flight stack's cores free")
     p.add_argument('--model-commit', help='use the model configuration at this git commit (cf_2: 45900ad)')
     p.add_argument('--cable-fit', type=Path, default=ARCHIVE/'cable'/'20261028-012011.json')
     p.add_argument('--drone-fit', type=Path, default=ARCHIVE/'drone'/'20261027-201939.json')
@@ -94,9 +94,14 @@ def main():
     p.add_argument('--quiet', action='store_true')
     args = p.parse_args()
     os.nice(10)
-    if args.cpus:
-        lo, _, hi = args.cpus.partition('-')
-        os.sched_setaffinity(0, set(range(int(lo), int(hi or lo)+1)))
+    if args.cpus:                       # 'auto': the upper half of the cores (the flight stack and its radio
+        if args.cpus == 'auto':         # link run on the host's CPU; a loaded host delays the radio)
+            n = os.cpu_count() or 2
+            cores = set(range(n//2, n))
+        else:
+            lo, _, hi = args.cpus.partition('-')
+            cores = set(range(int(lo), int(hi or lo)+1))
+        os.sched_setaffinity(0, cores)
 
     base = base_model(args.model_commit)
     space = ModelSpace(base, load_fit(args.cable_fit), load_fit(args.drone_fit))

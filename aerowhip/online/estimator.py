@@ -145,9 +145,13 @@ def cable_residual(config, window):
     return e[SUBSAMPLE-1::SUBSAMPLE].ravel()
 
 
-def drone_residual(config, firmware, window, flight):
+def drone_residual(config, firmware, window, flight, coupled=True):
+    """coupled: the model with the cable, started from the measured markers; otherwise drone only."""
     replay = flight_drone.DroneReplay(config, firmware)
-    p, R, _, _ = replay.run(window, flight, markers=True, attitude=True, pipeline=True)
+    if coupled:
+        p, R, _, _ = replay.run(window, flight, markers=True, attitude=True, pipeline=True)
+    else:
+        p, R = replay.run(window, flight, attitude=True, pipeline=True)
     position = flight_drone.debias(p-window.position[1:])
     tilt = flight_drone.tilt_error(R, window.rotation[1:])
     tilt = tilt-tilt.mean(0)
@@ -234,7 +238,7 @@ class OnlineEstimator:
                         return self.pool.submit(cable_residual, self.space.config(th, cable=has_cable), window)
                 else:
                     def submit(th):
-                        return self.pool.submit(drone_residual, self.space.config(th, cable=has_cable), firmware, window, flight)
+                        return self.pool.submit(drone_residual, self.space.config(th, cable=has_cable), firmware, window, flight, has_cable)
                 thetas = [self.theta]+[self.theta+np.eye(len(self.theta))[k]*self.space.parameters[k].step for k in fam.index]
                 jobs[name] = (submit, [submit(th) for th in thetas])
             for name, (submit, futures) in jobs.items():

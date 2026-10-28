@@ -117,7 +117,7 @@ def simulate_motion(config, firmware, motion, voltage=7.6, stack=FLIGHT_STACK, m
         out['tip'].append(q[-1].copy()); out['tip_speed'].append(float(np.linalg.norm(qv[-1])))
         out['motor'].append(float(min(controller.motors(s, sent))/hover_share))
         out['command'].append(sent[6:9].copy()); out['position'].append(p.copy())
-        if len(out['t']) % markers_every == 1:
+        if (len(out['t'])-1) % markers_every == 0:     # the first step, then every markers_every (1 = all)
             markers.append(q[index].copy()); rotations.append(R.copy())
             if nodes:
                 cable_nodes.append(q.copy()); references.append(np.asarray(ref, float).copy())
@@ -126,6 +126,7 @@ def simulate_motion(config, firmware, motion, voltage=7.6, stack=FLIGHT_STACK, m
             break
     result = {k: (np.array(v) if k != 'phase' else v) for k, v in out.items()}
     result['markers'] = np.array(markers); result['rotation'] = np.array(rotations)
+    result['trim'] = trim
     if nodes:
         result['nodes'] = np.array(cable_nodes); result['reference'] = np.array(references)
         result['marker_t'] = result['t'][::markers_every][:len(markers)]

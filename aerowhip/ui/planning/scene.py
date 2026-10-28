@@ -23,7 +23,8 @@ FLOOR, GRID, GRID_MAJOR = '#1a2129', '#26313c', '#34424f'
 AREA, CEILING = '#3d93d1', '#D55E00'
 CABLE, TIP, MARKER = '#f2f2f2', '#E69F00', '#56B4E9'
 DRONE_BODY, DRONE_GUARD = '#2b2f36', '#c8d0d8'
-PATH, AHEAD = '#93a0ad', '#3dd6c6'        # the whole plan (faint) and the next seconds of it
+PATH, AHEAD = '#93a0ad', '#3dd6c6'
+FLOWN, FLOWN_CABLE = '#ffffff', '#ff5a4f'          # the measured flight: drone and its live-labelled cable        # the whole plan (faint) and the next seconds of it
 
 
 def arena():
@@ -91,6 +92,7 @@ class Scene3D(QtWidgets.QWidget):
         p.add_light(pv.Light(position=(4, 2, 5), focal_point=(0, 0, 1), intensity=.5, light_type='scene light'))
         self.hover = np.array([0., 0., 1.3])
         self.preview = None
+        self.flown = None
         self.trail = None
         self._drone = []
         self._frame_index = 0
@@ -199,7 +201,31 @@ class Scene3D(QtWidgets.QWidget):
             j0, j1 = np.searchsorted(t, [pr['t'][i], pr['t'][i]+ahead_s])
             segment = pos[min(j0, len(t)-2):max(j1, j0+2)]
             self.ahead.copy_from(pv.lines_from_points(segment))
+        if self.flown is not None:
+            f = self.flown
+            j = int(np.clip(np.searchsorted(f['t'], pr['t'][i]), 0, len(f['t'])-1))
+            self.flown_drone.points = f['position'][j:j+1]
+            seen = np.isfinite(f['markers'][j]).all(1)
+            self.flown_markers.points = f['markers'][j][seen] if seen.any() else f['position'][j:j+1]
         self.plotter.render()
+
+    def set_flown(self, record):
+        """The measured flight on the same timeline (white: drone path and drone; red: the cable markers
+        the live labeller sees), or None to hide it."""
+        for name in ('flown_path', 'flown_drone', 'flown_markers'):
+            self.plotter.remove_actor(name, render=False)
+        self.flown = record
+        if record is None:
+            return
+        inside = (record['t'] >= -1.) & (record['t'] <= (self.preview['t'][-1] if self.preview is not None else 1e9))
+        self.plotter.add_mesh(pv.lines_from_points(record['position'][inside][::2]), color=FLOWN, line_width=1.5, opacity=.55,
+                              name='flown_path', lighting=False)
+        self.flown_drone = pv.PolyData(record['position'][:1])
+        self.plotter.add_mesh(self.flown_drone, color=FLOWN, point_size=12, render_points_as_spheres=True, name='flown_drone')
+        self.flown_markers = pv.PolyData(record['position'][:1])
+        self.plotter.add_mesh(self.flown_markers, color=FLOWN_CABLE, point_size=10, render_points_as_spheres=True, name='flown_markers')
+        if self.preview is not None:
+            self.set_frame(self._frame_index)
 
     def _place_drone(self, position, R, nodes, marker_indices):
         M = np.eye(4); M[:3, :3] = R; M[:3, 3] = position

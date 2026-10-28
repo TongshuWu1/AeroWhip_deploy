@@ -155,3 +155,32 @@ class Job:
         except OSError:
             return
         subprocess.run(['pkill', '-TERM', '-P', pid], check=False)
+
+
+def flown_record(path, setup):
+    """The newest real flight of the planned trajectory `path`, on the plan's timeline (t = 0 where its
+    'excitation' part starts): drone positions and the cable markers as the live labeller sees them.
+    Cached as runs/planning/<plan>_flown_<NNN>.npz. None if the plan has not been flown."""
+    flights = [f for f in flown(setup) if (read_json(f/'trajectory.json') or {}).get('name') == path.stem]
+    if not flights:
+        return None
+    folder = flights[0]
+    cache = path.with_name(f'{path.stem}_flown_{folder.name}.npz')
+    if cache.exists() and cache.stat().st_mtime >= (folder/'poses.jsonl').stat().st_mtime:
+        return dict(np.load(cache), folder=str(folder))
+    from aerowhip.online.stream import FlightStream
+    from aerowhip.physics.model_configuration import DEFAULT_MODEL, fit_configuration, load_model_configuration
+    cfg = fit_configuration(load_model_configuration(DEFAULT_MODEL))
+    stream = FlightStream(folder, np.cumsum(cfg['cable']['marker_interval_lengths_m']), cfg['attachment']['position_tracking_m'],
+                          keep_s=1e9, replay=True)
+    stream.advance(np.inf)
+    start = next((r['pose_stamp'] for r in stream.rows if r['phase'].startswith('excitation') and r.get('pose_stamp')), None)
+    if start is None:
+        return None
+    stamps = np.array([p['stamp'] for p in stream.poses])
+    position = np.array([p['position'] for p in stream.poses])
+    labels = dict(stream.labels)
+    markers = np.array([labels.get(s, np.full((10, 3), np.nan)) for s in stamps])
+    record = dict(t=stamps-start, position=position, markers=markers)
+    np.savez_compressed(cache, **record)
+    return dict(record, folder=str(folder))

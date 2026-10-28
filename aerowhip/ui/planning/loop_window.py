@@ -17,6 +17,7 @@ clipboard. While a flight script runs on this computer, every computing action i
 simulation running during a flight once stalled the host loop and dropped the drone.
 """
 from datetime import datetime
+from pathlib import Path
 import shutil
 import sys
 import time
@@ -495,6 +496,12 @@ class LoopWindow(QtWidgets.QMainWindow):
         self.report = ld.report_of(path) if path else None
         self.preview = ld.load_preview(path) if path else None
         self.scene.set_trajectory(self.data, self.preview)
+        try:
+            self.flown_record = ld.flown_record(path, self.setup) if path else None
+        except Exception as exc:                    # a damaged recording must not stop the window
+            self.flown_record = None
+            self.statusBar().showMessage(f'Could not read the flown flight: {exc}')
+        self.scene.set_flown(self.flown_record)
         self.strip.show(self.data, self.preview)
         self.information.show(self.data, self.report)
         self.safety.show(self.data, self.report)
@@ -516,8 +523,10 @@ class LoopWindow(QtWidgets.QMainWindow):
             else:
                 self.preview_note.setText('No 3D preview yet')
         else:
-            self.preview_note.setText('Simulated with the adopted model · drone, cable and the next 3 s of the plan'
-                                      if self.preview is not None else '')
+            note = 'Simulated with the adopted model · drone, cable and the next 3 s of the plan' if self.preview is not None else ''
+            if self.flown_record is not None:
+                note += f" · measured flight {Path(self.flown_record['folder']).name} in white and red"
+            self.preview_note.setText(note)
         self.preview_note.setVisible(bool(self.preview_note.text()))
 
     def _inspect(self, path):
@@ -681,7 +690,7 @@ class LoopWindow(QtWidgets.QMainWindow):
 
     def start_online(self):
         self.run('online-fit', [ld.PYTHON, 'scripts/online_fit.py', '--watch', FLIGHT_STACK/'calibration_data'/self.setup,
-                                '--quiet', '--threads', '6'], env='OMP_NUM_THREADS=1', show_log=False)
+                                '--quiet', '--threads', '6', '--cpus', 'auto'], env='OMP_NUM_THREADS=1', show_log=False)
         self.segments.setCurrentIndex(self.online_index)
 
     def update_envelope(self):
