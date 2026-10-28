@@ -1871,3 +1871,15 @@ User's request: one systematic, automated data collection with a single calibrat
   On a third of the segments at the configuration now, tilt rises with the delay (0/10/20/30/40 ms:
   1.27/1.33/1.48/1.71/1.98 deg) while position changes little (59.3/57.7/57.7/59.3/62.1 mm). Delay grid
   0, 5, 10, 15, 20, 30, 40 ms. Results report position (mm), tilt (deg) and the combined loss.
+- **Adopted (same day, user decision "Adopt both"):** drone `runs/fits/drone/20261027-201939.json`
+  (position+tilt loss; 1610 segments): command delay 0 -> 5 ms (profile: loss 0.980/0.977/0.986/1.014/
+  1.041/1.141/1.272 at 0/5/10/15/20/30/40 ms), motor response 22.5 -> 19.6 ms (± 14.5), body drag xy
+  0.518 -> 0.588 (± 0.052), z 0.846 -> 0.477 s⁻¹ (± 0.19); position 59.6 -> 55.9 mm, tilt 1.265 -> 1.283
+  deg; reproduced twice. Roll/pitch inertia NOT adopted: not identified (×0.64 ± 1.2), kept at the
+  configured value. Cable `runs/fits/cable/20261027-202726.json` (1069 segments, 21 flights, converged in
+  41 evaluations): EI 1.14e-7 -> 5.71e-4 N m² (×/÷ 1.18), Cb 3.02e-4 -> 4.13e-5 N m² s (×/÷ 1.23), Cd 0.689
+  -> 0.642 (± 0.15), linear drag 0.053 -> 0.223 s⁻¹ (×/÷ 1.24; Cd and linear drag correlated -0.94); marker
+  error 33.0 -> 27.9 mm, fast flights (whip, strokes, random_high) 40.8 -> 30.2 mm, slow 29.3 -> 27.9 mm;
+  figure8_xy 30.1 -> 35.0, line_star_xy/001 24.0 -> 27.3, vertical 21.4 -> 23.9 mm got worse; reproduced
+  twice. Both are effective values for this model (10-segment cable mesh, firmware law). Each run had one
+  worker process die (memory fault) and repeated the evaluation. Logged in runs/fits/adoptions.jsonl.

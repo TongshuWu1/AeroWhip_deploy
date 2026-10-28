@@ -7,4 +7,4 @@ attitude_frequency_rad_s = [20.0, 20.0, 15.0]
 attitude_damping_ratio = [1.0, 1.0, 1.0]
 # Explicit experimental clock, not inferred from 100 Hz observations.
 controller_period_s = 0.002   # 500 Hz: the firmware attitude rate (ATTITUDE_RATE); the geometric law is continuous-time
-command_delay_s = 0.0     # stage 2 with the firmware law: the port carries the response; 0.03 was the previous simulator value
+command_delay_s = 0.005     # stage 2 with the firmware law: the port carries the response; 0.03 was the previous simulator value
