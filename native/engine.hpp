@@ -23,6 +23,9 @@ struct Parameters {
     // cable cylinder, 0.5*rho*Cd*diameter per unit length, with still air.
     double air_density = 0., normal_drag_coefficient = 0., diameter = 0.;
     int projections = 0;
+    // Fixed-point stopping rule of the implicit endpoint: the largest relative velocity change of an
+    // iteration (simulation.solver_tolerance; 2e-11 when absent).
+    double solver_tolerance = 2e-11;
     // Drone air drag: linear rates (s^-1, mass proportional) per body axis on the COM velocity
     // relative to still air (rotor and body drag), F = -m R diag(k) R^T v.
     Vec3 body_drag{};

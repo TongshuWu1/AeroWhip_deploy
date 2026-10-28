@@ -433,7 +433,7 @@ Vector Engine::integrate(const Vector& s, const Vector& previous, double previou
         for(int i=0;i<v;++i){rhs[i]+=beta*f[i];for(int j=0;j<v;++j)A[i*v+j]+=g.mass[i*v+j];}
         auto next=prescribed::constrained(A,rhs,g.constraint,Vector(m),v,m);double err=0.;
         for(int i=0;i<v;++i)err=std::max(err,std::abs(next[i]-x[i])/(1.+std::max(std::abs(next[i]),std::abs(x[i]))));
-        x=std::move(next);if(err>2e-11)continue;
+        x=std::move(next);if(err>p_.solver_tolerance)continue;
         with_velocity(out,x,m);
         require(maxabs(material::product(g.constraint,x,m,v))<=1e-9,"Implicit velocity constraint failed");
         validate_state(out,false);return out;

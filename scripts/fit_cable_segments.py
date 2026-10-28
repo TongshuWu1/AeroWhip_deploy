@@ -31,7 +31,7 @@ from aerowhip.fitting.calibration_set import split
 from aerowhip.fitting.least_squares import Fit, FAILED_RESIDUAL_M, ProcessRunner, strong_correlations, uncertainty
 from aerowhip.fitting.progress import Progress
 from aerowhip.physics.model import Model
-from aerowhip.physics.model_configuration import DEFAULT_MODEL, load_model_configuration
+from aerowhip.physics.model_configuration import DEFAULT_MODEL, fit_configuration, load_model_configuration
 
 KEYS = ('EI_n_m2', 'Cb_n_m2_s', 'normal_drag_coefficient', 'external_drag_s_inv')
 PHYSICS = ('log10 EI', 'log10 Cb', 'Cd', 'log10 linear drag')
@@ -101,7 +101,7 @@ class Parameters:
 
 
 def _replay(config):
-    replay = flight_cable.CableReplay(Model(config).native)
+    replay = flight_cable.CableReplay(Model(fit_configuration(config)).native)
     return lambda item: replay.run(item[1])
 
 

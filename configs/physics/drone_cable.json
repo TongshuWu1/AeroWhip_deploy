@@ -96,6 +96,8 @@
       -9.80665
     ],
     "physics_timestep_s": 0.002,
+    "solver_tolerance": 1e-05,
+    "fit_solver_tolerance": 1e-07,
     "segments_per_marker_interval": [
       1,
       1,

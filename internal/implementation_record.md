@@ -32,7 +32,8 @@ attachment node 0, use world coordinates.
 
 The parameter table, the cable model (twist-free discrete elastic rod, Kelvin–Voigt bending
 damping, quadratic normal drag plus linear drag, point clamp), the drone body drag, the
-integration (projected Lie-BDF2, 2 ms maximum step chosen by `scripts/step_convergence.py`) and
+integration (projected Lie-BDF2, 2 ms maximum step chosen by `scripts/step_convergence.py`; solver
+stopping tolerance 1e-5, 1e-7 in the fits, chosen by `scripts/solver_tolerance.py`) and
 the flight pipeline are described in [docs/simulation_model.md](../docs/simulation_model.md);
 the values are the configured ones (`configs/simulation.json` and the files it links), with
 each adoption recorded in `runs/fits/adoptions.jsonl`. There is one engine, the native C++ one
@@ -1790,7 +1791,7 @@ User's request: one systematic, automated data collection with a single calibrat
 - Tried and not adopted: an extrapolated starting velocity for the iteration (4.98 → 4.78
   iterations, 1e-11 differences); compile-time derivative loop bounds and a mirrored damping
   operator (no gain, 4e-14 differences: the mirror's products round differently). Measured, not
-  adopted (accuracy setting for the user): iteration tolerance 2e-11 → 1e-10 / 1e-9 gives 4.72 / 4.29
+  adopted at the time (accuracy setting for the user; superseded by the solver tolerance note below): iteration tolerance 2e-11 → 1e-10 / 1e-9 gives 4.72 / 4.29
   iterations per step, 5 % / 14 % faster, position differences 7e-11 / 5e-10 m after 2 s.
 - Installed by building aside and renaming into place (processes holding the old library keep it).
   109 tests pass. Phases A + B, 64 lanes × 2 s: 18.2 (in process) → 50.0 simulated lane-seconds per
@@ -1960,3 +1961,42 @@ through the simulated host law match real flights.
   engine; under a 0.006 N/m sideways load the held-clamp cable settles onto the discrete-chain
   prediction (interior edges within 0.3° after 30 s); info round-trip. 111 tests pass. Not yet in
   any fit: `fit_cable_segments.py` still fits the four physical parameters only.
+
+## Dated change note — 2026-10-28 solver stopping tolerance a setting (training 1e-5, fits 1e-7)
+
+Approved by the user (1e-5 for training, 1e-7 for fitting).
+
+- The implicit endpoint iteration stopped at a hard-coded 2e-11 (largest relative velocity change
+  of an iteration), in the coupled engine ([native/engine.cpp](../native/engine.cpp)) and the
+  prescribed-clamp cable replay ([native/prescribed_material.inc](../native/prescribed_material.inc)).
+  It is now `Parameters::solver_tolerance`, read from `simulation.solver_tolerance` (bindings
+  `model()`, validated in (0, 1e-3]; the raw `parameters()` dict; reported by `info()`); a
+  configuration without the key keeps 2e-11, so old snapshots replay as before.
+- [configs/physics/drone_cable.json](../configs/physics/drone_cable.json): `solver_tolerance` 1e-5
+  (training, simulator, tools) and `fit_solver_tolerance` 1e-7.
+  `model_configuration.fit_configuration` copies the fit value into `solver_tolerance`; applied in
+  `flight_drone.DroneReplay` (drone, coupled and validation replays, step convergence, reset bank) and
+  in `fit_cable_segments._replay`. Least-squares finite differences use `diff_step` 1e-2, far above the
+  1e-7 stopping noise.
+- **Study** ([scripts/solver_tolerance.py](../scripts/solver_tolerance.py),
+  `runs/calibration_2026-10-27/solver_tolerance.json` and `.log`; reference 1e-13): coupled open-loop
+  replays of every 2 s window of whip/002 (70) and strokes/002 (45), sent commands ×1 and ×1.5:
+  2e-11 identical to the reference at the printed precision; 1e-7 drone ≤ 0.0040 mm, marker ≤ 0.0050 mm;
+  1e-5 drone ≤ 0.0074 mm, marker ≤ 0.0161 mm, peak tip speed ≤ 0.0010 %; 1e-4 drone ≤ 0.020 mm, marker
+  ≤ 0.052 mm, peak tip speed ≤ 0.0018 %; peak timing never shifted, no failures. Prescribed cable
+  replay of the 1,069 one-second cf_2 cable segments: 1e-7 marker ≤ 0.0000 mm at the printed precision, 1e-5 ≤ 0.0017 mm,
+  1e-4 ≤ 0.015 mm; RMS marker error against the recordings 27.727 mm at every tolerance; no failures.
+- **Cost** (development check, an instrumented scratch build counting iterations over the same coupled
+  replays, not retained): iterations per step 5.82 (1e-13), 4.73 (2e-11), 3.96 (1e-9), 3.18 (1e-7),
+  2.84 (1e-6), 2.38 (1e-5), 2.03 (1e-4). Iterations are nearly all of a step's cost, so 1e-5 halves the
+  physics time; wall-clock timings were unreliable while a cable fit loaded every core (single-lane
+  physics with the installed build: 13.2× real time vs 7–8× before, same load). Expected effect on a
+  training run: collection about 1.6× faster (physics ~78 % of an environment step), the run 15–20 %
+  shorter (the PPO update is unchanged). Not yet measured on a training run.
+- Checks: the new build's fit path (1e-7) reproduces the scratch 1e-7 replays bit for bit; the scratch
+  build at 2e-11 reproduced the previous installed engine bit for bit.
+  `test_bending_cable_conserves_momentum_and_lengths_in_free_fall` now takes its bound from the model's
+  tolerance (steps × tolerance × |momentum|). 111 tests pass. Installed by building aside and renaming
+  into place while the cable fit ran (it keeps its loaded library). Fit results adopted earlier were
+  computed at 2e-11; refits from now on run at 1e-7 (differences ≤ 0.005 mm in the replays above).
+

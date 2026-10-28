@@ -49,6 +49,7 @@ Parameters parameters(const py::dict& d) {
     if(d.contains("residual_body_frame")) p.residual_body_frame=d["residual_body_frame"].cast<bool>();
     if(d.contains("residual_normal_log")) p.residual_normal_log=fixed<2>(d["residual_normal_log"]);
     if(d.contains("residual_tangential")) p.residual_tangential=fixed<2>(d["residual_tangential"]);
+    if(d.contains("solver_tolerance")) p.solver_tolerance=d["solver_tolerance"].cast<double>();
     return p;
 }
 Model model(const py::dict& c) {
@@ -94,6 +95,11 @@ Model model(const py::dict& c) {
     if(!std::isfinite(iterations)||iterations<1||std::floor(iterations)!=iterations||iterations>1000000.)
         throw py::value_error("Invalid projection count");
     p.projections=static_cast<int>(iterations);
+    if(n.contains("solver_tolerance")) {
+        double tolerance=n["solver_tolerance"].cast<double>();
+        if(!std::isfinite(tolerance)||tolerance<=0.||tolerance>1e-3) throw py::value_error("simulation.solver_tolerance must lie in (0, 1e-3]");
+        p.solver_tolerance=tolerance;
+    }
     if(n.contains("physics_timestep_s")) {
         if(n.contains("cable_substeps")) throw py::value_error("Use physics_timestep_s or cable_substeps, not both");
         p.maximum_step=n["physics_timestep_s"].cast<double>();
@@ -115,7 +121,7 @@ py::dict info(const Model& model) {
     d["body_drag"]=array(Vector(p.body_drag.begin(),p.body_drag.end()));
     d["rest"]=array(p.rest);d["node_mass"]=array(p.node_mass);d["ei"]=p.stiffness;d["drag"]=p.drag;
     d["cb"]=p.bending_damping;d["cb_saturation"]=p.bending_damping_saturation;d["cd"]=p.normal_drag_coefficient;d["diameter"]=p.diameter;d["air_density"]=p.air_density;
-    d["dt"]=model.output_step;d["delay_s"]=model.delay;d["physics_dt"]=p.maximum_step;d["iterations"]=p.projections;
+    d["dt"]=model.output_step;d["delay_s"]=model.delay;d["physics_dt"]=p.maximum_step;d["iterations"]=p.projections;d["solver_tolerance"]=p.solver_tolerance;
     d["residual_static"]=py::array_t<double>({3,3},p.residual_static.data());d["residual_body_frame"]=p.residual_body_frame;
     d["residual_normal_log"]=array(Vector(p.residual_normal_log.begin(),p.residual_normal_log.end()));
     d["residual_tangential"]=array(Vector(p.residual_tangential.begin(),p.residual_tangential.end()));

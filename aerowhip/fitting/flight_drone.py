@@ -21,6 +21,7 @@ import numpy as np
 from aerowhip.fitting.flight_cable import endpoint_velocity
 from aerowhip.paths import ROOT
 from aerowhip.physics.model import Model, native_module
+from aerowhip.physics.model_configuration import fit_configuration
 
 FIRMWARE = ROOT/'configs/controllers/crazyflie_firmware.toml'    # the flown firmware (law 'firmware'); crazyflie_flight.toml is the identified fallback
 
@@ -91,6 +92,7 @@ def centred_state(window, half=5):
 
 class DroneReplay:
     def __init__(self, config, firmware, *, delay_s=None):
+        config = fit_configuration(config)
         self.config, self.firmware = config, firmware
         self.model = Model(config)
         self.native = native_module()

@@ -31,6 +31,7 @@ Defined in [configs/physics/drone_cable.json](../configs/physics/drone_cable.jso
 | Linear drag | 0.223 s⁻¹ (on node velocity, mass proportional) |
 | Drone air drag (body x, y / z) | 0.59 / 0.48 s⁻¹ (linear, mass proportional, on the COM velocity in body axes) |
 | Maximum physics step | 2 ms (one step per firmware controller period) |
+| Solver stopping tolerance | 1e−5 relative (`simulation.solver_tolerance`: training, simulator, tools); 1e−7 in the model fits (`simulation.fit_solver_tolerance`) |
 | Output / controller rate | 100 / 500 Hz (the firmware attitude rate) |
 | Attitude loop / command delay / motor response | firmware law: Mellinger gains of the flight (kR 70000, kw 20000, kd_omega 200, massThrust 17700) / 5 ms / 0.0196 s; roll/pitch inertia 1.877e-4 kg m² (the configured value: the drone fit did not identify it). Identified law (fallback): 20 rad/s, ζ = 1 / 0.03 s / 0.015 s |
 | Thrust map | firmware law: per motor T_i = κ/4 (pwm_i/massThrust)^p (1 + β (V − 7.2 V)), κ = 0.553 N^(1−p), p = 2.19, β = 0.249 V⁻¹ ([crazyflie_firmware.toml](../configs/controllers/crazyflie_firmware.toml)); identified law: T = 0.553 (1 + 0.177 (V − 7.2 V)) T_cmd^2.2 N |
@@ -92,10 +93,24 @@ the data and fitting page.
 The solver is a projected Lie-BDF2 method in float64 (backward Euler at startup
 and after large step growth). Endpoint geometry, velocities, material rates,
 loads and constraints are iterated together: at most 20 Picard iterations,
-relative tolerance 2e−11, length tolerance 1e−10 m, velocity-constraint
+stopping when the largest relative velocity change of an iteration is below
+`simulation.solver_tolerance`, length tolerance 1e−10 m, velocity-constraint
 tolerance 1e−9 m/s and four position projections per iteration. Failure to
 converge raises an error rather than accepting an approximate step. Solver
 convergence does not by itself establish physical accuracy.
+
+The stopping tolerance is 1e−5 for training, the simulator and the tools, and 1e−7 in the
+model fits (`simulation.fit_solver_tolerance`, applied by the fitting replays), where the
+least-squares finite differences should see the model rather than the stopping rule; a
+configuration without the key uses 2e−11. It was chosen by
+[`scripts/solver_tolerance.py`](../scripts/solver_tolerance.py)
+(`runs/calibration_2026-10-27/solver_tolerance.json`): against 1e−13, on every 2 s window of
+whip/002 and strokes/002 (recorded commands ×1 and ×1.5, open loop), 1e−5 differs by at most
+0.0074 mm in drone position and 0.016 mm in marker position, 0.001 % in peak tip speed with no
+shift of the peak, and on the 1,069 one-second cable segments of the cable fit by at most
+0.0017 mm (RMS marker error against the recordings unchanged at 27.727 mm); 1e−7 by at most
+0.005 mm. No replay failed. 1e−5 takes 2.4 iterations per step instead of 4.7 at 2e−11, about
+half the physics time. These differences are far below those of the 2 ms step below.
 
 The 2 ms step was chosen by a convergence study on the whip and strokes cable flights
 (`scripts/step_convergence.py`, every 2 s window replayed open loop at 2, 1 and 0.5 ms,

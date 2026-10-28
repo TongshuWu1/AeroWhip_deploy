@@ -80,12 +80,13 @@ def test_bending_cable_conserves_momentum_and_lengths_in_free_fall():
     engine.advance(.2, np.zeros(4))
     after = engine.state()
     # Internal forces conserve momentum up to the implicit solver's stopping rule: each step ends when
-    # the velocities change by less than 2e-11 (relative), so 0.2 s of 2 ms steps can leave up to
-    # steps x 2e-11 x |momentum|. With the measured cable stiffness (EI 5.7e-4 N m^2) the leftover is
-    # ~1e-10 kg m/s, growing with stiffness; with a nearly limp cable it was ~1e-18.
-    steps = round(.2/model.native.info()['physics_dt'])
+    # the velocities change by less than simulation.solver_tolerance (relative), so 0.2 s of 2 ms steps
+    # can leave up to steps x tolerance x |momentum|. With the measured cable stiffness (EI 5.7e-4 N m^2)
+    # the leftover at 2e-11 was ~1e-10 kg m/s, growing with stiffness; with a nearly limp cable ~1e-18.
+    info = model.native.info()
+    steps = round(.2/info['physics_dt'])
     target = before+[0., 0., -G*.2*total]
-    assert np.allclose(momentum(model, after), target, rtol=0, atol=steps*2e-11*np.linalg.norm(target))
+    assert np.allclose(momentum(model, after), target, rtol=0, atol=steps*info['solver_tolerance']*np.linalg.norm(target))
     assert edge_error(model, after) < 1e-12
     assert abs(after[16]) > 1e-5      # the clamp couple acted: internal forces were present
 

@@ -72,3 +72,14 @@ def load_model_configuration(source, *, with_sources=False, root=ROOT):
         raise ValueError("Historical model is not the twist-free cable setup; no implicit migration")
     verify_configuration_sources(sources)
     return (result, sources) if with_sources else result
+
+
+def fit_configuration(config):
+    """Copy of a model configuration for the model fits: the solver stops at
+    simulation.fit_solver_tolerance (tighter than the training setting, so the least-squares
+    finite differences see the model, not the stopping rule). Unchanged when the key is absent."""
+    if 'fit_solver_tolerance' not in config['simulation']:
+        return config
+    config = deepcopy(config)
+    config['simulation']['solver_tolerance'] = config['simulation']['fit_solver_tolerance']
+    return config

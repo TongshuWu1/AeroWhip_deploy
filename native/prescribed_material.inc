@@ -100,7 +100,7 @@ Vector step(const Parameters&p,const Vector&s,const std::array<BoundarySample,4>
         for(int i=0;i<m;++i)require(std::abs(c.lengths[i]-p.rest[i])<=1e-10,"Prescribed implicit position projection failed");
         auto next=endpoint_solve(p,out,bar,b[3],beta,scale);double err=0.;
         for(int i=0;i<3*m;++i)err=std::max(err,std::abs(next[i]-x[i])/(1.+std::max(std::abs(next[i]),std::abs(x[i]))));
-        x=std::move(next);if(err>2e-11)continue;
+        x=std::move(next);if(err>p.solver_tolerance)continue;
         std::copy_n(x.begin(),3*m,out.begin()+3*m);
         require(material::maxabs(product(c,x,b[3].v))<=1e-9,"Prescribed implicit velocity constraint failed");
         require(finite(out),"Nonfinite prescribed implicit endpoint");return out;
