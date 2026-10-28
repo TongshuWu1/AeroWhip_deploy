@@ -237,8 +237,11 @@ class Cable(Stage):
             physics['cable'].pop('residual', None)
         else:
             physics['cable']['residual'] = residual
+        tangent = r['adopt'].get('tangent_body')
+        if tangent is not None:
+            physics['attachment']['tangent_body'] = tangent
         _write_json(PHYSICS, physics)
-        return dict(values, **({'residual': residual} if residual else {}))
+        return dict(values, **({'residual': residual} if residual else {}), **({'tangent_body': tangent} if tangent else {}))
 
 
 class Coupled(Stage):

@@ -7,6 +7,9 @@ residual (`cable.residual`, docs/simulation_model.md):
             monomial coefficients; in the drone's body frame or the world frame (--frame)
     drag    the normal-drag multiplier as its log at the clamp and at the tip, and a tangential
             quadratic drag coefficient at the clamp and at the tip (each linear in between)
+    clamp   the direction in which the clamp holds the cable (`attachment.tangent_body`), as tilts
+            about the body x and y axes from straight down, in degrees (a physical parameter: it
+            bends the hanging shape without any net force on drone and cable)
 
 The measured drone pose drives the clamp; every flight is cut into consecutive segments (--horizon,
 1 s) and each segment's cable starts from the measured markers. Residuals: simulated minus measured
@@ -37,6 +40,7 @@ KEYS = ('EI_n_m2', 'Cb_n_m2_s', 'normal_drag_coefficient', 'external_drag_s_inv'
 PHYSICS = ('log10 EI', 'log10 Cb', 'Cd', 'log10 linear drag')
 STATIC = tuple(f'static {axis} P{k} (0.01 N/m)' for axis in 'xyz' for k in range(3))
 DRAG = ('normal drag log, clamp', 'normal drag log, tip', 'tangential drag, clamp', 'tangential drag, tip')
+CLAMP = ('clamp tilt about x (deg)', 'clamp tilt about y (deg)')
 STATIC_UNIT = .01                     # N/m per search unit
 # Legendre P0, P1, P2 on [0, 1] in monomials (rows: P_k; columns: 1, s, s^2)
 LEGENDRE = np.array([[1., 0., 0.], [-1., 2., 0.], [1., -6., 6.]])
@@ -49,7 +53,8 @@ class Parameters:
 
     def __init__(self, terms, frame, fixed=(), vertical='quadratic'):
         self.terms, self.frame = terms, frame
-        self.full = list(PHYSICS)+(list(STATIC) if 'static' in terms else [])+(list(DRAG) if 'drag' in terms else [])
+        self.full = (list(PHYSICS)+(list(STATIC) if 'static' in terms else [])+(list(DRAG) if 'drag' in terms else [])
+                     +(list(CLAMP) if 'clamp' in terms else []))
         self.zeroed = {'static z P1 (0.01 N/m)', 'static z P2 (0.01 N/m)'} if vertical == 'constant' and 'static' in terms else set()
         unknown = set(fixed)-set(self.full)
         if unknown:
@@ -64,6 +69,8 @@ class Parameters:
             lower += [-5.]*9; upper += [5.]*9
         if 'drag' in self.terms:
             lower += [math.log(.3)]*2+[0.]*2; upper += [math.log(3.)]*2+[3.]*2
+        if 'clamp' in self.terms:
+            lower += [-15.]*2; upper += [15.]*2
         keep = [n in self.names for n in self.full]
         return np.array(lower)[keep], np.array(upper)[keep]
 
@@ -86,6 +93,10 @@ class Parameters:
         if 'drag' in self.terms:
             b, c = r.get('normal_drag_log', [0., 0.]), r.get('tangential_drag', [0., 0.])
             x.update(zip(DRAG, [b[0], b[0]+b[1], c[0], c[0]+c[1]]))
+        if 'clamp' in self.terms:
+            t = np.asarray(config['attachment']['tangent_body'], float)
+            t = t/np.linalg.norm(t)
+            x.update(zip(CLAMP, [math.degrees(math.asin(t[1])), math.degrees(math.atan2(-t[0], -t[2]))]))
         if previous is not None:
             x.update({n: v for n, v in zip(previous['parameters'], previous['best']['x']) if n in x})
         x.update({n: v for n, v in (override or {}).items() if n in x})
@@ -98,9 +109,18 @@ class Parameters:
         return dict(EI_n_m2=10**v[PHYSICS[0]], Cb_n_m2_s=10**v[PHYSICS[1]], normal_drag_coefficient=float(v[PHYSICS[2]]),
                     external_drag_s_inv=10**v[PHYSICS[3]])
 
+    def tangent(self, x):
+        """`attachment.tangent_body` for x (None without the clamp term): straight down tilted about
+        body x, then about body y."""
+        if 'clamp' not in self.terms:
+            return None
+        v = self.expand(x)
+        ax, ay = (math.radians(v[n]) for n in CLAMP)
+        return [-math.sin(ay)*math.cos(ax), math.sin(ax), -math.cos(ay)*math.cos(ax)]
+
     def residual(self, x):
         """The `cable.residual` entry for x (None without residual terms)."""
-        if not self.terms:
+        if not set(self.terms) & {'static', 'drag'}:
             return None
         values = self.expand(x)
         r = dict(frame=self.frame)
@@ -117,6 +137,9 @@ class Parameters:
         residual = self.residual(x)
         if residual is not None:
             c['cable']['residual'] = residual
+        tangent = self.tangent(x)
+        if tangent is not None:
+            c['attachment'] = dict(c['attachment'], tangent_body=tangent)
         return c
 
 
@@ -189,7 +212,7 @@ def main():
     t0 = time.time()
     config = load_model_configuration(DEFAULT_MODEL)
     terms = tuple(t for t in args.terms.split(',') if t)
-    if set(terms)-{'static', 'drag'}:
+    if set(terms)-{'static', 'drag', 'clamp'}:
         raise SystemExit(f'unknown residual terms {terms}')
     parameters = Parameters(terms, args.frame, args.fix, args.vertical)
     NAMES = parameters.names
@@ -257,10 +280,13 @@ def main():
                       held_out={n: len(v) for n, v in held.items()}, dropped_at_start=dropped, seen_marker_frames=seen),
         loss='RMS marker distance over every seen marker of every segment',
         start=start,
-        best=dict(x=x.tolist(), values=parameters.physics(x), residual=parameters.residual(x), rms_m=value(r), per_flight_rms_m=per,
+        best=dict(x=x.tolist(), values=parameters.physics(x), residual=parameters.residual(x), tangent_body=parameters.tangent(x),
+                  rms_m=value(r), per_flight_rms_m=per,
                   failed_segments=failures, reproduced_twice=reproduced, held_out=held_score),
         uncertainty=u, counts=fit.counts(), status=int(out.status),
-        adopt=dict({k: float(v) for k, v in parameters.physics(x).items()}, **({'residual': parameters.residual(x)} if terms else {})),
+        adopt=dict({k: float(v) for k, v in parameters.physics(x).items()},
+                   **({'residual': parameters.residual(x)} if parameters.residual(x) is not None else {}),
+                   **({'tangent_body': parameters.tangent(x)} if parameters.tangent(x) is not None else {})),
         search=dict(optimiser='scipy.optimize.least_squares trf, 2-point Jacobian, bounds', lower=lower.tolist(),
                     upper=upper.tolist()),
         seconds=time.time()-t0), indent=1, default=float))

@@ -57,6 +57,7 @@ def held_clamp_rollout(config, seconds):
 
 def test_absent_and_zero_residual_are_identical():
     config = load_model_configuration(DEFAULT_MODEL)
+    config = dict(config, cable={k: v for k, v in config['cable'].items() if k != 'residual'})
     zero = dict(config, cable=dict(config['cable'], residual=dict(frame='body', static_n_per_m=[[0.]*3]*3,
                                                                   normal_drag_log=[0., 0.], tangential_drag=[0., 0.])))
     assert np.array_equal(coupled_rollout(config, 1.), coupled_rollout(zero, 1.))
