@@ -265,17 +265,18 @@ class BatchEnvironment:
         models, draws = [], []
         for group in mine:
             rng = np.random.default_rng([seed, self.cohort, 1_000_003, int(group)])
-            drag = math.exp(rng.uniform(*np.log(r.body_drag_scale))) if r.body_drag_scale[0] > 0 else 1.
+            drag_xy = math.exp(rng.uniform(*np.log(r.body_drag_xy_scale))) if r.body_drag_xy_scale[0] > 0 else 1.
+            drag_z = math.exp(rng.uniform(*np.log(r.body_drag_z_scale))) if r.body_drag_z_scale[0] > 0 else 1.
             damping = math.exp(rng.uniform(*np.log(r.bending_damping_scale))) if r.bending_damping_scale[0] > 0 else 1.
             response = rng.uniform(*r.motor_response_s)
             delay = rng.uniform(*r.command_delay_s)
             model = deepcopy(self.model_config)
-            model['drone']['body_drag_s_inv'] = [float(v*drag) for v in model['drone']['body_drag_s_inv']]
+            model['drone']['body_drag_s_inv'] = [float(v*s) for v, s in zip(model['drone']['body_drag_s_inv'], (drag_xy, drag_xy, drag_z))]
             model['cable']['Cb_n_m2_s'] = float(model['cable']['Cb_n_m2_s']*damping)
             model['actuator']['response_time_s'] = [float(response)]*4
             model['controller'] = dict(model['controller'], command_delay_s=float(delay))
             models.append(model)
-            draws.append(dict(body_drag_scale=drag, bending_damping_scale=damping, motor_response_s=float(response),
+            draws.append(dict(body_drag_xy_scale=drag_xy, body_drag_z_scale=drag_z, bending_damping_scale=damping, motor_response_s=float(response),
                               command_delay_s=float(delay)))
         self.variant_draws = draws
         self._build_runtime(models, [int(n) for n in sizes])

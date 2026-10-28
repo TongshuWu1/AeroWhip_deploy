@@ -110,29 +110,33 @@
     "randomisation": {
       "groups": 4,
       "battery_voltage_v": [
-        6.9,
-        7.6
+        6.88,
+        7.78
       ],
       "acceleration_bias_sd_mps2": [
-        0.03,
-        0.2,
-        0.15
+        0.0234,
+        0.161,
+        0.153
       ],
-      "body_drag_scale": [
-        0.8,
-        1.25
+      "body_drag_xy_scale": [
+        0.912,
+        1.088
+      ],
+      "body_drag_z_scale": [
+        0.6061,
+        1.3939
       ],
       "bending_damping_scale": [
-        0.5,
-        2.0
+        0.8115,
+        1.2322
       ],
       "motor_response_s": [
-        0.005,
-        0.03
+        0.00511,
+        0.03412
       ],
       "command_delay_s": [
-        0.02,
-        0.04
+        0.0,
+        0.01
       ]
     }
   },

@@ -105,15 +105,22 @@ hover start. Evaluation never uses reference starts.
 
 ## Domain randomisation
 
-`environment.randomisation`, drawn at every reset of a training cohort as a function of the
-randomisation seed and the cohort index. Per lane: battery voltage (uniform in
-`battery_voltage_v`) and a constant world acceleration bias (normal, per-axis sd
+`environment.randomisation`, drawn at every reset of a training cohort; every draw of a lane is a
+function of the randomisation seed, the cohort and the lane number. Per lane: battery voltage
+(uniform in `battery_voltage_v`) and a constant world acceleration bias (normal, per-axis sd
 `acceleration_bias_sd_mps2`), both native per-lane inputs of the flight controller. Per group of
-lanes (`groups` = 4 native batch runtimes per cohort): body drag scale and bending damping scale
-(log-uniform), motor response time and command delay (uniform). The current ranges are
-provisional (voltage 6.9–7.6 V, bias sd 0.03/0.20/0.15 m/s², drag ×0.8–1.25, Cb ×0.5–2,
-response 5–30 ms, delay 20–40 ms); they are to be replaced by the 95 % intervals of the adopted
-least-squares fits. The critic's command-queue slots use the nominal delay.
+lanes (`groups` = 4 model variants per cohort): horizontal and vertical body drag scales and the
+bending damping scale (log-uniform), motor response time and command delay (uniform).
+
+The ranges come from the adopted model fits, written by
+[`scripts/randomisation_from_fits.py`](../scripts/randomisation_from_fits.py) (rerun it after every
+adoption): motor response ± 1.96 sd and drag rates ± 1.96 sd (95 % intervals clustered by flight),
+Cb ×/÷ 10^(1.96 sd of log10 Cb), the command delays whose fit loss lies within 1 % of the profile's
+minimum, the battery range of the calibration flights, and per axis the RMS of the per-flight
+acceleration biases. Current values (drone fit `runs/fits/drone/20261027-201939.json`, cable fit
+`runs/fits/cable/20261027-202726.json`): response 5.1–34.1 ms, delay 0–10 ms, drag ×0.91–1.09
+horizontal and ×0.61–1.39 vertical, Cb ×0.81–1.23, battery 6.88–7.78 V, bias 0.023 / 0.161 / 0.153
+m/s² (x / y / z). The critic's command-queue slots use the nominal delay rounded up to 10 ms.
 
 ## Training and evaluation
 

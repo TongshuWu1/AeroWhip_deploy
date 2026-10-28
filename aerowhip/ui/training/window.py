@@ -271,7 +271,7 @@ class TrainingWindow(QtWidgets.QMainWindow):
                 f"Curriculum {len(stages)} stages (" + ', '.join(f"{s['target_distance_m']:g} m / {s['speed_threshold_mps']:g} m/s / r {s['workspace_radius_m']:g} m" for s in stages) +
                 f"), advance at {t['curriculum']['advance_strike_rate']:.0%} strikes over {t['curriculum']['window_episodes']} episodes; "
                 f"{t['curriculum']['reference_state_fraction']:.0%} of lanes start from recorded whip states.\n"
-                f"Randomisation: {rnd.get('groups',0)} model groups per cohort, voltage {rnd.get('battery_voltage_v')} V, drag ×{rnd.get('body_drag_scale')}, "
+                f"Randomisation: {rnd.get('groups',0)} model groups per cohort, voltage {rnd.get('battery_voltage_v')} V, drag ×{rnd.get('body_drag_xy_scale')} horizontal, ×{rnd.get('body_drag_z_scale')} vertical, "
                 f"Cb ×{rnd.get('bending_damping_scale')}, response {rnd.get('motor_response_s')} s, delay {rnd.get('command_delay_s')} s, bias sd {rnd.get('acceleration_bias_sd_mps2')} m/s².\n"
                 f"Tilt >{v['maximum_tilt_deg']:g}° or cable below {v['minimum_cable_height_m']:g} m {'ends the episode' if v.get('terminate_on_violation') else 'is recorded as invalid'}. "
                 f"Heights {w['height_lower_world_m']:g}–{w['height_upper_world_m']:g} m.\n"

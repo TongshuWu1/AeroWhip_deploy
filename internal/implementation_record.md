@@ -1967,3 +1967,19 @@ User's request: one systematic, automated data collection with a single calibrat
   aside and installed by rename while a cable fit ran (the physics code in the new library is
   unchanged from phase B). A first build hit a gcc internal compiler error (machine instability
   recorded 2026-10-28); the rebuild succeeded.
+
+## Dated change note — 2026-10-28 training randomisation from the adopted fits
+
+- [scripts/randomisation_from_fits.py](../scripts/randomisation_from_fits.py) writes
+  `environment.randomisation` of the strike experiment from the latest adopted drone and cable
+  least-squares results and the manifest (rules in its docstring and in docs/strike_task.md); rerun
+  after every adoption. Run on the 2026-10-28 adoption (drone `runs/fits/drone/20261027-201939.json`,
+  cable `runs/fits/cable/20261027-202726.json`, 43 flights' batteries, 22 per-flight biases): motor
+  response 19.6 ± 14.5 ms → 5.1–34.1 ms; delay 0–10 ms (combined position+tilt loss within 1 % of its
+  minimum at 0, 5, 10 ms; it rises from 15 ms); drag xy 0.588 ± 0.052, z 0.477 ± 0.188 s⁻¹ →
+  ×0.912–1.088, ×0.606–1.394; Cb ×0.81–1.23; battery 6.88–7.78 V; bias RMS 0.023 / 0.161 / 0.153 m/s²
+  (per-flight means −0.004 / 0.048 / 0.131). The provisional ranges (delay 20–40 ms, one drag scale)
+  are replaced. `body_drag_scale` split into `body_drag_xy_scale` and `body_drag_z_scale`.
+- Noted for the user, not acted on: the drone fit's per-flight tilt offsets are about −4.0° in roll
+  on every flight (a constant OptiTrack-body to drone-frame offset).
+- 112 tests pass; an 8-lane randomised environment builds and steps.

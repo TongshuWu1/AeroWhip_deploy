@@ -42,14 +42,16 @@ class RandomisationConfig:
     """Per-episode model draws (domain randomisation). Per lane: battery voltage (uniform in
     battery_voltage_v) and a constant world acceleration bias (normal, per-axis sd
     acceleration_bias_sd_mps2). Per group of lanes (the native batch runs one model per group;
-    groups runtimes are built per cohort): body drag scaled log-uniformly within body_drag_scale,
+    groups runtimes are built per cohort): horizontal and vertical body drag scaled log-uniformly within
+    body_drag_xy_scale and body_drag_z_scale,
     bending damping Cb within bending_damping_scale, motor response time uniform in
     motor_response_s, command delay uniform in command_delay_s. Equal bounds disable a draw;
     groups = 0 disables all of them (nominal model, reference voltage, no bias)."""
     groups: int
     battery_voltage_v: tuple
     acceleration_bias_sd_mps2: tuple
-    body_drag_scale: tuple
+    body_drag_xy_scale: tuple
+    body_drag_z_scale: tuple
     bending_damping_scale: tuple
     motor_response_s: tuple
     command_delay_s: tuple
@@ -61,7 +63,8 @@ class RandomisationConfig:
 
     def __post_init__(self):
         integer('groups', self.groups, 0)
-        for name in ('battery_voltage_v', 'body_drag_scale', 'bending_damping_scale', 'motor_response_s', 'command_delay_s'):
+        for name in ('battery_voltage_v', 'body_drag_xy_scale', 'body_drag_z_scale', 'bending_damping_scale', 'motor_response_s',
+                     'command_delay_s'):
             low, high = (number(name, v, positive=False) for v in getattr(self, name))
             if low > high or low < 0:
                 raise ValueError(f'{name} must be [low, high] with 0 <= low <= high')
