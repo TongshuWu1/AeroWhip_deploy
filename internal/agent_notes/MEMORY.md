@@ -14,3 +14,5 @@
 - [Safe planned identification](online-identification-rethink.md) — 2026-10-28: series stopped; bench-measure what can be measured, plan flights over a horizon with cable-angle chance constraints; design in internal/safe_planned_identification.md
 - [Planning tools built](planning-tools-built.md) — 2026-10-28: the loop's tools exist (plan/optimise, fly, envelope, fit, check); run it, don't redesign
 - [Online estimator built](online-estimator-built.md) — 2026-10-28: scripts/online_fit.py + Online page; robust filter per user; running model feeds the planner (approved), delay held
+- [Role: audit, don't implement](role-audit-not-implement.md) — analyse/audit/check/propose/research vs goals; no code changes unless asked
+- [Cable contact = failed take](cable-contact-take-is-failure.md) — cable touches drone or take interrupted → whole take unused; partial markers still fine

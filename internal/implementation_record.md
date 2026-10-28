@@ -2757,3 +2757,10 @@ file; a pill shows whether it runs; the Loop window's 3D view is hidden (not ren
 real or a flight runs. Checked: the model file loads; custom real parses the options (stopped at a
 missing container on purpose: the stack and radio were not started); the feed builds the labeller and
 the running-model cable together; the pause on/off in the window. Not checked: a real launch.
+
+## Dated change note — 2026-10-28 night: handoff
+
+Session ended before the user moves to the other computer. `internal/handoff_2026-10-28_night.md`
+is the entry point (CLAUDE.md points to it): state, the move, how to run the loop, the user's
+decisions, verified vs not, open findings, next steps. Agent notes synced from the memory folder.
+No code changed.
