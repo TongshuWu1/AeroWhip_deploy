@@ -36,6 +36,7 @@ from aerowhip.fitting import flight_drone
 from aerowhip.fitting.calibration_set import DEFAULT_ROOT
 from aerowhip.fitting.least_squares import ProcessRunner
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, fit_configuration, load_model_configuration
+from aerowhip.online import state as running
 from aerowhip.planning.ensemble import BRACKETS, Ensemble, load_fit
 from aerowhip.planning.simulate import FLIGHT_STACK, simulate_part
 
@@ -132,6 +133,7 @@ def main():
     p.add_argument('--budget', type=float, default=80., help='seconds of motion in the plan')
     p.add_argument('--cable-fit', type=Path, default=ARCHIVE/'cable'/'20261028-012011.json')
     p.add_argument('--drone-fit', type=Path, default=ARCHIVE/'drone'/'20261027-201939.json')
+    p.add_argument('--model-state', default=str(running.STATE), help="the running model (online fit) to plan with, or 'none' for the offline fits")
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--report', type=Path)
     args = p.parse_args()
@@ -146,7 +148,10 @@ def main():
     if not cable:
         config = flight_drone.drone_only(config)
     firmware = flown_gains(args.stack)
-    ensemble = Ensemble(config, load_fit(args.cable_fit), load_fit(args.drone_fit) if args.drone_fit.exists() else None)
+    cable_fit, drone_fit, notes = running.planning_fits(load_fit(args.cable_fit), load_fit(args.drone_fit) if args.drone_fit.exists() else None,
+                                                        None if args.model_state == 'none' else running.load(args.model_state))
+    print('model: '+'; '.join(notes), flush=True)
+    ensemble = Ensemble(config, cable_fit, drone_fit)
     members = ensemble.samples(args.members+1, sigma=args.sigma)
     wanted = [b.strip() for b in args.brackets.split(';') if b.strip() and b.strip() != 'none']
     members += [(name, c) for name, c in ensemble.brackets() if name in wanted]

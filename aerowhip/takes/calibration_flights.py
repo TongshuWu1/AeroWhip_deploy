@@ -130,7 +130,11 @@ def from_records(folder, rows, params, poses, label_stamps=None, label_positions
     stamp = stamp[order]
     unique = np.r_[True, np.diff(stamp) > 1e-6]   # drop repeated frames
     order, stamp = order[unique], stamp[unique]
-    period = DT/2 if np.median(np.diff(stamp)) < .75*DT else DT
+    step = float(np.median(np.diff(stamp))) if len(stamp) > 1 else DT
+    if .55*DT < step < .85*DT:      # e.g. 150 Hz: neither the 100 Hz grid nor its double (frames would be misread)
+        raise ValueError(f'{folder}: OptiTrack at {1/step:.0f} Hz; the fitting windows need 100 or 200 Hz '
+                         '(set Motive to one of them, or resample first)')
+    period = DT/2 if step < .75*DT else DT
     frame = camera_frames(stamp, period)
     if period < DT:                               # 200 Hz: keep the even camera frames (the 100 Hz grid)
         parity = int(np.argmax(np.bincount(frame % 2, minlength=2)))

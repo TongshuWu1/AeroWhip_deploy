@@ -68,8 +68,10 @@ class FlightStream:
 
     @property
     def has_cable_labels(self):
-        """The flight records a marker cloud (a cable flight): the cable family is fitted."""
-        return self.has_cloud
+        """A cable flight with a marker cloud: the cable family is fitted. The setup says whether there
+        is a cable ('<drone>_nocable' has none, though it may record a cloud of the drone's markers)."""
+        setup = str(((self.params or {}).get('settings') or {}).get('setup', ''))
+        return self.has_cloud and not setup.endswith('_nocable')
 
     @property
     def ready(self):

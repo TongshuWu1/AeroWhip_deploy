@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT/'scripts'))
 from aerowhip.physics.model import Model
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, fit_configuration, load_model_configuration
+from aerowhip.online import state as running
 from aerowhip.planning.ensemble import Ensemble, load_fit
 from aerowhip.planning.simulate import FLIGHT_STACK, simulate_motion, flight_script
 from plan_flight import ARCHIVE, flown_gains  # noqa: E402
@@ -30,6 +31,7 @@ def main():
     p.add_argument('trajectory', type=Path)
     p.add_argument('--cable-fit', type=Path, default=ARCHIVE/'cable'/'20261028-012011.json')
     p.add_argument('--drone-fit', type=Path, default=ARCHIVE/'drone'/'20261027-201939.json')
+    p.add_argument('--model-state', default=str(running.STATE), help="the running model (online fit) to plan with, or 'none' for the offline fits")
     p.add_argument('--output', type=Path)
     args = p.parse_args()
     t0 = time.time()
@@ -37,7 +39,10 @@ def main():
     _, trajectories = flight_script()
     motion = trajectories.TrajectoryFile(data, str(data.get('name', args.trajectory.stem)))
     config = fit_configuration(load_model_configuration(DEFAULT_MODEL))
-    ensemble = Ensemble(config, load_fit(args.cable_fit), load_fit(args.drone_fit) if args.drone_fit.exists() else None)
+    cable_fit, drone_fit, notes = running.planning_fits(load_fit(args.cable_fit), load_fit(args.drone_fit) if args.drone_fit.exists() else None,
+                                                        None if args.model_state == 'none' else running.load(args.model_state))
+    print('model: '+'; '.join(notes), flush=True)
+    ensemble = Ensemble(config, cable_fit, drone_fit)
     adopted = ensemble.member_config(ensemble.cable_fit['best']['x'], ensemble.drone_best())
     r = simulate_motion(adopted, flown_gains(FLIGHT_STACK), motion, markers_every=EVERY, nodes=True)
     every = slice(None, None, EVERY)

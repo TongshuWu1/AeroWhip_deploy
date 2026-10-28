@@ -2665,7 +2665,16 @@ Findings, not resolved:
    now labelled "no gain" (not gated); windows whose step predicts under 1 % gain count as
    confirming the estimate. Remedy to try: profile the delay on a small grid, as the offline fit does.
 **Sweep** (`scripts/online_sweep.py`, every recorded flight replayed as live; runs/online/sweep_*/sweep.json):
-see the numbers below once complete.
+85 flights (71 cf_2 with the cf_2 model, 14 cf_6): none failed, no non-finite estimate, every
+update under 1 s (largest 0.89 s; typical 0.12 s drone-only, 0.4–0.75 s with the cable). It found:
+pooled outliers drove the motor response to 0.3 s (38 sd) on drone-only cf_2 strokes/decay flights
+(fixed: bounds 1–80 ms motor response, 0–3/s drag, and a change applied only if it lowers the newest
+window's error; afterwards the response still reaches its 80 ms bound there: the drone-only model
+misfits those flights); cf_6 tuning flights with a drone-marker cloud but no cable were treated as
+cable flights (fixed: the setup name decides); and two cf_6 tuning flights captured at ~150 Hz gave
+no windows at all, silently, in the offline loader too (now refused with a message; resampling to
+the 10 ms grid not built, a data-preparation decision for the user). Tuning flights that switch
+gains mid-flight show applied "changes", as they should.
 **Radio** (crazyswarm2 `scripts/radio_report.py`): on every cf_6 flight no log packet was lost; the
 downlink queue (receipt against the onboard clock) was 6/11 ms (median/99 %) on quiet hover flights
 and 20–32/65–85 ms on flights flown while this computer was loaded. Changes (config/crazyflies.yaml):
@@ -2678,3 +2687,18 @@ names it: drone path and drone in white, the live-labelled cable markers in red,
 timeline, cached as runs/planning/<plan>_flown_<NNN>.npz); the Online page marks "no gain".
 `simulate_motion` records every step with markers_every=1 (the old test skipped it; the same
 samples as before for every other value) and returns the trim.
+
+## Dated change note — 2026-10-28 the running model (user: apply the online fit straight away)
+
+User's decisions: apply the online estimate straight away with old history discounted (half-life
+5 min of flight); hold the online delay out of planning until the replay/simulator timing offset
+is resolved. Implemented in `aerowhip/online/state.py` (model_state.json, history, reset keeping
+a dated copy, `planning_fits` with the delay held and values beyond 4 offline sd held at the limit
+and reported), the estimator's forgetting (`forget`: covariance doubles per half-life, capped at
+the prior), `online_fit.py --state` ('auto': real flights followed live only), the planners
+(`optimize_trajectory.py`, `plan_flight.py`, `preview_trajectory.py`: `--model-state`, default
+the running model, 'none' for the offline fits), the preview re-simulated when the running model is
+newer, and the Online page's running-model table with Reset. Checked: two synthetic flights in a row
+through a scratch state (the second continued from the first; EI sd 0.011 -> 0.008; history of 2),
+the preview planned with it (Cd flagged at 5.9 sd and held at 4, delay held); the real
+model_state.json was not created by any test. Not done: a real flight.

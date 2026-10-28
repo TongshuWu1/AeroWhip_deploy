@@ -32,6 +32,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT/'scripts'))
 from aerowhip.online.estimator import ModelSpace, OnlineEstimator  # noqa: E402
+from aerowhip.online import state as running  # noqa: E402
 from aerowhip.online.stream import FlightStream  # noqa: E402
 from aerowhip.physics.model_configuration import DEFAULT_MODEL, fit_configuration, load_model_configuration  # noqa: E402
 from aerowhip.planning.ensemble import load_fit  # noqa: E402
@@ -91,6 +92,8 @@ def main():
     p.add_argument('--start', help='start away from the prior mean, e.g. "log10 EI=+0.3, motor_response_s=*1.5"')
     p.add_argument('--families', default='cable,drone')
     p.add_argument('--output', type=Path)
+    p.add_argument('--state', default='auto', help="the running model to start from and update: 'auto' (runs/online/model_state.json "
+                   "for real flights followed live; none for replays and synthetic flights), a path, or 'none'")
     p.add_argument('--quiet', action='store_true')
     args = p.parse_args()
     os.nice(10)
@@ -127,13 +130,34 @@ def main():
                               parameters=space.names, prior=estimator.summary()['prior'],
                               start={n: float(v) for n, v in zip(space.names, estimator.theta)}))+'\n')
     print(f'{folder} -> {out}', flush=True)
+    state_path = None
+    if args.state == 'auto':
+        state_path = running.STATE if (not args.replay and running.is_real_flight(folder)) else None
+    elif args.state != 'none':
+        state_path = Path(args.state)
+    if state_path is not None and not args.start:
+        started = running.start_from(estimator, running.load(state_path))
+        print(f"running model: {state_path} ({'continued' if started else 'new, from the offline fits'})", flush=True)
+        log.write(json.dumps(dict(kind='state', path=str(state_path), continued=started,
+                                  start={n: float(v) for n, v in zip(space.names, estimator.theta)}))+'\n')
+
+    unusable = []
 
     def update():
-        flight = stream.flight()
+        try:
+            flight = stream.flight()
+        except ValueError as exc:            # e.g. a capture rate the windows cannot use: say it once
+            if not unusable:
+                unusable.append(str(exc))
+                log.write(json.dumps(dict(kind='error', stamp=stream.latest, reason=str(exc)))+'\n')
+                print('cannot use this flight:', exc, flush=True)
+            return
         if flight is None:
             return
         record = estimator.step(flight, stream.params, has_cable=stream.has_cable_labels)
         record['kind'] = 'update'
+        if state_path is not None:
+            running.save(state_path, estimator, flight=folder)
         log.write(json.dumps(record)+'\n')
         if not args.quiet:
             fams = '  '.join(f"{n}: {r['status']}{' ('+r['reason']+')' if r.get('reason') and r['status'] != 'accepted' else ''}"
@@ -172,6 +196,8 @@ def main():
                 if time.monotonic()-quiet_since > 2.:
                     break
             time.sleep(.05)
+    if state_path is not None:
+        running.save(state_path, estimator, flight=folder, finished=True)
     summary = estimator.summary()
     estimator.close()
     log.write(json.dumps(dict(kind='summary', **summary))+'\n')

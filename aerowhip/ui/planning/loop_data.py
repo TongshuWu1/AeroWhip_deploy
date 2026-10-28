@@ -46,7 +46,9 @@ def preview_path(path):
 
 def load_preview(path):
     p = preview_path(path)
-    if not p.exists() or p.stat().st_mtime < path.stat().st_mtime:
+    from aerowhip.online.state import STATE
+    newest = max(path.stat().st_mtime, STATE.stat().st_mtime if STATE.exists() else 0.)
+    if not p.exists() or p.stat().st_mtime < newest:    # older than the plan or the running model
         return None
     try:
         return dict(np.load(p))

@@ -64,6 +64,7 @@ QPushButton#primary {{ background: {ACCENT}; color: #0e1418; border-color: {ACCE
 QPushButton#primary:disabled {{ background: {T['hover']}; color: {T['disabled']}; border-color: {T['border']}; }}
 QFrame#panel {{ background: #1f262e; border: 1px solid #2a333d; border-radius: 8px; }}
 QTableWidget {{ alternate-background-color: #1c2229; }}
+QHeaderView {{ background: #1f262e; }}
 QAbstractSpinBox {{ background: {T['panel']}; color: {T['text']}; border: 1px solid {T['border']}; border-radius: 3px; padding: 4px 6px; }}
 '''
 STEPS = (('Plan', 'Optimise the next flight'), ('Fly', 'Run it in the lab'), ('Measure', 'What the cable really did'),

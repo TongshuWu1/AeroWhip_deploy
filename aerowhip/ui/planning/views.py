@@ -238,6 +238,17 @@ class OnlineView(QtWidgets.QWidget):
         layout.addLayout(head)
         self.status = label('', 'muted')
         layout.addWidget(self.status)
+        model_head = QtWidgets.QHBoxLayout()
+        model_head.addWidget(label('Running model (the planner and the 3D preview use it)', 'section'), 1)
+        self.reset_button = QtWidgets.QPushButton('Reset to the offline fit')
+        self.reset_button.clicked.connect(self._reset)
+        model_head.addWidget(self.reset_button)
+        layout.addLayout(model_head)
+        self.model_note = label('', 'muted')
+        layout.addWidget(self.model_note)
+        self.model_table = table(['parameter', 'offline fit', 'running model', 'from offline', 'planner uses'])
+        self.model_table.setMaximumHeight(210)
+        layout.addWidget(self.model_table)
         self.canvas = PlotCanvas(dark=True, minimum=(600, 430))
         layout.addWidget(self.canvas, 1)
         layout.addWidget(label('Not used (newest first)', 'section'))
@@ -248,6 +259,43 @@ class OnlineView(QtWidgets.QWidget):
     def _picked(self, index):
         self.follow = index == 0
         self.load(self.runs.currentData(), force=True)
+
+    def show_model(self):
+        from aerowhip.online import state as running
+        st = running.load()
+        self.reset_button.setEnabled(st is not None)
+        if st is None:
+            self.model_note.setText('No running model yet: the planner uses the offline fits. It starts with the first real '
+                                    'flight followed live (Start online fit).')
+            fill(self.model_table, [])
+            return
+        values = running.planning_values(st)
+        P = np.asarray(st['P'], float)
+        rows, colours = [], {}
+        for k, name in enumerate(st['parameters']):
+            prior = st['prior'][name]
+            v, sd = st['theta'][k], float(np.sqrt(max(P[k, k], 0.)))
+            used, note = values[name]
+            dist = (v-prior['value'])/prior['sd']
+            rows.append([name, f"{prior['value']:.4g} ± {prior['sd']:.2g}", f'{v:.4g} ± {sd:.2g}', f'{dist:+.1f} sd',
+                         f'{used:.4g}' + (' (held)' if note else '')])
+            colours[(len(rows)-1, 3)] = GOOD if abs(dist) < 2 else (WARN if abs(dist) < running.MAX_PLANNING_SD else BAD)
+            if note:
+                colours[(len(rows)-1, 4)] = WARN
+        fill(self.model_table, rows, colours)
+        flights = st.get('flights', [])
+        live = f" · updating now from {st['current_flight']}" if st.get('current_flight') else ''
+        self.model_note.setText(f"Updated {st.get('updated', '?')} from {len(flights)} flight(s){live}. Old evidence halves its weight every "
+                                f"{st.get('half_life_s', 300)/60:.0f} min of flight. The delay is held at the offline fit; values beyond "
+                                f"{running.MAX_PLANNING_SD:g} offline sd are held at that limit for planning.")
+
+    def _reset(self):
+        from aerowhip.online import state as running
+        answer = QtWidgets.QMessageBox.question(self, 'Reset the running model',
+                                                'Plan with the offline fits again? The running model is kept as a dated file, not deleted.')
+        if answer == QtWidgets.QMessageBox.StandardButton.Yes:
+            running.reset()
+            self.show_model()
 
     def files(self):
         return sorted(self.folder.glob('*.jsonl'), key=lambda p: p.stat().st_mtime, reverse=True) if self.folder.exists() else []
@@ -267,6 +315,7 @@ class OnlineView(QtWidgets.QWidget):
             self.runs.blockSignals(False)
         if self.runs.currentData():
             self.load(self.runs.currentData())
+        self.show_model()
 
     def load(self, path, force=False):
         from pathlib import Path

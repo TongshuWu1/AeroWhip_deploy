@@ -259,3 +259,17 @@ The output (`runs/online/*.jsonl`) holds the estimate and its standard deviation
 window and what happened to each window; the Identification Loop window plots it live.
 `scripts/online_validation.py` replays recorded flights from the prior and from a deliberately
 wrong start and scores the whole flight at each result.
+
+**The running model.** The online estimate is carried from flight to flight in
+`runs/online/model_state.json`: each real flight followed live starts from it and updates it
+every window, and old evidence loses half its weight every 5 minutes of flight (the uncertainty
+never grows beyond the offline fit's). The planner (`optimize_trajectory.py`, `plan_flight.py`),
+its model ensemble and the 3D preview use it in place of the offline fits for the online
+parameters, with two holds: the command delay stays at the offline fit (the replay that estimates
+it and the closed-loop simulation that plans with it differ by one 10 ms frame), and a value more
+than 4 offline standard deviations from the offline fit is held at that limit and reported. The
+measured envelope remains the safety authority. Replays and synthetic flights do not change it
+unless asked (`--state`); "Reset to the offline fit" keeps the old file under a dated name.
+A change in the estimate counts only if it lowers the error of the window it is applied on; the
+motor response and body drag are bounded to physically possible values. Flights captured at
+rates other than 100 or 200 Hz are refused with a message (the fitting windows need one of them).

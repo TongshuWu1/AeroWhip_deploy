@@ -15,7 +15,8 @@ Every update takes the newest window (`window_s`, 2 s) of the flight:
          the roll/pitch error with its window mean removed (attitude-estimate offsets).
 For each family: one replay at the estimate and one per parameter (forward differences), in
 parallel threads; then one Gauss-Newton step in information form, with the family's covariance as
-the prior (a Kalman update for constant parameters, plus a small random-walk drift per second).
+the prior (a Kalman update), with old evidence forgotten: its weight halves every `half_life_s` (5 min) of
+flight, the uncertainty never exceeding the prior's.
 The measurement noise is the median residual of the recent accepted windows, starting from the
 offline fit's typical residual and never below half of it (a quiet hover window has a small
 residual but is not more precise: without the floor it pulled the stiffness away); the
@@ -54,6 +55,8 @@ from aerowhip.takes.calibration_flights import windows
 SKIP_PHASES = ('takeoff', 'land', 'settle', 'link-', 'hover-cycle-land')
 CHI2_999 = {1: 10.83, 2: 13.82, 3: 16.27, 4: 18.47, 5: 20.52, 6: 22.46}
 SUBSAMPLE = 5                     # frames (10 ms) between residual samples
+BOUNDS = {'motor_response_s': (1e-3, .08), 'body_drag_xy_s_inv': (0., 3.)}   # physically possible values
+HALF_LIFE_S = 300.                # flight time over which old evidence loses half its weight (user, 2026-10-28)
 POSITION_SCALE_M, TILT_SCALE_RAD = .01, .01
 
 
@@ -87,7 +90,8 @@ class ModelSpace:
             self.parameters.append(Parameter(n, 'cable', float(self.cable_x[i]), float(csd[i]), float(csd[i])/2, -np.inf, np.inf))
         self.parameters[-1].low = .05                                 # Cd
         for n, i in zip(self.DRONE, self.drone_index):
-            self.parameters.append(Parameter(n, 'drone', float(self.drone_x[i]), float(dsd[i]), float(dsd[i])/2, 1e-3 if 'response' in n else 0., np.inf))
+            low, high = BOUNDS[n]
+            self.parameters.append(Parameter(n, 'drone', float(self.drone_x[i]), float(dsd[i]), float(dsd[i])/2, low, high))
         delay = float(drone_fit['best'].get('command_delay_s', self.base['controller']['command_delay_s']))
         self.parameters.append(Parameter('command_delay_s', 'drone', delay, delay_sd, .004, 0., .04))
         # prior covariance: the fits' correlations within each family (the delay independent)
@@ -169,12 +173,12 @@ class FamilyState:
 
 
 class OnlineEstimator:
-    def __init__(self, space, *, window_s=2., effective_samples=8., drift_per_s=.01, unexplained=3., persist_k=4, persist_m=6,
+    def __init__(self, space, *, window_s=2., effective_samples=8., half_life_s=HALF_LIFE_S, unexplained=3., persist_k=4, persist_m=6,
                  threads=8, families=('cable', 'drone')):
         self.space = space
         self.theta = np.array([p.value for p in space.parameters], float)
         self.P = space.prior.copy()
-        self.window_s, self.effective, self.drift = window_s, effective_samples, drift_per_s
+        self.window_s, self.effective, self.half_life = window_s, effective_samples, half_life_s
         self.unexplained, self.persist_k, self.persist_m = unexplained, persist_k, persist_m
         self.pool = ThreadPoolExecutor(threads)
         self.families = {f: FamilyState(space.family(f)) for f in families}
@@ -221,7 +225,7 @@ class OnlineEstimator:
             record['phase'] = window.phase
         if self.last_stamp is not None:
             dt = max(0., record['stamp']-self.last_stamp)
-            self.P += np.diag((np.array([p.sd for p in self.space.parameters])*self.drift)**2*dt)
+            self.forget(dt)
         self.last_stamp = record['stamp']
         if reason is not None:
             for name, fam in self.families.items():
@@ -251,6 +255,15 @@ class OnlineEstimator:
                       sd={n: float(math.sqrt(max(self.P[k, k], 0.))) for k, n in enumerate(self.space.names)},
                       seconds=round(time.perf_counter()-t0, 3))
         return record
+
+    def forget(self, dt):
+        """Old evidence loses weight: the information halves every `half_life` s of flight (the
+        covariance doubles), never beyond the prior's uncertainty."""
+        if dt <= 0 or not np.isfinite(self.half_life):
+            return
+        P = self.P*2.**(dt/self.half_life)
+        scale = np.sqrt(np.minimum(1., np.diag(self.space.prior)/np.maximum(np.diag(P), 1e-300)))
+        self.P = P*np.outer(scale, scale)
 
     def _push(self, fam, status):
         fam.history = (fam.history+[status])[-self.persist_m:]
@@ -331,13 +344,15 @@ class OnlineEstimator:
         fam.pending.append(dict(age=0, theta=self.theta[idx].copy(), info=info, gradient=gradient, step=step, why=why))
         self._push(fam, 'outlier')
         out.update(status='outlier', reason=why, step=step.tolist())
-        change = self._persistent(fam, idx, P)
-        if change is not None:
+        change = self._persistent(fam, idx, P, submit, mask, rms0)
+        if change:
             out.update(status='change', reason=f'{change} outliers agree: applied as a change', step=None)
             fam.counts['change'] += 1
+        elif change == 0:
+            out.update(reason=why+'; the agreeing outliers did not lower the error: dropped')
         return out
 
-    def _persistent(self, fam, idx, P):
+    def _persistent(self, fam, idx, P, submit, mask, rms0):
         """Apply the held outliers as a change point when they keep happening and agree."""
         if fam.history.count('outlier') < self.persist_k or len(fam.pending) < self.persist_k:
             return None
@@ -358,9 +373,22 @@ class OnlineEstimator:
         wide_inv = np.linalg.inv(wide)
         post = np.linalg.inv(wide_inv+info)
         target = post@(b+wide_inv@self.theta[idx])
-        self._apply(idx, target-self.theta[idx], post)
+        # like every step, the change must lower the newest window's error (pooled outliers once drove
+        # the motor response to 0.3 s on a drone-only strokes flight)
+        theta = self.theta.copy(); theta[idx] = target
+        for k in idx:
+            q = self.space.parameters[k]
+            theta[k] = float(np.clip(theta[k], q.low, q.high))
+        try:
+            r = submit(theta).result()[mask]
+            better = bool(np.isfinite(r).all() and np.sqrt(np.mean(r**2)) < rms0)
+        except Exception:
+            better = False
         fam.pending.clear()
         fam.history = []
+        if not better:
+            return 0
+        self._apply(idx, theta[idx]-self.theta[idx], post)
         return agree
 
     def _apply(self, idx, step, post):
