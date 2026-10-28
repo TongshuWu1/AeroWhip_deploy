@@ -214,3 +214,128 @@ class EnvelopeView(QtWidgets.QWidget):
             if rise is not None:
                 colours[(i, 6)] = BAD if rise > threshold*100 else (WARN if rise > RISE_LIMIT_M*100 else GOOD)
         fill(self.table, rows, colours)
+
+
+class OnlineView(QtWidgets.QWidget):
+    """The online estimate of a flight (scripts/online_fit.py writes runs/online/*.jsonl): each
+    parameter over the flight with its standard deviation, the prior (the offline fit) dashed, and
+    what happened to every window: accepted, held as an outlier, applied as a change, or gated."""
+    STATUS = dict(accepted=(GOOD, '.'), outlier=(WARN, 'x'), change=(BAD, 'D'), gated=(MUTED, '|'))
+
+    def __init__(self, folder):
+        super().__init__()
+        self.setObjectName('page')
+        self.folder, self.path, self.mtime = folder, None, None
+        self.follow = True                     # show the newest run as runs appear
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(18, 14, 18, 14)
+        head = QtWidgets.QHBoxLayout()
+        head.addWidget(label('Online identification', 'heading'), 1)
+        self.runs = QtWidgets.QComboBox()
+        self.runs.setMinimumWidth(360)
+        self.runs.activated.connect(self._picked)
+        head.addWidget(self.runs)
+        layout.addLayout(head)
+        self.status = label('', 'muted')
+        layout.addWidget(self.status)
+        self.canvas = PlotCanvas(dark=True, minimum=(600, 430))
+        layout.addWidget(self.canvas, 1)
+        layout.addWidget(label('Not used (newest first)', 'section'))
+        self.events = label('', None)
+        self.events.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+        layout.addWidget(self.events)
+
+    def _picked(self, index):
+        self.follow = index == 0
+        self.load(self.runs.currentData(), force=True)
+
+    def files(self):
+        return sorted(self.folder.glob('*.jsonl'), key=lambda p: p.stat().st_mtime, reverse=True) if self.folder.exists() else []
+
+    def poll(self):
+        """Follow the newest run, unless an older one was picked; redraw when its file grew."""
+        files = self.files()
+        names = [str(p) for p in files]
+        if names != [self.runs.itemData(i) for i in range(self.runs.count())]:
+            current = self.runs.currentData()
+            self.runs.blockSignals(True)
+            self.runs.clear()
+            for p in files:
+                self.runs.addItem(p.stem, str(p))
+            index = 0 if self.follow or current not in names else names.index(current)
+            self.runs.setCurrentIndex(index)
+            self.runs.blockSignals(False)
+        if self.runs.currentData():
+            self.load(self.runs.currentData())
+
+    def load(self, path, force=False):
+        from pathlib import Path
+        path = Path(path)
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            return
+        if not force and path == self.path and mtime == self.mtime:
+            return
+        self.path, self.mtime = path, mtime
+        import json
+        rows = []
+        for line in path.read_text().splitlines():
+            try:
+                rows.append(json.loads(line))
+            except ValueError:
+                pass
+        header = next((r for r in rows if r.get('kind') == 'header'), None)
+        updates = [r for r in rows if r.get('kind') == 'update']
+        done = any(r.get('kind') == 'summary' for r in rows)
+        self.draw(header, updates)
+        if header is None:
+            self.status.setText('')
+            return
+        counts = {}
+        for u in updates:
+            for f, r in u['families'].items():
+                counts.setdefault(f, {}).setdefault(r['status'], 0)
+                counts[f][r['status']] += 1
+        state = 'finished' if done else ('LIVE' if header.get('live') else 'replaying')
+        self.status.setText(f"{state} · {header['flight']} · {len(updates)} updates · "
+                            + ' · '.join(f"{f}: " + ', '.join(f'{v} {k}' for k, v in c.items()) for f, c in counts.items()))
+        lines = []
+        for u in reversed(updates):
+            for f, r in u['families'].items():
+                if r['status'] != 'accepted' and len(lines) < 10:
+                    lines.append(f"{u['stamp']-updates[0]['stamp']:6.1f} s  {f:5s}  {r['status']:8s}  {r.get('reason', '')}")
+        self.events.setText('\n'.join(lines) or 'every window used')
+
+    def draw(self, header, updates):
+        self.canvas.reset()
+        if header is None or not updates:
+            self.canvas.draw_idle()
+            return
+        names = header['parameters']
+        t0 = updates[0]['stamp']
+        t = np.array([u['stamp']-t0 for u in updates])
+        with self.canvas.style():
+            grid = self.canvas.figure.add_gridspec(2, 3)
+            for k, name in enumerate(names):
+                ax = self.canvas.figure.add_subplot(grid[k//3, k % 3])
+                v = np.array([u['theta'][name] for u in updates]); s = np.array([u['sd'][name] for u in updates])
+                prior = header['prior'][name]
+                ax.axhspan(prior['value']-prior['sd'], prior['value']+prior['sd'], color=MUTED, alpha=.12, lw=0)
+                ax.axhline(prior['value'], color=MUTED, lw=.8, ls='--')
+                ax.fill_between(t, v-s, v+s, color=PALETTE['sky'], alpha=.25, lw=0)
+                ax.plot(t, v, color=PALETTE['sky'], lw=1.3)
+                family = 'cable' if k < 3 else 'drone'
+                lo = min((v-s).min(), prior['value']-prior['sd']); hi = max((v+s).max(), prior['value']+prior['sd'])
+                y = lo-.08*(hi-lo)
+                for status, (colour, marker) in self.STATUS.items():
+                    at = [ti for ti, u in zip(t, updates) if u['families'].get(family, {}).get('status') == status]
+                    if at and status != 'accepted':
+                        ax.plot(at, [y]*len(at), marker, color=colour, ms=5, ls='none', label=status)
+                ax.set_title(name)
+                if k >= 3:
+                    ax.set_xlabel('flight time (s)')
+                if k == 0:
+                    handles = [ax.plot([], [], m, color=c, ls='none')[0] for c, m in (v_ for s_, v_ in self.STATUS.items() if s_ != 'accepted')]
+                    ax.legend(handles, [s_ for s_ in self.STATUS if s_ != 'accepted'], loc='upper right', ncols=3, fontsize=7)
+        self.canvas.draw_idle()

@@ -115,6 +115,16 @@ def load(folder):
     rows = [json.loads(line) for line in (folder/'flight.jsonl').read_text().splitlines()]
     params = json.loads((folder/'parameters.json').read_text())
     poses = [json.loads(line) for line in (folder/'poses.jsonl').read_text().splitlines()]
+    labels = np.load(folder/'cable_labels.npz') if (folder/'cable_labels.npz').exists() else None
+    return from_records(folder, rows, params, poses,
+                        None if labels is None else labels['stamps'], None if labels is None else labels['positions'])
+
+
+def from_records(folder, rows, params, poses, label_stamps=None, label_positions=None):
+    """A CalibrationFlight from the decoded log rows, parameters, pose records and (optionally) cable
+    markers on pose stamps: what `load` reads from a folder, or what a live reader has so far
+    (aerowhip.online.stream)."""
+    folder = Path(folder)
     stamp = np.array([p['stamp'] for p in poses])
     order = np.argsort(stamp, kind='stable')
     stamp = stamp[order]
@@ -132,17 +142,17 @@ def load(folder):
     position = np.array([poses[i]['position'] for i in order])[keep]
     quaternion = np.array([poses[i]['quaternion_xyzw'] for i in order])[keep]
     markers = None
-    if (folder/'cable_labels.npz').exists():
-        labels = np.load(folder/'cable_labels.npz')
+    if label_stamps is not None:
+        label_stamps, label_positions = np.asarray(label_stamps, float), np.asarray(label_positions, float)
         markers = np.full((len(stamp), MARKERS, 3), np.nan)
-        j = np.searchsorted(stamp, labels['stamps'])
-        ok = (j < len(stamp)) & np.isclose(stamp[np.minimum(j, len(stamp)-1)], labels['stamps'], atol=1e-6, rtol=0)
-        markers[j[ok]] = labels['positions'][ok]
+        j = np.searchsorted(stamp, label_stamps)
+        ok = (j < len(stamp)) & np.isclose(stamp[np.minimum(j, len(stamp)-1)], label_stamps, atol=1e-6, rtol=0)
+        markers[j[ok]] = label_positions[ok]
     log_stamp = np.array([r['pose_stamp'] if r.get('pose_stamp') is not None else np.nan for r in rows])
     return CalibrationFlight(folder, params['settings']['setup'], [r['phase'] for r in rows],
                              np.array([r['t'] for r in rows]), log_stamp,
                              np.array([r['sent_acceleration'] for r in rows]), np.array([r['trim'] for r in rows]),
-                             stamp, position, quaternion, markers, float(params['yaw_rad']), params['physical'],
+                             stamp, position, quaternion, markers, float(params.get('yaw_rad', 0.)), params.get('physical', {}),
                              np.array([np.nan if r.get('battery_v') is None else r['battery_v'] for r in rows], float),
                              frame)
 

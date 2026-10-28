@@ -2577,3 +2577,61 @@ trimesh's `split()` ran out of memory (54 GB, killed by the kernel: every piece 
 texture); `clean_lab_scan.py` now labels pieces on the face graph instead (`noise()`), **not yet
 run**. `data/lab_scan/lab_clean.glb` is still the first scan's, placed by a guess. Paused by the
 user to revisit later.
+
+## Dated change note — 2026-10-28 online identification built (user: "finish the complete online fitting")
+
+Implemented: `aerowhip/online/stream.py` (the flight folder read as written, or replayed as if
+live; cable markers from the native Observer on the recorded cloud, a marker counted where the
+filter associated a point with confidence >= 0.5), `aerowhip/online/estimator.py` (moving-window
+estimator with the robust filter), `scripts/online_fit.py` (replay / live / --watch for the next
+flight; output runs/online/*.jsonl), `scripts/online_validation.py`, `tests/test_online.py`
+(linear stand-in: agreeing windows converge, a one-off wild window is held and expires, a change
+that keeps happening is adopted: 3 pass), the Identification Loop's Online page and its "Start
+online fit" button. `calibration_flights.load` is now `from_records` on decoded records (behaviour
+unchanged; the same flight loads to the same frames and windows); missing yaw/physical tolerated.
+
+Design (docs/data_and_fitting.md, "Online identification"): parameters log10 EI, log10 Cb, Cd,
+motor_response_s, body_drag_xy_s_inv, command_delay_s; prior the archived cf_2 fits (cable
+20261028-012011, drone 20261027-201939); every 1 s the newest 2 s window, cable replayed from the
+measured drone pose, drone from its sent commands (coupled model, measured cable), forward-
+difference Jacobian, one information-form Gauss-Newton step per family; the drone mass is the base
+model's.
+
+Found and fixed while building (each checked by scoring the whole flight before/after):
+- distance residuals for the cable gave steps in the wrong direction (a distance's slope flips
+  where the simulated marker passes the measured one): signed x/y/z errors now;
+- the measurement noise taken from the window's own residual made quiet (hover) windows look
+  precise: the noise starts at the offline fit's typical residual and has half of it as floor;
+- counting all ~1200 samples of a window as independent made the estimate overconfident within
+  seconds, and the held outliers then pooled into false "changes" (Cd driven to 0.10): a window
+  now counts as 8 effective samples, and a step is applied only if replaying it (full or half)
+  lowers the window's own error.
+
+Validation (runs/online/validation.json; cf_2 model at 45900ad, six cf_2 flights replayed as
+live; cable error in mm per signed component over 1 s windows, drone normalised):
+| flight | prior | final from prior | wrong start | final from wrong |
+|---|---|---|---|---|
+| strokes/001 | 14.18 / 1.04 | 13.88 / 1.04 | 14.12 / 1.10 | 14.01 / 1.05 |
+| whip/001 | 13.34 / 1.11 | 13.00 / 1.12 | 13.26 / 1.19 | 13.47 / 1.13 |
+| random/001 | 9.29 / 1.02 | 9.31 / 1.02 | 9.23 / 1.06 | 9.45 / 1.02 |
+| decay/001 | 13.95 / 0.95 | 14.18 / 0.95 | 13.95 / 1.02 | 14.08 / 0.96 |
+| circle/001 | 7.95 / 0.91 | 7.71 / 0.90 | 8.83 / 0.94 | 7.86 / 0.92 |
+| figure8/001 | 6.05 / 1.01 | 5.77 / 1.01 | 6.66 / 1.02 | 5.87 / 1.02 |
+Wrong start: log10 EI +0.3, log10 Cb −0.15, Cd ×1.4, motor response ×1.6, drag ×1.4, delay +12 ms.
+Passes: 0.6 s per update with 8 threads on the i7; no outliers on 5 of 6 normal flights (3 on
+figure8); the drone's motor response recovers on all six (1.6 sd -> 0.1–1.2) and the delay on 5;
+on circle and figure8 (informative for the cable) everything recovers and the wrong start's misfit
+is repaired. **Does not pass** the criteria set before the run: on strokes, whip, random and decay
+the cable parameters do not return from the wrong start (EI ends 1.9–4.8 sd away) and on whip,
+random and decay the final from the wrong start fits 1–2 % worse than the wrong start itself. Those
+flights fit the wrong start about as well as the prior (strokes 14.12 vs 14.18), so they do not
+identify the cable parameters; the estimator cannot recover what the data does not show. From the
+prior, the 2 s online windows move EI up on every flight (e.g. −3.85 -> −3.55 on strokes) while the
+1 s offline fit prefers the prior: a window-length dependence of the cable model, not resolved.
+Flip test (cf_6 mix_a/002, current cf_6 model, live labels): both flips (+28 cm, +50 cm above the
+clamp) gated for both families, the cable estimate stayed within 1 prior sd; the drone's motor
+response moved to 8.8 ms (prior 19.6 ± 7.4, cf_2's) from cf_6's own clean windows.
+Not done: a live run during a flight (the user is moving to the other computer); the estimate is
+logged only, nothing feeds it into the model or the planner (adopting it is a model-selection
+decision). Test suite: 105 pass, the 11 known reset-bank failures; tests/test_native_estimator.py
+segfaults intermittently on this machine with and without these changes.

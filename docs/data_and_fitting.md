@@ -226,3 +226,36 @@ fit, check. It plays each planned flight back in 3D from one simulation of the a
 (`scripts/preview_trajectory.py`), with the predicted cable height above the clamp along the
 timeline. Only the recorded span from the settling hover to the final hover is used; takeoff,
 landing and safety landings are excluded, since the cable may then touch the ground.
+
+## Online identification
+
+`scripts/online_fit.py` (package `aerowhip.online`) estimates the parameters a flight can teach
+while it flies, every second, from the newest 2 s of the flight. It reads the flight folder as the
+flight script writes it (the logs are written line by line), so it needs no connection to the
+flight stack; a recorded flight can be replayed through it as if live (`--replay`).
+
+- **Labels:** the cable markers come from the same cable filter that runs in flight (the native
+  observer), applied to the recorded marker cloud frame by frame; a marker counts where the filter
+  associated a point to it with confidence.
+- **Parameters:** the cable's bending stiffness, bending damping and drag coefficient (log10 EI,
+  log10 Cb, Cd), and the drone's motor response, sideways body drag and command delay. The prior is
+  the offline fits (values, standard deviations, correlations). Parameters that a single window
+  cannot separate (the cable's linear drag against Cd, the static residual's coefficients against
+  each other) stay at the offline fit.
+- **Update:** for each family, the window is replayed at the current estimate and with each
+  parameter perturbed (the cable driven by the measured drone pose; the drone by its sent commands,
+  from the measured state and cable), and one Gauss-Newton step is taken in information form with
+  the current covariance as prior. A window counts as a few independent samples (its samples are
+  strongly correlated), the measurement noise starts at the offline fit's typical residual, and a
+  step is applied only if replaying it lowers the window's error.
+- **Robust filter:** windows outside the recorded motion, with the cable over the drone, with the
+  drone tilted beyond 60° or with too few markers are not used. A window whose step is improbable
+  under the current uncertainty, or whose error the model cannot explain, is held; it counts only
+  if most of the following windows agree with it (then the pooled change is applied with the
+  uncertainty widened), and expires otherwise. So a single flip or gust does not move the estimate,
+  while a real change (a different battery, a new cable) does.
+
+The output (`runs/online/*.jsonl`) holds the estimate and its standard deviation after every
+window and what happened to each window; the Identification Loop window plots it live.
+`scripts/online_validation.py` replays recorded flights from the prior and from a deliberately
+wrong start and scores the whole flight at each result.

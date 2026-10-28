@@ -30,7 +30,7 @@ from aerowhip.planning.simulate import FLIGHT_STACK
 from aerowhip.ui import style
 from aerowhip.ui.planning import loop_data as ld
 from aerowhip.ui.planning.scene import Scene3D
-from aerowhip.ui.planning.views import BAD, GOOD, MUTED, WARN, EnvelopeView, InformationView, SafetyView, Strip, label
+from aerowhip.ui.planning.views import BAD, GOOD, MUTED, WARN, EnvelopeView, InformationView, OnlineView, SafetyView, Strip, label
 
 ACCENT = '#3dd6c6'
 T = style._TOKENS[True]
@@ -226,7 +226,7 @@ class LoopWindow(QtWidgets.QMainWindow):
         col.setContentsMargins(14, 8, 14, 10)
         col.setSpacing(6)
         self.segments = QtWidgets.QTabBar(objectName='segments')
-        for name in ('3D preview', 'Information', 'Safety', 'Envelope', 'Log'):
+        for name in ('3D preview', 'Information', 'Safety', 'Envelope', 'Online', 'Log'):
             self.segments.addTab(name)
         self.segments.setDrawBase(False)
         col.addWidget(self.segments)
@@ -294,8 +294,10 @@ class LoopWindow(QtWidgets.QMainWindow):
         self.pages.addWidget(view)
 
         self.information, self.safety, self.envelope = InformationView(), SafetyView(), EnvelopeView()
-        for w in (self.information, self.safety, self.envelope):
+        self.online = OnlineView(ROOT/'runs'/'online')
+        for w in (self.information, self.safety, self.envelope, self.online):
             self.pages.addWidget(w)
+        self.online_index = self.pages.count()-1
         log = QtWidgets.QWidget(objectName='page')
         lv = QtWidgets.QVBoxLayout(log)
         lv.setContentsMargins(18, 14, 18, 14)
@@ -305,6 +307,7 @@ class LoopWindow(QtWidgets.QMainWindow):
         self.log.setFont(QtGui.QFontDatabase.systemFont(QtGui.QFontDatabase.SystemFont.FixedFont))
         lv.addWidget(self.log, 1)
         self.pages.addWidget(log)
+        self.log_index = self.pages.count()-1
         return centre
 
     def _inspector(self):
@@ -398,6 +401,12 @@ class LoopWindow(QtWidgets.QMainWindow):
         row.addWidget(self.copy_check)
         row.addWidget(self.copy_fly)
         lay.addLayout(row)
+        lay.addWidget(label('Online fit: start it before take-off; it follows the next flight folder and learns the drone '
+                            'and cable parameters from every second of it (Online page). Only on a computer with cores '
+                            'to spare for it.', 'muted'))
+        self.online_button = button('Start online fit (waits for the next flight)')
+        self.online_button.clicked.connect(self.start_online)
+        lay.addWidget(self.online_button)
 
     def _measure_page(self, lay):
         lay.addWidget(label('Measure the envelope', 'heading'))
@@ -549,7 +558,7 @@ class LoopWindow(QtWidgets.QMainWindow):
         self.flying = ld.flight_running()
         set_pill(self.flight_pill, 'FLIGHT RUNNING · computing locked' if self.flying else 'No flight running', BAD if self.flying else MUTED)
         busy = self.job is not None and self.job.running
-        for b in (self.optimise_button, self.envelope_button, self.label_button):
+        for b in (self.optimise_button, self.envelope_button, self.label_button, self.online_button):
             b.setEnabled(not self.flying and not busy)
             b.setToolTip('A flight is running: no computing during flights (it once stalled the host and dropped the drone)'
                          if self.flying else ('A job is running' if busy else ''))
@@ -569,6 +578,8 @@ class LoopWindow(QtWidgets.QMainWindow):
         if self.was_running and not busy:
             self.refresh()
         self.was_running = busy
+        if self.pages.currentIndex() == self.online_index or busy:
+            self.online.poll()
 
     # ------------------------------------------------------------ playback
     def toggle_play(self):
@@ -638,7 +649,7 @@ class LoopWindow(QtWidgets.QMainWindow):
             return
         self.job, self.was_running = job, True
         if show_log:
-            self.segments.setCurrentIndex(4)
+            self.segments.setCurrentIndex(self.log_index)
         self.poll()
 
     def optimise(self):
@@ -667,6 +678,11 @@ class LoopWindow(QtWidgets.QMainWindow):
         QtWidgets.QApplication.clipboard().setText(self.flight_command(path, check))
         self.statusBar().showMessage(f'{path.name} is in {ld.PLANS}; the {"preflight check" if check else "flight command"} is on the clipboard')
         self.refresh()
+
+    def start_online(self):
+        self.run('online-fit', [ld.PYTHON, 'scripts/online_fit.py', '--watch', FLIGHT_STACK/'calibration_data'/self.setup,
+                                '--quiet', '--threads', '6'], env='OMP_NUM_THREADS=1', show_log=False)
+        self.segments.setCurrentIndex(self.online_index)
 
     def update_envelope(self):
         self.run('envelope', ['python3', 'scripts/envelope.py', '--setup', self.setup], cwd=FLIGHT_STACK)
